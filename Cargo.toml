@@ -1,0 +1,4 @@
+[package]
+name = "sgp4-predict"
+version = "0.1.0"
+edition = "2024"
