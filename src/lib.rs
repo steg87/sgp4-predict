@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, Elements, MinutesSinceEpoch};
+use std::ops::Range;
 use uom::si::{f64, length::kilometer, velocity::kilometer_per_second};
 
 pub trait Satellite: HasId + HasTle {}
@@ -40,9 +41,8 @@ pub struct Velocity {
 }
 
 pub struct PredictionIter {
-    elements: Elements,
-    constants: Constants,
-    interval: Interval,
+    predictor: Predictor,
+    interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,
     step: Duration,
 }
@@ -65,16 +65,11 @@ impl From<sgp4::Prediction> for Prediction {
 }
 
 impl PredictionIter {
-    fn new(
-        elements: &Elements,
-        constants: &Constants,
-        interval: &impl IntervalRange,
-        step: Duration,
-    ) -> Self {
+    fn new(predictor: Predictor, interval: impl IntervalRange, step: Duration) -> Self {
+        // TODO: check start < end and check step > zero
         Self {
-            elements: elements.clone(),
-            constants: constants.clone(),
-            interval: Interval::new(interval.start(), interval.end()),
+            predictor,
+            interval: interval.start()..interval.end(),
             next_time: interval.start(),
             step,
         }
@@ -85,13 +80,19 @@ impl Iterator for PredictionIter {
     type Item = Result<Prediction, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next_time >= self.interval.end {
+        if !self.interval.contains(&self.next_time) {
             return None;
         }
 
         match self
+            .predictor
             .constants
-            .propagate(minutes_since_epoch(&self.elements, self.next_time))
+            .propagate(MinutesSinceEpoch(
+                self.predictor
+                    .time_since_epoch(self.next_time)
+                    .num_milliseconds() as f64
+                    / 60e3,
+            ))
             .map_err(Error::Sgp4Error)
         {
             Ok(prediction) => {
@@ -103,19 +104,7 @@ impl Iterator for PredictionIter {
     }
 }
 
-/// Defines a time range
-pub struct Interval {
-    pub start: DateTime<Utc>,
-    pub end: DateTime<Utc>,
-}
-
-impl Interval {
-    pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
-        Self { start, end }
-    }
-}
-
-impl IntervalRange for Interval {
+impl IntervalRange for Range<DateTime<Utc>> {
     fn start(&self) -> DateTime<Utc> {
         self.start
     }
@@ -126,6 +115,7 @@ impl IntervalRange for Interval {
 
 /// Stores orbital elements and constants. Has methods to create iterators to propagate predictions
 /// in given frames.
+#[derive(Debug, Clone)]
 pub struct Predictor {
     elements: Elements,
     constants: Constants,
@@ -156,15 +146,15 @@ impl Predictor {
     /// Propagate the TLE in the TEME frame over the interval in steps.
     ///
     /// Returns an iterator over predictions.
-    pub fn propagate(&self, interval: &impl IntervalRange, step: Duration) -> PredictionIter {
-        PredictionIter::new(&self.elements, &self.constants, interval, step)
+    pub fn propagate(&self, interval: impl IntervalRange, step: Duration) -> PredictionIter {
+        PredictionIter::new(self.clone(), interval, step)
     }
-}
 
-fn minutes_since_epoch(elements: &Elements, t: DateTime<Utc>) -> MinutesSinceEpoch {
-    let epoch = DateTime::<Utc>::from_naive_utc_and_offset(elements.datetime, Utc);
-    let duration = t.signed_duration_since(epoch);
-    MinutesSinceEpoch(duration.num_seconds() as f64 / 60.0)
+    /// Calculate the number of minutes since the predictor epoch
+    pub fn time_since_epoch(&self, t: DateTime<Utc>) -> Duration {
+        let epoch = DateTime::<Utc>::from_naive_utc_and_offset(self.elements.datetime, Utc);
+        t.signed_duration_since(epoch)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

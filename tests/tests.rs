@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 
-use sgp4_predict::{HasId, HasTle, Interval, Predictor};
+use sgp4_predict::{HasId, HasTle, Predictor};
 
 struct Tle {
     satellite: String,
@@ -43,10 +43,7 @@ fn test_propagate() {
     let p = Predictor::new(&tle);
     let transits = p
         .propagate(
-            &Interval::new(
-                datetime("2025-12-20T12:00:00Z"),
-                datetime("2025-12-23T12:00:00Z"),
-            ),
+            datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
             Duration::minutes(1),
         )
         .collect::<Result<Vec<_>, _>>()
