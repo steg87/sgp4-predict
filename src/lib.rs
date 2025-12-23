@@ -114,9 +114,7 @@ impl std::ops::Sub for Velocity {
 
 pub struct PredictionIter {
     predictor: Predictor,
-    interval: Range<DateTime<Utc>>,
-    next_time: DateTime<Utc>,
-    step: Duration,
+    dt_iter: DateTimeIter,
 }
 
 impl From<sgp4::Prediction> for TemeState {
@@ -124,15 +122,15 @@ impl From<sgp4::Prediction> for TemeState {
         Self {
             // Convert sgp4::Prediction.position units (km) to SI (m)
             position: Position::from_si(
-                value.position[0] / 1e3,
-                value.position[1] / 1e3,
-                value.position[2] / 1e3,
+                value.position[0] * 1e3,
+                value.position[1] * 1e3,
+                value.position[2] * 1e3,
             ),
             // Convert sgp4::Prediction.velocity units (km/s) to SI (m/s)
             velocity: Velocity::from_si(
-                value.velocity[0] / 1e3,
-                value.velocity[1] / 1e3,
-                value.velocity[2] / 1e3,
+                value.velocity[0] * 1e3,
+                value.velocity[1] * 1e3,
+                value.velocity[2] * 1e3,
             ),
             _frame: std::marker::PhantomData,
         }
@@ -141,39 +139,21 @@ impl From<sgp4::Prediction> for TemeState {
 
 impl PredictionIter {
     fn new(predictor: Predictor, interval: impl IntervalRange, step: Duration) -> Self {
-        // TODO: check start < end and check step > zero
         Self {
             predictor,
-            interval: interval.start()..interval.end(),
-            next_time: interval.start(),
-            step,
+            dt_iter: DateTimeIter::new(interval, step),
         }
     }
 }
 
 impl Iterator for PredictionIter {
-    type Item = Result<TemeState, Error>;
+    type Item = Result<(DateTime<Utc>, TemeState), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.interval.contains(&self.next_time) {
-            return None;
-        }
+        let current_time = self.dt_iter.next()?;
 
-        match self
-            .predictor
-            .constants
-            .propagate(MinutesSinceEpoch(
-                self.predictor
-                    .time_since_epoch(self.next_time)
-                    .num_milliseconds() as f64
-                    / 60e3,
-            ))
-            .map_err(Error::Sgp4Error)
-        {
-            Ok(prediction) => {
-                self.next_time += self.step;
-                Some(Ok(prediction.into()))
-            }
+        match self.predictor.propagate(current_time) {
+            Ok(prediction) => Some(Ok((current_time, prediction))),
             Err(e) => Some(Err(e)),
         }
     }
@@ -197,28 +177,25 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
         interval: impl IntervalRange,
         step: Duration,
     ) -> Self {
-        // TODO: check start < end and check step > zero
         Self {
-            predict_iter: PredictionIter {
-                predictor,
-                interval: interval.start()..interval.end(),
-                next_time: interval.start(),
-                step,
-            },
+            predict_iter: PredictionIter::new(predictor, interval, step),
             observer,
         }
     }
 }
 
 impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
-    type Item = Result<Observation, Error>;
+    type Item = Result<(DateTime<Utc>, Observation), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let teme_state = self.predict_iter.next()?.ok()?;
-        Some(Ok(teme_state
-            .to_ecef(self.predict_iter.next_time)
-            .to_enu(self.observer)
-            .to_observation()))
+        let (time, teme_state) = self.predict_iter.next()?.ok()?;
+        Some(Ok((
+            time,
+            teme_state
+                .to_ecef(time)
+                .to_enu(self.observer)
+                .to_observation(),
+        )))
     }
 }
 
@@ -228,6 +205,35 @@ impl IntervalRange for Range<DateTime<Utc>> {
     }
     fn end(&self) -> DateTime<Utc> {
         self.end
+    }
+}
+
+pub struct DateTimeIter {
+    interval: Range<DateTime<Utc>>,
+    next_time: DateTime<Utc>,
+    step: Duration,
+}
+
+impl DateTimeIter {
+    fn new(interval: impl IntervalRange, step: Duration) -> Self {
+        Self {
+            interval: interval.start()..interval.end(),
+            next_time: interval.start(),
+            step,
+        }
+    }
+}
+
+impl Iterator for DateTimeIter {
+    type Item = DateTime<Utc>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.interval.contains(&self.next_time) {
+            return None;
+        }
+        let current = self.next_time;
+        self.next_time += self.step;
+        Some(current)
     }
 }
 
@@ -241,7 +247,6 @@ pub struct Predictor {
 
 impl Predictor {
     pub fn new(sat: &impl Satellite) -> Self {
-        // TODO: convert to try_new with error handling
         let elements = Elements::from_tle(
             Some(sat.id()),
             sat.line_1().as_bytes(),
@@ -256,17 +261,30 @@ impl Predictor {
         }
     }
 
-    /// Propagate the TLE in the TEME frame over the interval in steps.
+    /// Propagate the TLE to given time t.
     ///
-    /// Returns an iterator over predictions.
-    pub fn propagate(&self, interval: impl IntervalRange, step: Duration) -> PredictionIter {
+    /// Returns a predicted state vector in the TEME frame.
+    pub fn propagate(&self, t: DateTime<Utc>) -> Result<TemeState, Error> {
+        let minutes_since_epoch =
+            MinutesSinceEpoch(self.time_since_epoch(t).num_milliseconds() as f64 / 60e3);
+        let prediction = self
+            .constants
+            .propagate(minutes_since_epoch)
+            .map_err(Error::Sgp4)?;
+        Ok(prediction.into())
+    }
+
+    /// Propagate the TLE over a time interval.
+    ///
+    /// Returns an iterator over predicted state vectors in the TEME frame.
+    pub fn prediction_iter(&self, interval: impl IntervalRange, step: Duration) -> PredictionIter {
         PredictionIter::new(self.clone(), interval, step)
     }
 
     /// Observe the TLE from an observer on Earth.
     ///
     /// Returns an iterator over observations.
-    pub fn observe<'a, O: Observer>(
+    pub fn observation_iter<'a, O: Observer>(
         &self,
         observer: &'a O,
         interval: impl IntervalRange,
@@ -285,5 +303,7 @@ impl Predictor {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("SGP4 error: {0}")]
-    Sgp4Error(sgp4::Error),
+    Sgp4(sgp4::Error),
+    #[error("Interval error: {0}")]
+    Interval(String),
 }

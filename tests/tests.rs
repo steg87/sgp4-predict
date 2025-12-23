@@ -87,7 +87,7 @@ fn test_propagate() {
     let tle = create_tle();
     let p = Predictor::new(&tle);
     let transits = p
-        .propagate(
+        .prediction_iter(
             datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
             Duration::minutes(1),
         )
@@ -102,7 +102,7 @@ fn test_observe() {
     let p = Predictor::new(&tle);
     let gs = GroundStation::new(55.8642, -4.2518, 40.0);
     let observations = p
-        .observe(
+        .observation_iter(
             &gs,
             datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
             Duration::minutes(1),
