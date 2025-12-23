@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
+use uom::si::{angle::degree, f64, length::meter};
 
-use sgp4_predict::{HasId, HasTle, Predictor};
+use sgp4_predict::{HasId, HasTle, Observer, Predictor};
 
 struct Tle {
     satellite: String,
@@ -20,6 +21,34 @@ impl HasTle for Tle {
     }
     fn line_2(&self) -> String {
         self.line_2.clone()
+    }
+}
+
+struct GroundStation {
+    latitude_deg: f64,
+    longitude_deg: f64,
+    altitude: f64,
+}
+
+impl GroundStation {
+    fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
+        Self {
+            latitude_deg,
+            longitude_deg,
+            altitude,
+        }
+    }
+}
+
+impl Observer for GroundStation {
+    fn latitude(&self) -> f64::Angle {
+        f64::Angle::new::<degree>(self.latitude_deg)
+    }
+    fn longitude(&self) -> f64::Angle {
+        f64::Angle::new::<degree>(self.longitude_deg)
+    }
+    fn altitude(&self) -> f64::Length {
+        f64::Length::new::<meter>(self.altitude)
     }
 }
 
@@ -49,4 +78,20 @@ fn test_propagate() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(transits.len() > 0);
+}
+
+#[test]
+fn test_observe() {
+    let tle = create_tle();
+    let p = Predictor::new(&tle);
+    let gs = GroundStation::new(55.8642, -4.2518, 40.0);
+    let observations = p
+        .observe(
+            &gs,
+            datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
+            Duration::minutes(1),
+        )
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(observations.len() > 0);
 }
