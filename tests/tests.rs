@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
-use uom::si::{angle::degree, f64, length::meter};
+#[cfg(feature = "uom")]
+use uom::si::{angle::degree, length::meter};
 
 use sgp4_predict::{HasId, HasTle, Observer, Predictor};
 
@@ -41,14 +42,29 @@ impl GroundStation {
 }
 
 impl Observer for GroundStation {
-    fn latitude(&self) -> f64::Angle {
-        f64::Angle::new::<degree>(self.latitude_deg)
+    #[cfg(not(feature = "uom"))]
+    fn latitude(&self) -> f64 {
+        self.latitude_deg.to_radians()
     }
-    fn longitude(&self) -> f64::Angle {
-        f64::Angle::new::<degree>(self.longitude_deg)
+    #[cfg(not(feature = "uom"))]
+    fn longitude(&self) -> f64 {
+        self.longitude_deg.to_radians()
     }
-    fn altitude(&self) -> f64::Length {
-        f64::Length::new::<meter>(self.altitude)
+    #[cfg(not(feature = "uom"))]
+    fn altitude(&self) -> f64 {
+        self.altitude
+    }
+    #[cfg(feature = "uom")]
+    fn latitude(&self) -> uom::si::f64::Angle {
+        uom::si::f64::Angle::new::<degree>(self.latitude_deg)
+    }
+    #[cfg(feature = "uom")]
+    fn longitude(&self) -> uom::si::f64::Angle {
+        uom::si::f64::Angle::new::<degree>(self.longitude_deg)
+    }
+    #[cfg(feature = "uom")]
+    fn altitude(&self) -> uom::si::f64::Length {
+        uom::si::f64::Length::new::<meter>(self.altitude)
     }
 }
 
@@ -77,7 +93,7 @@ fn test_propagate() {
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert!(transits.len() > 0);
+    assert!(!transits.is_empty());
 }
 
 #[test]
@@ -93,5 +109,5 @@ fn test_observe() {
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert!(observations.len() > 0);
+    assert!(!observations.is_empty());
 }

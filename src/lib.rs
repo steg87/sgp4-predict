@@ -1,43 +1,40 @@
 mod frames;
+mod units;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, Elements, MinutesSinceEpoch};
 use std::ops::Range;
-use uom::si::{
-    f64,
-    length::{kilometer, meter},
-    ratio::ratio,
-    velocity::kilometer_per_second,
-};
 
 use frames::{EcefState, TemeState};
+
+use crate::units::ScientificInstrument;
 
 pub trait Satellite: HasId + HasTle {}
 impl<T> Satellite for T where T: HasId + HasTle {}
 
 pub trait Observer {
-    fn latitude(&self) -> f64::Angle;
-    fn longitude(&self) -> f64::Angle;
-    fn altitude(&self) -> f64::Length;
+    fn latitude(&self) -> units::Angle;
+    fn longitude(&self) -> units::Angle;
+    fn altitude(&self) -> units::Length;
 
     fn to_ecef(&self) -> EcefState {
-        let h = self.altitude().get::<meter>();
+        let h = self.altitude().to_si();
         let a = 6378137.0; // meters
         let f = 1.0 / 298.257223563;
         let e2 = f * (2.0 - f);
 
-        let sin_lat = self.latitude().sin().get::<ratio>();
-        let cos_lat = self.latitude().cos().get::<ratio>();
-        let sin_lon = self.longitude().sin().get::<ratio>();
-        let cos_lon = self.longitude().cos().get::<ratio>();
+        let sin_lat = self.latitude().to_si().sin();
+        let cos_lat = self.latitude().to_si().cos();
+        let sin_lon = self.longitude().to_si().sin();
+        let cos_lon = self.longitude().to_si().cos();
 
         let n = a / (1.0 - e2 * sin_lat * sin_lat).sqrt();
 
         EcefState::new(
-            Position::new(
-                f64::Length::new::<meter>((n + h) * cos_lat * cos_lon),
-                f64::Length::new::<meter>((n + h) * cos_lat * sin_lon),
-                f64::Length::new::<meter>((n * (1.0 - e2) + h) * sin_lat),
+            Position::from_si(
+                (n + h) * cos_lat * cos_lon,
+                (n + h) * cos_lat * sin_lon,
+                (n * (1.0 - e2) + h) * sin_lat,
             ),
             Velocity::default(),
         )
@@ -78,44 +75,40 @@ impl<F> StateVector<F> {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Position {
-    pub x: f64::Length,
-    pub y: f64::Length,
-    pub z: f64::Length,
-}
-
-impl Position {
-    pub fn new(x: f64::Length, y: f64::Length, z: f64::Length) -> Self {
-        Self { x, y, z }
-    }
+    pub x: units::Length,
+    pub y: units::Length,
+    pub z: units::Length,
 }
 
 impl std::ops::Sub for Position {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+        Self::from_si(
+            self.x.to_si() - rhs.x.to_si(),
+            self.y.to_si() - rhs.y.to_si(),
+            self.z.to_si() - rhs.z.to_si(),
+        )
     }
 }
 
 /// Velocity vector
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Velocity {
-    pub x: f64::Velocity,
-    pub y: f64::Velocity,
-    pub z: f64::Velocity,
-}
-
-impl Velocity {
-    pub fn new(x: f64::Velocity, y: f64::Velocity, z: f64::Velocity) -> Self {
-        Self { x, y, z }
-    }
+    pub x: units::Velocity,
+    pub y: units::Velocity,
+    pub z: units::Velocity,
 }
 
 impl std::ops::Sub for Velocity {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+        Self::from_si(
+            self.x.to_si() - rhs.x.to_si(),
+            self.y.to_si() - rhs.y.to_si(),
+            self.z.to_si() - rhs.z.to_si(),
+        )
     }
 }
 
@@ -129,16 +122,18 @@ pub struct PredictionIter {
 impl From<sgp4::Prediction> for TemeState {
     fn from(value: sgp4::Prediction) -> Self {
         Self {
-            position: Position {
-                x: f64::Length::new::<kilometer>(value.position[0]),
-                y: f64::Length::new::<kilometer>(value.position[1]),
-                z: f64::Length::new::<kilometer>(value.position[2]),
-            },
-            velocity: Velocity {
-                x: f64::Velocity::new::<kilometer_per_second>(value.velocity[0]),
-                y: f64::Velocity::new::<kilometer_per_second>(value.velocity[1]),
-                z: f64::Velocity::new::<kilometer_per_second>(value.velocity[2]),
-            },
+            // Convert sgp4::Prediction.position units (km) to SI (m)
+            position: Position::from_si(
+                value.position[0] / 1e3,
+                value.position[1] / 1e3,
+                value.position[2] / 1e3,
+            ),
+            // Convert sgp4::Prediction.velocity units (km/s) to SI (m/s)
+            velocity: Velocity::from_si(
+                value.velocity[0] / 1e3,
+                value.velocity[1] / 1e3,
+                value.velocity[2] / 1e3,
+            ),
             _frame: std::marker::PhantomData,
         }
     }
@@ -176,7 +171,7 @@ impl Iterator for PredictionIter {
             .map_err(Error::Sgp4Error)
         {
             Ok(prediction) => {
-                self.next_time = self.next_time + self.step;
+                self.next_time += self.step;
                 Some(Ok(prediction.into()))
             }
             Err(e) => Some(Err(e)),
@@ -185,19 +180,9 @@ impl Iterator for PredictionIter {
 }
 
 pub struct Observation {
-    pub azimuth: f64::Angle,
-    pub elevation: f64::Angle,
-    pub range: f64::Length,
-}
-
-impl Observation {
-    fn new(azimuth: f64::Angle, elevation: f64::Angle, range: f64::Length) -> Self {
-        Self {
-            azimuth,
-            elevation,
-            range,
-        }
-    }
+    pub azimuth: units::Angle,
+    pub elevation: units::Angle,
+    pub range: units::Length,
 }
 
 pub struct ObservationIter<'a, O: Observer> {
@@ -262,14 +247,9 @@ impl Predictor {
             sat.line_1().as_bytes(),
             sat.line_2().as_bytes(),
         )
-        .expect(&format!(
-            "Failed to generate elements for sat '{}'",
-            sat.id()
-        ));
-        let constants = Constants::from_elements(&elements).expect(&format!(
-            "Failed to generate constants for sat '{}'",
-            sat.id()
-        ));
+        .expect("Failed to generate elements for sat");
+        let constants =
+            Constants::from_elements(&elements).expect("Failed to generate constants for sat");
         Self {
             elements,
             constants,

@@ -3,6 +3,10 @@ name = "sgp4-predict"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+uom = ["dep:uom"]
+
 [dependencies]
 chrono = "0.4.42"
 sgp4 = "2.3.0"
@@ -10,5 +14,4 @@ thiserror = "2.0.17"
 uom = { version = "0.37.0", default-features = false, features = [
     "f64",
     "si",
-    "std",
-] }
+], optional = true }

@@ -1,13 +1,13 @@
 use chrono::{DateTime, Utc};
 
-use crate::{Observation, Observer, Position, StateVector, Velocity};
+use crate::{Observation, Observer, Position, StateVector, Velocity, units::ScientificInstrument};
 
 pub struct JulianDate(f64);
 pub struct Radians(f64);
 
 /// Marker struct for TEME frame
-pub struct TEME;
-pub type TemeState = StateVector<TEME>;
+pub struct Teme;
+pub type TemeState = StateVector<Teme>;
 
 impl TemeState {
     /// Rotation about the Z-axis by GMST
@@ -15,23 +15,23 @@ impl TemeState {
         let (sin_g, cos_g) = gmst(julian_date(t)).0.sin_cos();
 
         EcefState::new(
-            Position::new(
-                cos_g * self.position.x + sin_g * self.position.y,
-                -sin_g * self.position.x + cos_g * self.position.y,
-                self.position.z,
+            Position::from_si(
+                cos_g * self.position.x.to_si() + sin_g * self.position.y.to_si(),
+                -sin_g * self.position.x.to_si() + cos_g * self.position.y.to_si(),
+                self.position.z.to_si(),
             ),
-            Velocity::new(
-                cos_g * self.velocity.x + sin_g * self.velocity.y,
-                -sin_g * self.velocity.x + cos_g * self.velocity.y,
-                self.velocity.z,
+            Velocity::from_si(
+                cos_g * self.velocity.x.to_si() + sin_g * self.velocity.y.to_si(),
+                -sin_g * self.velocity.x.to_si() + cos_g * self.velocity.y.to_si(),
+                self.velocity.z.to_si(),
             ),
         )
     }
 }
 
 /// Marker struct for ECEF frame
-pub struct ECEF;
-pub type EcefState = StateVector<ECEF>;
+pub struct Ecef;
+pub type EcefState = StateVector<Ecef>;
 
 impl EcefState {
     pub fn to_enu(&self, observer: &impl Observer) -> EnuState {
@@ -39,37 +39,47 @@ impl EcefState {
         let dp = self.position - obs_ecef.position;
         let dv = self.velocity - obs_ecef.velocity;
 
-        let (sin_lat, cos_lat) = observer.latitude().sin_cos();
-        let (sin_lon, cos_lon) = observer.longitude().sin_cos();
+        let (sin_lat, cos_lat) = observer.latitude().to_si().sin_cos();
+        let (sin_lon, cos_lon) = observer.longitude().to_si().sin_cos();
 
         EnuState::new(
-            Position::new(
-                -sin_lon * dp.x + cos_lon * dp.y,
-                -sin_lat * cos_lon * dp.x - sin_lat * sin_lon * dp.y + cos_lat * dp.z,
-                cos_lat * cos_lon * dp.x + cos_lat * sin_lon * dp.y + sin_lat * dp.z,
+            Position::from_si(
+                -sin_lon * dp.x.to_si() + cos_lon * dp.y.to_si(),
+                -sin_lat * cos_lon * dp.x.to_si() - sin_lat * sin_lon * dp.y.to_si()
+                    + cos_lat * dp.z.to_si(),
+                cos_lat * cos_lon * dp.x.to_si()
+                    + cos_lat * sin_lon * dp.y.to_si()
+                    + sin_lat * dp.z.to_si(),
             ),
-            Velocity::new(
-                -sin_lon * dv.x + cos_lon * dv.y,
-                -sin_lat * cos_lon * dv.x - sin_lat * sin_lon * dv.y + cos_lat * dv.z,
-                cos_lat * cos_lon * dv.x + cos_lat * sin_lon * dv.y + sin_lat * dv.z,
+            Velocity::from_si(
+                -sin_lon * dv.x.to_si() + cos_lon * dv.y.to_si(),
+                -sin_lat * cos_lon * dv.x.to_si() - sin_lat * sin_lon * dv.y.to_si()
+                    + cos_lat * dv.z.to_si(),
+                cos_lat * cos_lon * dv.x.to_si()
+                    + cos_lat * sin_lon * dv.y.to_si()
+                    + sin_lat * dv.z.to_si(),
             ),
         )
     }
 }
 
 /// Marker struct for ECEF frame
-pub struct ENU;
-pub type EnuState = StateVector<ENU>;
+pub struct Enu;
+pub type EnuState = StateVector<Enu>;
 
 impl EnuState {
     pub fn to_observation(&self) -> Observation {
-        let (e, n, u) = (self.position.x, self.position.y, self.position.z);
+        let (e, n, u) = (
+            self.position.x.to_si(),
+            self.position.y.to_si(),
+            self.position.z.to_si(),
+        );
 
         let range = (e * e + n * n + u * u).sqrt();
-        let az = e.atan2(n); // radians
+        let az = e.atan2(n);
         let el = (u / range).asin();
 
-        Observation::new(az, el, range)
+        Observation::from_si(az, el, range)
     }
 }
 
