@@ -7,7 +7,10 @@ use std::ops::Range;
 
 use frames::{EcefState, TemeState};
 
-use crate::units::ScientificInstrument;
+use crate::units::SI;
+pub mod test_utils {
+    pub use crate::units::SI;
+}
 
 pub trait Satellite: HasId + HasTle {}
 impl<T> Satellite for T where T: HasId + HasTle {}

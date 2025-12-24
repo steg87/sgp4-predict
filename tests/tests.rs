@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 #[cfg(feature = "uom")]
 use uom::si::{angle::degree, length::meter};
 
+use sgp4_predict::test_utils::*;
 use sgp4_predict::{HasId, HasTle, Observer, Predictor};
 
 struct Tle {
@@ -70,9 +71,9 @@ impl Observer for GroundStation {
 
 fn create_tle() -> Tle {
     Tle {
-        satellite: "GALILEO A".to_string(),
-        line_1: "1 67160U 25302A   25352.14605887 -.00000007  00000+0  00000+0 0  9994".to_string(),
-        line_2: "2 67160  54.2406 107.2544 0008423 237.6458 122.2317  1.72906186    28".to_string(),
+        satellite: "SENTINEL-2C".to_string(),
+        line_1: "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990".to_string(),
+        line_2: "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740".to_string(),
     }
 }
 
@@ -107,6 +108,26 @@ fn test_observe() {
             datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
             Duration::minutes(1),
         )
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(!observations.is_empty());
+}
+
+#[test]
+fn test_count_visible() {
+    let tle = create_tle();
+    let p = Predictor::new(&tle);
+    let gs = GroundStation::new(55.8642, -4.2518, 40.0);
+    let observations = p
+        .observation_iter(
+            &gs,
+            datetime("2025-12-20T12:00:00Z")..datetime("2025-12-21T12:00:00Z"),
+            Duration::minutes(1),
+        )
+        .filter(|r| match r {
+            Ok((_, o)) => o.elevation.to_si() > 0.0,
+            Err(_) => false,
+        })
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!observations.is_empty());

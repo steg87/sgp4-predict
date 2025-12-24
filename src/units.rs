@@ -15,32 +15,32 @@ pub type Velocity = uom::si::f64::Velocity;
 #[cfg(feature = "uom")]
 pub type Angle = uom::si::f64::Angle;
 
-pub trait ScientificInstrument {
+pub trait SI {
     fn to_si(&self) -> f64;
 }
 #[cfg(not(feature = "uom"))]
-impl ScientificInstrument for f64 {
+impl SI for f64 {
     #[inline]
     fn to_si(&self) -> f64 {
         *self
     }
 }
 #[cfg(feature = "uom")]
-impl ScientificInstrument for uom::si::f64::Length {
+impl SI for uom::si::f64::Length {
     #[inline]
     fn to_si(&self) -> f64 {
         self.get::<meter>()
     }
 }
 #[cfg(feature = "uom")]
-impl ScientificInstrument for uom::si::f64::Velocity {
+impl SI for uom::si::f64::Velocity {
     #[inline]
     fn to_si(&self) -> f64 {
         self.get::<meter_per_second>()
     }
 }
 #[cfg(feature = "uom")]
-impl ScientificInstrument for uom::si::f64::Angle {
+impl SI for uom::si::f64::Angle {
     #[inline]
     fn to_si(&self) -> f64 {
         self.get::<radian>()

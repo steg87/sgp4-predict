@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::{Observation, Observer, Position, StateVector, Velocity, units::ScientificInstrument};
+use crate::{Observation, Observer, Position, StateVector, Velocity, units::SI};
 
 pub struct JulianDate(f64);
 pub struct Radians(f64);
