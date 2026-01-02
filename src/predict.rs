@@ -43,10 +43,10 @@ impl Iterator for PredictionIter {
     type Item = Result<(DateTime<Utc>, TemeState), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let current_time = self.dt_iter.next()?;
+        let t = self.dt_iter.next()?;
 
-        match self.predictor.propagate(current_time) {
-            Ok(prediction) => Some(Ok((current_time, prediction))),
+        match self.predictor.propagate(t) {
+            Ok(prediction) => Some(Ok((t, prediction))),
             Err(e) => Some(Err(e)),
         }
     }

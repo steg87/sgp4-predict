@@ -2,7 +2,6 @@ use chrono::{DateTime, Duration, Utc};
 #[cfg(feature = "uom")]
 use uom::si::{angle::degree, length::meter};
 
-use sgp4_predict::test_utils::*;
 use sgp4_predict::{HasId, HasTle, Observer, Predictor};
 
 struct Tle {
@@ -83,6 +82,16 @@ fn datetime(dt: &str) -> DateTime<Utc> {
         .with_timezone(&Utc)
 }
 
+#[cfg(not(feature = "uom"))]
+fn angle(theta: f64) -> f64 {
+    theta.to_radians()
+}
+
+#[cfg(feature = "uom")]
+fn angle(theta: f64) -> uom::si::f64::Angle {
+    uom::si::f64::Angle::new::<degree>(theta)
+}
+
 #[test]
 fn test_propagate() {
     let tle = create_tle();
@@ -114,21 +123,17 @@ fn test_observe() {
 }
 
 #[test]
-fn test_count_visible() {
+fn test_transits() {
     let tle = create_tle();
     let p = Predictor::new(&tle);
     let gs = GroundStation::new(55.8642, -4.2518, 40.0);
-    let observations = p
-        .observation_iter(
+    let transits = p
+        .transits_iter(
             &gs,
             datetime("2025-12-20T12:00:00Z")..datetime("2025-12-21T12:00:00Z"),
-            Duration::minutes(1),
+            angle(0.0),
         )
-        .filter(|r| match r {
-            Ok((_, o)) => o.elevation.to_si() > 0.0,
-            Err(_) => false,
-        })
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert!(!observations.is_empty());
+    assert!(!transits.is_empty());
 }

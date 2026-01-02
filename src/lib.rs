@@ -2,6 +2,7 @@ mod frames;
 mod observe;
 mod predict;
 mod time;
+mod transits;
 mod units;
 mod vectors;
 
@@ -12,6 +13,7 @@ pub use crate::frames::TemeState;
 pub use crate::observe::{Observation, ObservationIter, Observer};
 pub use crate::predict::PredictionIter;
 pub use crate::time::IntervalRange;
+pub use crate::transits::{Transit, TransitIter};
 pub use crate::vectors::{Position, StateVector, Velocity};
 
 pub mod test_utils {
@@ -84,6 +86,18 @@ impl Predictor {
         step: Duration,
     ) -> ObservationIter<'a, O> {
         ObservationIter::new(self.clone(), observer, interval, step)
+    }
+
+    /// Calculate all of the transits visible to the observer.
+    ///
+    /// Returns an iterator over transits.
+    pub fn transits_iter<'a, O: Observer>(
+        &self,
+        observer: &'a O,
+        interval: impl IntervalRange,
+        min_elevation: units::Angle,
+    ) -> TransitIter<'a, O> {
+        TransitIter::new(self.clone(), observer, interval, min_elevation)
     }
 
     /// Calculate the number of minutes since the predictor epoch
