@@ -74,12 +74,18 @@ impl EnuState {
             self.position.y.to_si(),
             self.position.z.to_si(),
         );
+        let (ed, nd, ud) = (
+            self.velocity.x.to_si(),
+            self.velocity.y.to_si(),
+            self.velocity.z.to_si(),
+        );
 
         let range = (e * e + n * n + u * u).sqrt();
+        let range_rate = (e * ed + n * nd + u * ud) / range;
         let az = e.atan2(n);
         let el = (u / range).asin();
 
-        Observation::from_si(az, el, range)
+        Observation::from_si(az, el, range, range_rate)
     }
 }
 

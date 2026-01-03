@@ -74,18 +74,20 @@ impl crate::Velocity {
 }
 
 impl crate::Observation {
-    pub(crate) fn from_si(azimuth: f64, elevation: f64, range: f64) -> Self {
+    pub(crate) fn from_si(azimuth: f64, elevation: f64, range: f64, range_rate: f64) -> Self {
         #[cfg(not(feature = "uom"))]
         return Self {
             azimuth,
             elevation,
             range,
+            range_rate,
         };
         #[cfg(feature = "uom")]
         return Self {
             azimuth: uom::si::f64::Angle::new::<radian>(azimuth),
             elevation: uom::si::f64::Angle::new::<radian>(elevation),
             range: uom::si::f64::Length::new::<meter>(range),
+            range_rate: uom::si::f64::Velocity::new::<meter_per_second>(range_rate),
         };
     }
 }

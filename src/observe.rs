@@ -37,10 +37,12 @@ pub trait Observer {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Observation {
     pub azimuth: units::Angle,
     pub elevation: units::Angle,
     pub range: units::Length,
+    pub range_rate: units::Velocity,
 }
 
 pub struct ObservationIter<'a, O: Observer> {
