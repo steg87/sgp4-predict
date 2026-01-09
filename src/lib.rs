@@ -69,6 +69,22 @@ impl Predictor {
         Ok(prediction.into())
     }
 
+    /// Calculate observation at time t.
+    ///
+    /// Returns a predicted local observation.
+    pub fn observe_at<O: Observer>(
+        &self,
+        t: DateTime<Utc>,
+        observer: &O,
+    ) -> Result<Observation, Error> {
+        let observation = self
+            .propagate(t)?
+            .to_ecef(t)
+            .to_enu(observer)
+            .to_observation();
+        Ok(observation)
+    }
+
     /// Propagate the TLE over a time interval.
     ///
     /// Returns an iterator over predicted state vectors in the TEME frame.
