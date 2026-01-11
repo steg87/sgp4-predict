@@ -5,6 +5,7 @@ mod time;
 mod transits;
 mod units;
 mod vectors;
+mod roots;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, Elements, MinutesSinceEpoch};
