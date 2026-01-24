@@ -1,14 +1,15 @@
 mod frames;
 mod observe;
 mod predict;
+mod roots;
 mod time;
 mod transits;
 mod units;
 mod vectors;
-mod roots;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, Elements, MinutesSinceEpoch};
+use thiserror::Error as ThisError;
 
 pub use crate::frames::TemeState;
 pub use crate::observe::{Observation, ObservationIter, Observer};
@@ -124,10 +125,12 @@ impl Predictor {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, ThisError)]
 pub enum Error {
     #[error("SGP4 error: {0}")]
     Sgp4(sgp4::Error),
     #[error("Interval error: {0}")]
     Interval(String),
+    #[error("Roots error: {0}")]
+    Roots(roots::Error),
 }

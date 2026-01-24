@@ -3,11 +3,14 @@ use std::ops::Range;
 use chrono::{DateTime, Duration, Utc};
 
 use crate::Error;
-use crate::Observation;
 use crate::Predictor;
 use crate::observe::Observer;
+use crate::roots;
 use crate::time::IntervalRange;
 use crate::units::{self, SI};
+
+const MAX_STEP: Duration = Duration::minutes(10);
+const MIN_STEP: Duration = Duration::seconds(10);
 
 pub struct Transit {
     pub start: DateTime<Utc>,
@@ -61,14 +64,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
     /// On entering a transit it will calculate the roots (start, end) of the transit and return it.
     fn detect_transit(&mut self, new_state: &mut TransitState) -> Option<Transit> {
         // Define refinement cost function closure
-        let f = |t| {
+        let mut f = |t| {
             let t = DateTime::from_timestamp(t as i64, 0).unwrap();
-            let el = self
-                .predictor
-                .observe_at(t, self.observer)
-                .unwrap()
-                .elevation;
-            (el - self.min_elevation).to_si()
+            let (el, el_rate) = self.calculate_elevation(t).unwrap(); // TODO
+            (el - self.min_elevation.to_si(), el_rate)
         };
 
         // Determine if state transition indicates that a new transit has been found
@@ -78,13 +77,9 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 match (prev_state, &*new_state) {
                     (TransitState::Outside(t0), TransitState::Inside(t1, _)) => {
                         // Transitioned into a transit, refine transit start and return
-                        let start = refine_crossing(
-                            datetime_to_f64(*t0),
-                            datetime_to_f64(*t1),
-                            f,
-                            0.001,
-                            1e-6,
-                        );
+                        let start =
+                            refine_crossing(datetime_to_f64(*t0), datetime_to_f64(*t1), &mut f)
+                                .ok()?;
                         DateTime::<Utc>::from_timestamp_nanos((start * 1e9) as i64)
                     }
                     _ => return None, // No other state transitions of interest
@@ -92,7 +87,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             }
             None => {
                 match &*new_state {
-                    TransitState::Inside(t1, o1) if o1.elevation == self.min_elevation => {
+                    TransitState::Inside(t1, el) if *el == self.min_elevation.to_si() => {
                         // This is an edge case where the first observation is the start of a
                         // transit, i.e. the start of the first transit is exactly concurrent with
                         // the start of iter interval.
@@ -105,7 +100,8 @@ impl<'a, O: Observer> TransitIter<'a, O> {
 
         // new_state must be Inside at this point, advance time until the state is Outside
         let mut t0 = start;
-        let mut t1 = t0 + self.step_size();
+        let step = Duration::seconds(30); // Fixed step, el_rate won't help cross el_max
+        let mut t1 = t0 + step;
         let end = loop {
             if (t1 - start) > Duration::hours(1) {
                 // TODO: log warning transit was longer than an hour and was ignored
@@ -114,19 +110,35 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             let observation = self.predictor.observe_at(t1, self.observer).unwrap(); // TODO
             if observation.elevation < self.min_elevation {
                 // Transitioned out of a transit, refine transit end and return
-                let end = refine_crossing(datetime_to_f64(t0), datetime_to_f64(t1), f, 0.001, 1e-6);
+                let end = refine_crossing(datetime_to_f64(t0), datetime_to_f64(t1), &mut f).ok()?;
                 break DateTime::<Utc>::from_timestamp_nanos((end * 1e9) as i64);
             };
             t0 = t1;
-            t1 += self.step_size();
+            t1 += step;
         };
         // Update the state and next time so the next iteration picks up from here
         (self.next_time, *new_state) = (t1, TransitState::Outside(t1));
         Some(Transit::new(start, end))
     }
 
-    fn step_size(&self) -> Duration {
-        Duration::seconds(15) // TODO
+    fn calculate_elevation(&self, t: DateTime<Utc>) -> Result<(f64, f64), Error> {
+        let (el, el_rate) = self
+            .predictor
+            .propagate(t)?
+            .to_ecef(t)
+            .to_enu(self.observer)
+            .to_elevation();
+        Ok((el, el_rate))
+    }
+
+    fn step_size(&self, el: f64, el_rate: f64) -> Duration {
+        if el_rate <= 0.0 {
+            // Descending portion of orbit, use max step
+            MAX_STEP
+        } else {
+            Duration::seconds(((self.min_elevation.to_si() - el) / el_rate) as i64)
+                .clamp(MIN_STEP, MAX_STEP)
+        }
     }
 }
 
@@ -137,12 +149,12 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
         while self.interval.contains(&self.next_time) {
             // Calculate observation at current time
             let t = self.next_time;
-            let observation = match self.predictor.observe_at(t, self.observer) {
-                Ok(obs) => obs,
+            let (el, el_rate) = match self.calculate_elevation(t) {
+                Ok((el, el_rate)) => (el, el_rate),
                 Err(e) => return Some(Err(e)),
             };
-            let mut new_state = if observation.elevation >= self.min_elevation {
-                TransitState::Inside(t, observation)
+            let mut new_state = if el >= self.min_elevation.to_si() {
+                TransitState::Inside(t, el)
             } else {
                 TransitState::Outside(t)
             };
@@ -150,7 +162,7 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
             // Detect transit, if any. Calculate step size based on result.
             let result = self.detect_transit(&mut new_state);
             // Calculate next step size
-            self.next_time += self.step_size();
+            self.next_time += self.step_size(el, el_rate);
             // Update current state
             self.state.replace(new_state);
             // If transit found then return it, otherwise continue
@@ -164,57 +176,24 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
 
 #[derive(Debug, Clone)]
 enum TransitState {
-    Inside(DateTime<Utc>, Observation),
+    Inside(DateTime<Utc>, f64),
     Outside(DateTime<Utc>),
 }
 
-fn refine_crossing<F>(mut t0: f64, mut t1: f64, mut f: F, tol_time: f64, tol_val: f64) -> f64
+fn refine_crossing<F>(t0: f64, t1: f64, mut f: F) -> Result<f64, Error>
 where
-    F: FnMut(f64) -> f64,
+    F: FnMut(f64) -> (f64, f64),
 {
-    let f_lo = f(t0);
-    let f_hi = f(t1);
+    let t = (t0 + t1) / 2.0;
 
-    assert!(f_lo != 0.0 && f_hi != 0.0);
-    assert!(f_lo.signum() != f_hi.signum());
-
-    // Normalise so f(t0) < 0 and f(t1) > 0
-    let flip = if f_lo > f_hi { -1.0 } else { 1.0 };
-    let mut f_norm = |t: f64| flip * f(t);
-
-    let mut t = 0.5 * (t0 + t1);
-
-    for _ in 0..20 {
-        let v = f_norm(t);
-        if v.abs() < tol_val || (t1 - t0).abs() < tol_time {
-            return t;
-        }
-
-        let h = 1.0;
-        let v_plus = f_norm(t + h);
-        let v_minus = f_norm(t - h);
-        let deriv = (v_plus - v_minus) / (2.0 * h);
-
-        let mut new_t = if deriv.abs() > 1e-12 {
-            t - v / deriv
-        } else {
-            0.5 * (t0 + t1)
-        };
-
-        if new_t <= t0 || new_t >= t1 {
-            new_t = 0.5 * (t0 + t1);
-        }
-
-        if f_norm(new_t) > 0.0 {
-            t1 = new_t;
-        } else {
-            t0 = new_t;
-        }
-
-        t = new_t;
-    }
-    // TODO: log warning max iterations reached
-    t
+    // Try Newton-Raphson first
+    let result = roots::newton_raphson(t, &mut f, 1e-6, 20)
+        // TODO: log Newton-Raphson failure
+        // Fall back to Brent if Newton-Raphson fails
+        .or_else(|_| roots::brent(t0, t1, |x| f(x).0, 1e-6, 50))
+        // TODO: log Brent failure
+        .map_err(Error::Roots)?;
+    Ok(result)
 }
 
 fn datetime_to_f64(dt: DateTime<Utc>) -> f64 {

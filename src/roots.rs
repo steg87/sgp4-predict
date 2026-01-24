@@ -37,9 +37,9 @@ where
 /// - `f`: f(x) -> y
 /// - `tol`: acceptable absolute error in f(x)
 /// - `max_iter`: safety cap
-pub fn brent<F>(mut a: f64, mut b: f64, f: F, tol: f64, max_iter: usize) -> Result<f64, Error>
+pub fn brent<F>(mut a: f64, mut b: f64, mut f: F, tol: f64, max_iter: usize) -> Result<f64, Error>
 where
-    F: Fn(f64) -> f64,
+    F: FnMut(f64) -> f64,
 {
     let mut fa = f(a);
     let mut fb = f(b);

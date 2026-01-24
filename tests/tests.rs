@@ -130,10 +130,77 @@ fn test_transits() {
     let transits = p
         .transits_iter(
             &gs,
-            datetime("2025-12-20T12:00:00Z")..datetime("2025-12-21T12:00:00Z"),
+            datetime("2025-12-20T12:00:00Z")..datetime("2026-01-21T12:00:00Z"),
             angle(0.0),
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!transits.is_empty());
+}
+
+#[test]
+fn test_transits_to_csv() {
+    use std::io::Write;
+
+    let tle = create_tle();
+    let sat_id = tle.id();
+    let p = Predictor::new(&tle);
+    let gs = GroundStation::new(55.8642, -4.2518, 40.0);
+
+    let start_dt = datetime("2025-12-20T12:00:00Z");
+    let end_dt = datetime("2026-01-21T12:00:00Z");
+
+    // Format filename: {sat_id}_transits_{start_dt}_{end_dt}.csv
+    let start_str = start_dt.format("%Y%m%dT%H%M%S").to_string();
+    let end_str = end_dt.format("%Y%m%dT%H%M%S").to_string();
+    let filename = format!("{}_transits_{}_{}.csv", sat_id, start_str, end_str);
+
+    // Create results directory if it doesn't exist
+    std::fs::create_dir_all("tests/results").unwrap();
+    let filepath = format!("tests/results/{}", filename);
+
+    // Write transits to CSV file
+    let mut file = std::fs::File::create(&filepath).unwrap();
+    writeln!(file, "start,end,aos_azimuth_deg,los_azimuth_deg,duration").unwrap();
+
+    let mut count = 0;
+    for transit in p.transits_iter(&gs, start_dt..end_dt, angle(0.0)) {
+        let transit = transit.unwrap();
+
+        // Get observations at start and end to extract azimuth
+        let obs_start = p.observe_at(transit.start, &gs).unwrap();
+        let obs_end = p.observe_at(transit.end, &gs).unwrap();
+
+        // Calculate duration
+        let duration = transit.end - transit.start;
+        let duration_str = humantime::format_duration(std::time::Duration::from_secs_f32(
+            duration.as_seconds_f32(),
+        ))
+        .to_string();
+
+        // Convert azimuth to degrees
+        #[cfg(feature = "uom")]
+        let aos_az_deg = obs_start.azimuth.get::<degree>();
+        #[cfg(feature = "uom")]
+        let los_az_deg = obs_end.azimuth.get::<degree>();
+
+        #[cfg(not(feature = "uom"))]
+        let aos_az_deg = obs_start.azimuth.to_degrees();
+        #[cfg(not(feature = "uom"))]
+        let los_az_deg = obs_end.azimuth.to_degrees();
+
+        writeln!(
+            file,
+            "{},{},{:.2},{:.2},{}",
+            transit.start.format("%Y-%m-%d %H:%M:%S"),
+            transit.end.format("%Y-%m-%d %H:%M:%S"),
+            aos_az_deg,
+            los_az_deg,
+            duration_str
+        )
+        .unwrap();
+        count += 1;
+    }
+
+    println!("Wrote {} transits to {}", count, filepath);
 }

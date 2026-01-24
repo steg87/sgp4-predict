@@ -15,3 +15,5 @@ uom = { version = "0.37.0", default-features = false, features = [
     "f64",
     "si",
 ], optional = true }
+[dev-dependencies]
+humantime = "2.1.0"

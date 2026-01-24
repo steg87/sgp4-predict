@@ -68,6 +68,7 @@ pub struct Enu;
 pub type EnuState = StateVector<Enu>;
 
 impl EnuState {
+    /// Convert to an observation (range, range rate, azimuth, elevation)
     pub fn to_observation(&self) -> Observation {
         let (e, n, u) = (
             self.position.x.to_si(),
@@ -86,6 +87,35 @@ impl EnuState {
         let el = (u / range).asin();
 
         Observation::from_si(az, el, range, range_rate)
+    }
+
+    /// Convert to an (elevation, elevation rate)
+    pub(crate) fn to_elevation(&self) -> (f64, f64) {
+        let (e, n, u) = (
+            self.position.x.to_si(),
+            self.position.y.to_si(),
+            self.position.z.to_si(),
+        );
+        let (ed, nd, ud) = (
+            self.velocity.x.to_si(),
+            self.velocity.y.to_si(),
+            self.velocity.z.to_si(),
+        );
+
+        let horiz2 = e * e + n * n;
+        let horiz = horiz2.sqrt();
+        let range2 = horiz2 + u * u;
+
+        let el = u.atan2(horiz);
+
+        let el_rate = if horiz > 1e-12 {
+            (horiz2 * ud - u * (e * ed + n * nd)) / (range2 * horiz)
+        } else {
+            // At or near zenith elevation rate undefined
+            0.0 // Treat as zero
+        };
+
+        (el, el_rate)
     }
 }
 
