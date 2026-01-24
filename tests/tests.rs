@@ -98,7 +98,7 @@ fn test_propagate() {
     let p = Predictor::new(&tle);
     let transits = p
         .prediction_iter(
-            datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
+            &(datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z")),
             Duration::minutes(1),
         )
         .collect::<Result<Vec<_>, _>>()
@@ -114,7 +114,7 @@ fn test_observe() {
     let observations = p
         .observation_iter(
             &gs,
-            datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z"),
+            &(datetime("2025-12-20T12:00:00Z")..datetime("2025-12-23T12:00:00Z")),
             Duration::minutes(1),
         )
         .collect::<Result<Vec<_>, _>>()
@@ -139,6 +139,7 @@ fn test_transits() {
 }
 
 #[test]
+#[cfg(feature = "test-outputs")]
 fn test_transits_to_csv() {
     use std::io::Write;
 
@@ -203,4 +204,93 @@ fn test_transits_to_csv() {
     }
 
     println!("Wrote {} transits to {}", count, filepath);
+}
+
+#[test]
+#[cfg(feature = "test-outputs")]
+fn test_next_transit_observations_to_csv() {
+    use std::io::Write;
+
+    let tle = create_tle();
+    let sat_id = tle.id();
+    let p = Predictor::new(&tle);
+    let gs = GroundStation::new(55.8642, -4.2518, 40.0);
+
+    // Calculate transits over the next 3 hours
+    let start_dt = datetime("2025-12-20T12:00:00Z");
+    let end_dt = start_dt + Duration::hours(3);
+
+    let next_transit = p
+        .transits_iter(&gs, start_dt..end_dt, angle(0.0))
+        .next()
+        .expect("No transits found in the next 3 hours")
+        .unwrap();
+
+    println!(
+        "First transit: {} to {}",
+        next_transit.start.format("%Y-%m-%d %H:%M:%S"),
+        next_transit.end.format("%Y-%m-%d %H:%M:%S")
+    );
+
+    // Create results directory if it doesn't exist
+    std::fs::create_dir_all("tests/results").unwrap();
+
+    // Format filename
+    let transit_start_str = next_transit.start.format("%Y%m%dT%H%M%S").to_string();
+    let filename = format!("{}_observations_{}.csv", sat_id, transit_start_str);
+    let filepath = format!("tests/results/{}", filename);
+
+    // Write observations to CSV file
+    let mut file = std::fs::File::create(&filepath).unwrap();
+    writeln!(
+        file,
+        "time,azimuth_deg,elevation_deg,range_km,range_rate_km_s"
+    )
+    .unwrap();
+
+    let mut count = 0;
+    for obs in p
+        .observation_iter(&gs, &next_transit, Duration::seconds(10))
+        .chain(std::iter::once(Ok((
+            next_transit.end,
+            p.observe_at(next_transit.end, &gs).unwrap(),
+        ))))
+    {
+        let (time, obs) = obs.unwrap();
+
+        // Convert to degrees and km
+        #[cfg(feature = "uom")]
+        let az_deg = obs.azimuth.get::<degree>();
+        #[cfg(feature = "uom")]
+        let el_deg = obs.elevation.get::<degree>();
+        #[cfg(feature = "uom")]
+        let range_km = obs.range.get::<uom::si::length::kilometer>();
+        #[cfg(feature = "uom")]
+        let range_rate_km_s = obs
+            .range_rate
+            .get::<uom::si::velocity::kilometer_per_second>();
+
+        #[cfg(not(feature = "uom"))]
+        let az_deg = obs.azimuth.to_degrees();
+        #[cfg(not(feature = "uom"))]
+        let el_deg = obs.elevation.to_degrees();
+        #[cfg(not(feature = "uom"))]
+        let range_km = obs.range / 1000.0;
+        #[cfg(not(feature = "uom"))]
+        let range_rate_km_s = obs.range_rate / 1000.0;
+
+        writeln!(
+            file,
+            "{},{:.2},{:.2},{:.2},{:.4}",
+            time.format("%Y-%m-%d %H:%M:%S"),
+            az_deg,
+            el_deg,
+            range_km,
+            range_rate_km_s
+        )
+        .unwrap();
+        count += 1;
+    }
+
+    println!("Wrote {} observations to {}", count, filepath);
 }

@@ -90,7 +90,7 @@ impl Predictor {
     /// Propagate the TLE over a time interval.
     ///
     /// Returns an iterator over predicted state vectors in the TEME frame.
-    pub fn prediction_iter(&self, interval: impl IntervalRange, step: Duration) -> PredictionIter {
+    pub fn prediction_iter(&self, interval: &impl IntervalRange, step: Duration) -> PredictionIter {
         PredictionIter::new(self.clone(), interval, step)
     }
 
@@ -100,7 +100,7 @@ impl Predictor {
     pub fn observation_iter<'a, O: Observer>(
         &self,
         observer: &'a O,
-        interval: impl IntervalRange,
+        interval: &impl IntervalRange,
         step: Duration,
     ) -> ObservationIter<'a, O> {
         ObservationIter::new(self.clone(), observer, interval, step)

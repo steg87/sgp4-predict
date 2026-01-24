@@ -22,7 +22,7 @@ pub struct DateTimeIter {
 }
 
 impl DateTimeIter {
-    pub fn new(interval: impl IntervalRange, step: Duration) -> Self {
+    pub fn new(interval: &impl IntervalRange, step: Duration) -> Self {
         Self {
             interval: interval.start()..interval.end(),
             next_time: interval.start(),

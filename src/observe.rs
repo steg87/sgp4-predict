@@ -54,7 +54,7 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
     pub fn new(
         predictor: Predictor,
         observer: &'a O,
-        interval: impl IntervalRange,
+        interval: &impl IntervalRange,
         step: Duration,
     ) -> Self {
         Self {
