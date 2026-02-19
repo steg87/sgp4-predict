@@ -5,17 +5,11 @@ edition = "2024"
 
 [features]
 default = []
-uom = ["dep:uom"]
-test-outputs = []
 
 [dependencies]
 chrono = "0.4.43"
 sgp4 = "2.3.0"
 thiserror = "2.0.18"
-uom = { version = "0.37.0", default-features = false, features = [
-    "f64",
-    "si",
-], optional = true }
 
 [dev-dependencies]
 humantime = "2.1.0"

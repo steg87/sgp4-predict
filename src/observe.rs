@@ -1,12 +1,13 @@
 use chrono::{DateTime, Duration, Utc};
 
-use crate::Error;
-use crate::Predictor;
-use crate::frames::EcefState;
-use crate::predict::PredictionIter;
-use crate::time::IntervalRange;
-use crate::units::{self, SI};
-use crate::vectors::{Position, Velocity};
+use crate::{
+    Error, Predictor,
+    frames::EcefState,
+    predict::PredictionIter,
+    time::IntervalRange,
+    units,
+    vectors::{Position, Velocity},
+};
 
 pub trait Observer {
     fn latitude(&self) -> units::Angle;
@@ -14,24 +15,24 @@ pub trait Observer {
     fn altitude(&self) -> units::Length;
 
     fn to_ecef(&self) -> EcefState {
-        let h = self.altitude().to_si();
+        let h = self.altitude();
         let a = 6378137.0; // meters
         let f = 1.0 / 298.257223563;
         let e2 = f * (2.0 - f);
 
-        let sin_lat = self.latitude().to_si().sin();
-        let cos_lat = self.latitude().to_si().cos();
-        let sin_lon = self.longitude().to_si().sin();
-        let cos_lon = self.longitude().to_si().cos();
+        let sin_lat = self.latitude().sin();
+        let cos_lat = self.latitude().cos();
+        let sin_lon = self.longitude().sin();
+        let cos_lon = self.longitude().cos();
 
         let n = a / (1.0 - e2 * sin_lat * sin_lat).sqrt();
 
         EcefState::new(
-            Position::from_si(
-                (n + h) * cos_lat * cos_lon,
-                (n + h) * cos_lat * sin_lon,
-                (n * (1.0 - e2) + h) * sin_lat,
-            ),
+            Position {
+                x: (n + h) * cos_lat * cos_lon,
+                y: (n + h) * cos_lat * sin_lon,
+                z: (n * (1.0 - e2) + h) * sin_lat,
+            },
             Velocity::default(),
         )
     }

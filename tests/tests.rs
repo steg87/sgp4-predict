@@ -1,6 +1,4 @@
 use chrono::{DateTime, Duration, Utc};
-#[cfg(feature = "uom")]
-use uom::si::{angle::degree, length::meter};
 
 use sgp4_predict::{HasId, HasTle, Observer, Predictor};
 
@@ -42,29 +40,14 @@ impl GroundStation {
 }
 
 impl Observer for GroundStation {
-    #[cfg(not(feature = "uom"))]
     fn latitude(&self) -> f64 {
         self.latitude_deg.to_radians()
     }
-    #[cfg(not(feature = "uom"))]
     fn longitude(&self) -> f64 {
         self.longitude_deg.to_radians()
     }
-    #[cfg(not(feature = "uom"))]
     fn altitude(&self) -> f64 {
         self.altitude
-    }
-    #[cfg(feature = "uom")]
-    fn latitude(&self) -> uom::si::f64::Angle {
-        uom::si::f64::Angle::new::<degree>(self.latitude_deg)
-    }
-    #[cfg(feature = "uom")]
-    fn longitude(&self) -> uom::si::f64::Angle {
-        uom::si::f64::Angle::new::<degree>(self.longitude_deg)
-    }
-    #[cfg(feature = "uom")]
-    fn altitude(&self) -> uom::si::f64::Length {
-        uom::si::f64::Length::new::<meter>(self.altitude)
     }
 }
 
@@ -82,14 +65,8 @@ fn datetime(dt: &str) -> DateTime<Utc> {
         .with_timezone(&Utc)
 }
 
-#[cfg(not(feature = "uom"))]
 fn angle(theta: f64) -> f64 {
     theta.to_radians()
-}
-
-#[cfg(feature = "uom")]
-fn angle(theta: f64) -> uom::si::f64::Angle {
-    uom::si::f64::Angle::new::<degree>(theta)
 }
 
 #[test]
@@ -139,7 +116,7 @@ fn test_transits() {
 }
 
 #[test]
-#[cfg(feature = "test-outputs")]
+#[ignore]
 fn test_transits_to_csv() {
     use std::io::Write;
 
@@ -180,14 +157,7 @@ fn test_transits_to_csv() {
         .to_string();
 
         // Convert azimuth to degrees
-        #[cfg(feature = "uom")]
-        let aos_az_deg = obs_start.azimuth.get::<degree>();
-        #[cfg(feature = "uom")]
-        let los_az_deg = obs_end.azimuth.get::<degree>();
-
-        #[cfg(not(feature = "uom"))]
         let aos_az_deg = obs_start.azimuth.to_degrees();
-        #[cfg(not(feature = "uom"))]
         let los_az_deg = obs_end.azimuth.to_degrees();
 
         writeln!(
@@ -207,7 +177,7 @@ fn test_transits_to_csv() {
 }
 
 #[test]
-#[cfg(feature = "test-outputs")]
+#[ignore]
 fn test_next_transit_observations_to_csv() {
     use std::io::Write;
 
@@ -259,24 +229,9 @@ fn test_next_transit_observations_to_csv() {
         let (time, obs) = obs.unwrap();
 
         // Convert to degrees and km
-        #[cfg(feature = "uom")]
-        let az_deg = obs.azimuth.get::<degree>();
-        #[cfg(feature = "uom")]
-        let el_deg = obs.elevation.get::<degree>();
-        #[cfg(feature = "uom")]
-        let range_km = obs.range.get::<uom::si::length::kilometer>();
-        #[cfg(feature = "uom")]
-        let range_rate_km_s = obs
-            .range_rate
-            .get::<uom::si::velocity::kilometer_per_second>();
-
-        #[cfg(not(feature = "uom"))]
         let az_deg = obs.azimuth.to_degrees();
-        #[cfg(not(feature = "uom"))]
         let el_deg = obs.elevation.to_degrees();
-        #[cfg(not(feature = "uom"))]
         let range_km = obs.range / 1000.0;
-        #[cfg(not(feature = "uom"))]
         let range_rate_km_s = obs.range_rate / 1000.0;
 
         writeln!(

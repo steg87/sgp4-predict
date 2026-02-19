@@ -11,16 +11,14 @@ use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, Elements, MinutesSinceEpoch};
 use thiserror::Error as ThisError;
 
-pub use crate::frames::TemeState;
-pub use crate::observe::{Observation, ObservationIter, Observer};
-pub use crate::predict::PredictionIter;
-pub use crate::time::IntervalRange;
-pub use crate::transits::{Transit, TransitIter};
-pub use crate::vectors::{Position, StateVector, Velocity};
-
-pub mod test_utils {
-    pub use crate::units::SI;
-}
+pub use crate::{
+    frames::TemeState,
+    observe::{Observation, ObservationIter, Observer},
+    predict::PredictionIter,
+    time::IntervalRange,
+    transits::{Transit, TransitIter},
+    vectors::{Position, StateVector, Velocity},
+};
 
 pub trait Satellite: HasId + HasTle {}
 impl<T> Satellite for T where T: HasId + HasTle {}

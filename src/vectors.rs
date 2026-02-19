@@ -1,4 +1,4 @@
-use crate::units::{self, SI};
+use crate::units;
 
 /// State vector, takes frame as generic
 #[derive(Debug, Clone, Copy, Default)]
@@ -29,11 +29,11 @@ impl std::ops::Sub for Position {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::from_si(
-            self.x.to_si() - rhs.x.to_si(),
-            self.y.to_si() - rhs.y.to_si(),
-            self.z.to_si() - rhs.z.to_si(),
-        )
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
     }
 }
 
@@ -49,10 +49,10 @@ impl std::ops::Sub for Velocity {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::from_si(
-            self.x.to_si() - rhs.x.to_si(),
-            self.y.to_si() - rhs.y.to_si(),
-            self.z.to_si() - rhs.z.to_si(),
-        )
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
     }
 }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::{Observation, Observer, Position, StateVector, Velocity, units::SI};
+use crate::{Observation, Observer, Position, StateVector, Velocity};
 
 pub struct JulianDate(f64);
 pub struct Radians(f64);
@@ -15,16 +15,16 @@ impl TemeState {
         let (sin_g, cos_g) = gmst(julian_date(t)).0.sin_cos();
 
         EcefState::new(
-            Position::from_si(
-                cos_g * self.position.x.to_si() + sin_g * self.position.y.to_si(),
-                -sin_g * self.position.x.to_si() + cos_g * self.position.y.to_si(),
-                self.position.z.to_si(),
-            ),
-            Velocity::from_si(
-                cos_g * self.velocity.x.to_si() + sin_g * self.velocity.y.to_si(),
-                -sin_g * self.velocity.x.to_si() + cos_g * self.velocity.y.to_si(),
-                self.velocity.z.to_si(),
-            ),
+            Position {
+                x: cos_g * self.position.x + sin_g * self.position.y,
+                y: -sin_g * self.position.x + cos_g * self.position.y,
+                z: self.position.z,
+            },
+            Velocity {
+                x: cos_g * self.velocity.x + sin_g * self.velocity.y,
+                y: -sin_g * self.velocity.x + cos_g * self.velocity.y,
+                z: self.velocity.z,
+            },
         )
     }
 }
@@ -39,26 +39,20 @@ impl EcefState {
         let dp = self.position - obs_ecef.position;
         let dv = self.velocity - obs_ecef.velocity;
 
-        let (sin_lat, cos_lat) = observer.latitude().to_si().sin_cos();
-        let (sin_lon, cos_lon) = observer.longitude().to_si().sin_cos();
+        let (sin_lat, cos_lat) = observer.latitude().sin_cos();
+        let (sin_lon, cos_lon) = observer.longitude().sin_cos();
 
         EnuState::new(
-            Position::from_si(
-                -sin_lon * dp.x.to_si() + cos_lon * dp.y.to_si(),
-                -sin_lat * cos_lon * dp.x.to_si() - sin_lat * sin_lon * dp.y.to_si()
-                    + cos_lat * dp.z.to_si(),
-                cos_lat * cos_lon * dp.x.to_si()
-                    + cos_lat * sin_lon * dp.y.to_si()
-                    + sin_lat * dp.z.to_si(),
-            ),
-            Velocity::from_si(
-                -sin_lon * dv.x.to_si() + cos_lon * dv.y.to_si(),
-                -sin_lat * cos_lon * dv.x.to_si() - sin_lat * sin_lon * dv.y.to_si()
-                    + cos_lat * dv.z.to_si(),
-                cos_lat * cos_lon * dv.x.to_si()
-                    + cos_lat * sin_lon * dv.y.to_si()
-                    + sin_lat * dv.z.to_si(),
-            ),
+            Position {
+                x: -sin_lon * dp.x + cos_lon * dp.y,
+                y: -sin_lat * cos_lon * dp.x - sin_lat * sin_lon * dp.y + cos_lat * dp.z,
+                z: cos_lat * cos_lon * dp.x + cos_lat * sin_lon * dp.y + sin_lat * dp.z,
+            },
+            Velocity {
+                x: -sin_lon * dv.x + cos_lon * dv.y,
+                y: -sin_lat * cos_lon * dv.x - sin_lat * sin_lon * dv.y + cos_lat * dv.z,
+                z: cos_lat * cos_lon * dv.x + cos_lat * sin_lon * dv.y + sin_lat * dv.z,
+            },
         )
     }
 }
@@ -70,37 +64,26 @@ pub type EnuState = StateVector<Enu>;
 impl EnuState {
     /// Convert to an observation (range, range rate, azimuth, elevation)
     pub fn to_observation(&self) -> Observation {
-        let (e, n, u) = (
-            self.position.x.to_si(),
-            self.position.y.to_si(),
-            self.position.z.to_si(),
-        );
-        let (ed, nd, ud) = (
-            self.velocity.x.to_si(),
-            self.velocity.y.to_si(),
-            self.velocity.z.to_si(),
-        );
+        let (e, n, u) = (self.position.x, self.position.y, self.position.z);
+        let (ed, nd, ud) = (self.velocity.x, self.velocity.y, self.velocity.z);
 
         let range = (e * e + n * n + u * u).sqrt();
         let range_rate = (e * ed + n * nd + u * ud) / range;
-        let az = e.atan2(n);
-        let el = (u / range).asin();
+        let azimuth = e.atan2(n);
+        let elevation = (u / range).asin();
 
-        Observation::from_si(az, el, range, range_rate)
+        Observation {
+            azimuth,
+            elevation,
+            range,
+            range_rate,
+        }
     }
 
     /// Convert to an (elevation, elevation rate)
     pub(crate) fn to_elevation(&self) -> (f64, f64) {
-        let (e, n, u) = (
-            self.position.x.to_si(),
-            self.position.y.to_si(),
-            self.position.z.to_si(),
-        );
-        let (ed, nd, ud) = (
-            self.velocity.x.to_si(),
-            self.velocity.y.to_si(),
-            self.velocity.z.to_si(),
-        );
+        let (e, n, u) = (self.position.x, self.position.y, self.position.z);
+        let (ed, nd, ud) = (self.velocity.x, self.velocity.y, self.velocity.z);
 
         let horiz2 = e * e + n * n;
         let horiz = horiz2.sqrt();

@@ -1,13 +1,7 @@
+use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
-use chrono::{DateTime, Duration, Utc};
-
-use crate::Error;
-use crate::Predictor;
-use crate::observe::Observer;
-use crate::roots;
-use crate::time::IntervalRange;
-use crate::units::{self, SI};
+use crate::{Error, Predictor, observe::Observer, roots, time::IntervalRange, units};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -67,7 +61,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         let mut f = |t| {
             let t = DateTime::from_timestamp(t as i64, 0).unwrap();
             let (el, el_rate) = self.calculate_elevation(t).unwrap(); // TODO
-            (el - self.min_elevation.to_si(), el_rate)
+            (el - self.min_elevation, el_rate)
         };
 
         // Determine if state transition indicates that a new transit has been found
@@ -87,7 +81,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             }
             None => {
                 match &*new_state {
-                    TransitState::Inside(t1, el) if *el == self.min_elevation.to_si() => {
+                    TransitState::Inside(t1, el) if *el == self.min_elevation => {
                         // This is an edge case where the first observation is the start of a
                         // transit, i.e. the start of the first transit is exactly concurrent with
                         // the start of iter interval.
@@ -136,7 +130,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             // Descending portion of orbit, use max step
             MAX_STEP
         } else {
-            Duration::seconds(((self.min_elevation.to_si() - el) / el_rate) as i64)
+            Duration::seconds(((self.min_elevation - el) / el_rate) as i64)
                 .clamp(MIN_STEP, MAX_STEP)
         }
     }
@@ -153,7 +147,7 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
                 Ok((el, el_rate)) => (el, el_rate),
                 Err(e) => return Some(Err(e)),
             };
-            let mut new_state = if el >= self.min_elevation.to_si() {
+            let mut new_state = if el >= self.min_elevation {
                 TransitState::Inside(t, el)
             } else {
                 TransitState::Outside(t)
