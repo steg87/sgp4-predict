@@ -1,3 +1,4 @@
+mod apsides;
 mod frames;
 mod observe;
 mod predict;
@@ -11,6 +12,7 @@ use sgp4::{Constants, Elements, MinutesSinceEpoch};
 use thiserror::Error as ThisError;
 
 pub use crate::{
+    apsides::{Apsis, ApsisEvent, ApsisIter},
     frames::TemeState,
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,
@@ -101,6 +103,13 @@ impl Predictor {
         step: Duration,
     ) -> ObservationIter<'a, O> {
         ObservationIter::new(self.clone(), observer, interval, step)
+    }
+
+    /// Detect apogee and perigee events over a time interval.
+    ///
+    /// Returns an iterator over apsis events in the TEME frame.
+    pub fn apsis_iter(&self, interval: impl IntervalRange) -> ApsisIter {
+        ApsisIter::new(self.clone(), interval)
     }
 
     /// Calculate all of the transits visible to the observer.

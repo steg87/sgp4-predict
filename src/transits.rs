@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
-use crate::{Error, Predictor, observe::Observer, roots, time::IntervalRange};
+use crate::{Error, Predictor, observe::Observer, roots, time};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -17,7 +17,7 @@ impl Transit {
     }
 }
 
-impl IntervalRange for Transit {
+impl time::IntervalRange for Transit {
     fn start(&self) -> DateTime<Utc> {
         self.start
     }
@@ -39,7 +39,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
     pub fn new(
         predictor: Predictor,
         observer: &'a O,
-        interval: impl IntervalRange,
+        interval: impl time::IntervalRange,
         min_elevation: f64,
     ) -> Self {
         Self {
@@ -71,10 +71,13 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 match (prev_state, &*new_state) {
                     (TransitState::Outside(t0), TransitState::Inside(t1, _)) => {
                         // Transitioned into a transit, refine transit start and return
-                        let start =
-                            refine_crossing(datetime_to_f64(*t0), datetime_to_f64(*t1), &mut f)
-                                .ok()?;
-                        DateTime::<Utc>::from_timestamp_nanos((start * 1e9) as i64)
+                        let start = refine_crossing(
+                            time::datetime_to_f64(*t0),
+                            time::datetime_to_f64(*t1),
+                            &mut f,
+                        )
+                        .ok()?;
+                        time::f64_to_datetime(start)
                     }
                     _ => return None, // No other state transitions of interest
                 }
@@ -104,8 +107,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             let observation = self.predictor.observe_at(t1, self.observer).unwrap(); // TODO
             if observation.elevation < self.min_elevation {
                 // Transitioned out of a transit, refine transit end and return
-                let end = refine_crossing(datetime_to_f64(t0), datetime_to_f64(t1), &mut f).ok()?;
-                break DateTime::<Utc>::from_timestamp_nanos((end * 1e9) as i64);
+                let end =
+                    refine_crossing(time::datetime_to_f64(t0), time::datetime_to_f64(t1), &mut f)
+                        .ok()?;
+                break time::f64_to_datetime(end);
             };
             t0 = t1;
             t1 += step;
@@ -181,17 +186,11 @@ where
     let t = (t0 + t1) / 2.0;
 
     // Try Newton-Raphson first
-    let result = roots::newton_raphson(t, &mut f, 1e-6, 20)
+    let result = roots::newton_raphson(t, &mut f, 1e-3, 50)
         // TODO: log Newton-Raphson failure
         // Fall back to Brent if Newton-Raphson fails
-        .or_else(|_| roots::brent(t0, t1, |x| f(x).0, 1e-6, 50))
+        .or_else(|_| roots::brent(t0, t1, |x| f(x).0, 1e-3, 100))
         // TODO: log Brent failure
         .map_err(Error::Roots)?;
     Ok(result)
-}
-
-fn datetime_to_f64(dt: DateTime<Utc>) -> f64 {
-    let secs = dt.timestamp() as f64; // integer seconds since Unix epoch
-    let nanos = dt.timestamp_subsec_nanos() as f64; // fractional nanoseconds
-    secs + nanos * 1e-9
 }

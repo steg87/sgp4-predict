@@ -19,10 +19,6 @@ impl<K, F> Vec3<K, F> {
             _marker: PhantomData,
         }
     }
-
-    pub fn magnitude(&self) -> f64 {
-        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
-    }
 }
 
 impl<K, F> std::ops::Sub for Vec3<K, F> {
@@ -43,6 +39,16 @@ pub struct StateVector<F> {
 impl<F> StateVector<F> {
     pub fn new(position: Position<F>, velocity: Velocity<F>) -> Self {
         Self { position, velocity }
+    }
+
+    /// Radial velocity: dot product of position and velocity (m²/s).
+    ///
+    /// Positive when the satellite is moving away from the origin, negative when approaching.
+    /// Zero at apogee and perigee.
+    pub fn radial_velocity(&self) -> f64 {
+        self.position.x * self.velocity.x
+            + self.position.y * self.velocity.y
+            + self.position.z * self.velocity.z
     }
 }
 

@@ -43,3 +43,13 @@ impl Iterator for DateTimeIter {
         Some(current)
     }
 }
+
+pub(crate) fn datetime_to_f64(dt: DateTime<Utc>) -> f64 {
+    let secs = dt.timestamp() as f64;
+    let nanos = dt.timestamp_subsec_nanos() as f64;
+    secs + nanos * 1e-9
+}
+
+pub(crate) fn f64_to_datetime(t: f64) -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp_nanos((t * 1e9) as i64)
+}

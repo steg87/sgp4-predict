@@ -24,6 +24,7 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 - `prediction_iter(interval, step)` → `PredictionIter`
 - `observation_iter(observer, interval, step)` → `ObservationIter`
 - `transits_iter(observer, interval, min_elevation)` → `TransitIter`
+- `apsis_iter(interval)` → `ApsisIter`
 
 ### Type-safe coordinate frames
 
@@ -36,6 +37,14 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 **All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `predict.rs` in the `From<sgp4::Prediction>` impl.
 
 **Observer lat/lon must be in radians.**
+
+### Apsis detection (`apsides.rs`)
+
+`ApsisIter` detects apogee and perigee events in the TEME frame with a fixed 60-second step. It monitors the sign of the radial velocity `r · v` (dot product of position and velocity vectors). A sign change brackets an event:
+- `r·v > 0 → < 0`: apogee (`ApsisEvent::Apogee`)
+- `r·v < 0 → > 0`: perigee (`ApsisEvent::Perigee`)
+
+Brent's method refines the crossing time (no derivative needed; bracket is already known).
 
 ### Transit detection (`transits.rs`)
 
