@@ -7,9 +7,8 @@ pub struct Radians(f64);
 
 /// Marker struct for TEME frame
 pub struct Teme;
-pub type TemeState = StateVector<Teme>;
 
-impl TemeState {
+impl StateVector<Teme> {
     /// Rotation about the Z-axis by GMST
     pub fn to_ecef(&self, t: DateTime<Utc>) -> EcefState {
         let (sin_g, cos_g) = gmst(julian_date(t)).0.sin_cos();
@@ -31,9 +30,8 @@ impl TemeState {
 
 /// Marker struct for ECEF frame
 pub struct Ecef;
-pub type EcefState = StateVector<Ecef>;
 
-impl EcefState {
+impl StateVector<Ecef> {
     pub fn to_enu(&self, observer: &impl Observer) -> EnuState {
         let obs_ecef = observer.to_ecef();
         let dp = self.position - obs_ecef.position;
@@ -59,9 +57,8 @@ impl EcefState {
 
 /// Marker struct for ECEF frame
 pub struct Enu;
-pub type EnuState = StateVector<Enu>;
 
-impl EnuState {
+impl StateVector<Enu> {
     /// Convert to an observation (range, range rate, azimuth, elevation)
     pub fn to_observation(&self) -> Observation {
         let (e, n, u) = (self.position.x, self.position.y, self.position.z);

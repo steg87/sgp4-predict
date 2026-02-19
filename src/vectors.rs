@@ -1,5 +1,3 @@
-use crate::units;
-
 /// State vector, takes frame as generic
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StateVector<F> {
@@ -20,9 +18,9 @@ impl<F> StateVector<F> {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Position {
-    pub x: units::Length,
-    pub y: units::Length,
-    pub z: units::Length,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 impl std::ops::Sub for Position {
@@ -40,9 +38,9 @@ impl std::ops::Sub for Position {
 /// Velocity vector
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Velocity {
-    pub x: units::Velocity,
-    pub y: units::Velocity,
-    pub z: units::Velocity,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 impl std::ops::Sub for Velocity {

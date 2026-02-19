@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
-use crate::{Error, Predictor, observe::Observer, roots, time::IntervalRange, units};
+use crate::{Error, Predictor, observe::Observer, roots, time::IntervalRange};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -30,7 +30,7 @@ pub struct TransitIter<'a, O: Observer> {
     predictor: Predictor,
     observer: &'a O,
     interval: Range<DateTime<Utc>>,
-    min_elevation: units::Angle,
+    min_elevation: f64,
     next_time: DateTime<Utc>,
     state: Option<TransitState>,
 }
@@ -40,7 +40,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         predictor: Predictor,
         observer: &'a O,
         interval: impl IntervalRange,
-        min_elevation: units::Angle,
+        min_elevation: f64,
     ) -> Self {
         Self {
             predictor,

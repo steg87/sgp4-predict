@@ -5,14 +5,13 @@ use crate::{
     frames::EcefState,
     predict::PredictionIter,
     time::IntervalRange,
-    units,
     vectors::{Position, Velocity},
 };
 
 pub trait Observer {
-    fn latitude(&self) -> units::Angle;
-    fn longitude(&self) -> units::Angle;
-    fn altitude(&self) -> units::Length;
+    fn latitude(&self) -> f64;
+    fn longitude(&self) -> f64;
+    fn altitude(&self) -> f64;
 
     fn to_ecef(&self) -> EcefState {
         let h = self.altitude();
@@ -40,10 +39,10 @@ pub trait Observer {
 
 #[derive(Debug, Clone)]
 pub struct Observation {
-    pub azimuth: units::Angle,
-    pub elevation: units::Angle,
-    pub range: units::Length,
-    pub range_rate: units::Velocity,
+    pub azimuth: f64,
+    pub elevation: f64,
+    pub range: f64,
+    pub range_rate: f64,
 }
 
 pub struct ObservationIter<'a, O: Observer> {

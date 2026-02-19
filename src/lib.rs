@@ -4,7 +4,6 @@ mod predict;
 mod roots;
 mod time;
 mod transits;
-mod units;
 mod vectors;
 
 use chrono::{DateTime, Duration, Utc};
@@ -111,7 +110,7 @@ impl Predictor {
         &self,
         observer: &'a O,
         interval: impl IntervalRange,
-        min_elevation: units::Angle,
+        min_elevation: f64,
     ) -> TransitIter<'a, O> {
         TransitIter::new(self.clone(), observer, interval, min_elevation)
     }
