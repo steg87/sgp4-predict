@@ -2,7 +2,7 @@ SILENT:
 
 .PHONY: test
 test:
-	cargo test && cargo test --features uom
+	cargo test --all-targets --all-features
 
 .PHONY: lint
 lint:

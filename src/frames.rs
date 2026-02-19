@@ -1,37 +1,40 @@
 use chrono::{DateTime, Utc};
 
-use crate::{Observation, Observer, Position, StateVector, Velocity};
+use crate::{
+    Observation, Observer,
+    vectors::{Position, StateVector, Velocity},
+};
 
 pub struct JulianDate(f64);
 pub struct Radians(f64);
 
-/// Marker struct for TEME frame
-pub struct Teme;
+/// TEME state vector
+pub type TemeState = StateVector<markers::Teme>;
 
-impl StateVector<Teme> {
+impl TemeState {
     /// Rotation about the Z-axis by GMST
     pub fn to_ecef(&self, t: DateTime<Utc>) -> EcefState {
         let (sin_g, cos_g) = gmst(julian_date(t)).0.sin_cos();
 
-        EcefState::new(
-            Position {
-                x: cos_g * self.position.x + sin_g * self.position.y,
-                y: -sin_g * self.position.x + cos_g * self.position.y,
-                z: self.position.z,
-            },
-            Velocity {
-                x: cos_g * self.velocity.x + sin_g * self.velocity.y,
-                y: -sin_g * self.velocity.x + cos_g * self.velocity.y,
-                z: self.velocity.z,
-            },
+        StateVector::new(
+            Position::new(
+                cos_g * self.position.x + sin_g * self.position.y,
+                -sin_g * self.position.x + cos_g * self.position.y,
+                self.position.z,
+            ),
+            Velocity::new(
+                cos_g * self.velocity.x + sin_g * self.velocity.y,
+                -sin_g * self.velocity.x + cos_g * self.velocity.y,
+                self.velocity.z,
+            ),
         )
     }
 }
 
-/// Marker struct for ECEF frame
-pub struct Ecef;
+/// ECEF state vector
+pub type EcefState = StateVector<markers::Ecef>;
 
-impl StateVector<Ecef> {
+impl EcefState {
     pub fn to_enu(&self, observer: &impl Observer) -> EnuState {
         let obs_ecef = observer.to_ecef();
         let dp = self.position - obs_ecef.position;
@@ -40,25 +43,25 @@ impl StateVector<Ecef> {
         let (sin_lat, cos_lat) = observer.latitude().sin_cos();
         let (sin_lon, cos_lon) = observer.longitude().sin_cos();
 
-        EnuState::new(
-            Position {
-                x: -sin_lon * dp.x + cos_lon * dp.y,
-                y: -sin_lat * cos_lon * dp.x - sin_lat * sin_lon * dp.y + cos_lat * dp.z,
-                z: cos_lat * cos_lon * dp.x + cos_lat * sin_lon * dp.y + sin_lat * dp.z,
-            },
-            Velocity {
-                x: -sin_lon * dv.x + cos_lon * dv.y,
-                y: -sin_lat * cos_lon * dv.x - sin_lat * sin_lon * dv.y + cos_lat * dv.z,
-                z: cos_lat * cos_lon * dv.x + cos_lat * sin_lon * dv.y + sin_lat * dv.z,
-            },
+        StateVector::new(
+            Position::new(
+                -sin_lon * dp.x + cos_lon * dp.y,
+                -sin_lat * cos_lon * dp.x - sin_lat * sin_lon * dp.y + cos_lat * dp.z,
+                cos_lat * cos_lon * dp.x + cos_lat * sin_lon * dp.y + sin_lat * dp.z,
+            ),
+            Velocity::new(
+                -sin_lon * dv.x + cos_lon * dv.y,
+                -sin_lat * cos_lon * dv.x - sin_lat * sin_lon * dv.y + cos_lat * dv.z,
+                cos_lat * cos_lon * dv.x + cos_lat * sin_lon * dv.y + sin_lat * dv.z,
+            ),
         )
     }
 }
 
-/// Marker struct for ECEF frame
-pub struct Enu;
+/// ENU state vector
+pub type EnuState = StateVector<markers::Enu>;
 
-impl StateVector<Enu> {
+impl EnuState {
     /// Convert to an observation (range, range rate, azimuth, elevation)
     pub fn to_observation(&self) -> Observation {
         let (e, n, u) = (self.position.x, self.position.y, self.position.z);
@@ -78,7 +81,7 @@ impl StateVector<Enu> {
     }
 
     /// Convert to an (elevation, elevation rate)
-    pub(crate) fn to_elevation(&self) -> (f64, f64) {
+    pub(crate) fn elevation_and_rate(&self) -> (f64, f64) {
         let (e, n, u) = (self.position.x, self.position.y, self.position.z);
         let (ed, nd, ud) = (self.velocity.x, self.velocity.y, self.velocity.z);
 
@@ -112,4 +115,18 @@ fn gmst(jd: JulianDate) -> Radians {
 
     // Convert seconds → radians
     Radians(((gmst_sec % 86400.0) * std::f64::consts::TAU) / 86400.0)
+}
+
+mod markers {
+    /// Marker struct for TEME frame
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct Teme;
+
+    /// Marker struct for ECEF frame
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct Ecef;
+
+    /// Marker struct for ENU frame
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct Enu;
 }

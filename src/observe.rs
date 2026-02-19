@@ -5,7 +5,7 @@ use crate::{
     frames::EcefState,
     predict::PredictionIter,
     time::IntervalRange,
-    vectors::{Position, Velocity},
+    vectors::{Position, Velocity, StateVector},
 };
 
 pub trait Observer {
@@ -26,12 +26,12 @@ pub trait Observer {
 
         let n = a / (1.0 - e2 * sin_lat * sin_lat).sqrt();
 
-        EcefState::new(
-            Position {
-                x: (n + h) * cos_lat * cos_lon,
-                y: (n + h) * cos_lat * sin_lon,
-                z: (n * (1.0 - e2) + h) * sin_lat,
-            },
+        StateVector::new(
+            Position::new(
+                (n + h) * cos_lat * cos_lon,
+                (n + h) * cos_lat * sin_lon,
+                (n * (1.0 - e2) + h) * sin_lat,
+            ),
             Velocity::default(),
         )
     }

@@ -16,17 +16,17 @@ impl From<sgp4::Prediction> for TemeState {
     fn from(value: sgp4::Prediction) -> Self {
         Self::new(
             // Convert sgp4::Prediction.position units (km) to SI (m)
-            Position {
-                x: value.position[0] * 1e3,
-                y: value.position[1] * 1e3,
-                z: value.position[2] * 1e3,
-            },
+            Position::new(
+                value.position[0] * 1e3,
+                value.position[1] * 1e3,
+                value.position[2] * 1e3,
+            ),
             // Convert sgp4::Prediction.velocity units (km/s) to SI (m/s)
-            Velocity {
-                x: value.velocity[0] * 1e3,
-                y: value.velocity[1] * 1e3,
-                z: value.velocity[2] * 1e3,
-            },
+            Velocity::new(
+                value.velocity[0] * 1e3,
+                value.velocity[1] * 1e3,
+                value.velocity[2] * 1e3,
+            ),
         )
     }
 }

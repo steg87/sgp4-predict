@@ -121,7 +121,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             .propagate(t)?
             .to_ecef(t)
             .to_enu(self.observer)
-            .to_elevation();
+            .elevation_and_rate();
         Ok((el, el_rate))
     }
 
