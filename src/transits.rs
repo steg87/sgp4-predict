@@ -1,7 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
+use thiserror::Error as ThisError;
 
-use crate::{Error, Predictor, Result, observe::Observer, roots, time};
+use crate::{Error as LibError, Predictor, Result, observe::Observer, roots, time};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -67,7 +68,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             // Previous state exists, check if we have transitioned into a transit
             Some(prev_state) => {
                 match (prev_state, &*new_state) {
-                    (TransitState::Outside(t0), TransitState::Inside(t1, _)) => {
+                    (TransitState::Outside(t0), TransitState::Inside(t1)) => {
                         // Transitioned into a transit, refine transit start
                         let start = refine_crossing(
                             time::datetime_to_f64(*t0),
@@ -80,13 +81,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 }
             }
             None => {
-                match &*new_state {
-                    TransitState::Inside(t1, el) if *el == self.min_elevation => {
-                        // Edge case: first observation is exactly the start of a transit.
-                        *t1
-                    }
-                    _ => return Ok(None),
-                }
+                // If the satellite is already inside a transit at the start of the window,
+                // that transit began before the window and is not returned. Subsequent
+                // Outside→Inside transitions will be detected normally.
+                return Ok(None);
             }
         };
 
@@ -96,7 +94,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         let mut t1 = t0 + step;
         let end = loop {
             if (t1 - start) > Duration::hours(1) {
-                return Ok(None);
+                return Err(Error::TransitEndNotFound { start }.into());
             }
             let observation = self.predictor.observe_at(t1, self.observer)?;
             if observation.elevation < self.min_elevation {
@@ -146,7 +144,7 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
                 Err(e) => return Some(Err(e)),
             };
             let mut new_state = if el >= self.min_elevation {
-                TransitState::Inside(t, el)
+                TransitState::Inside(t)
             } else {
                 TransitState::Outside(t)
             };
@@ -156,14 +154,15 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
                 Ok(r) => r,
                 Err(e) => return Some(Err(e)),
             };
-            // Calculate next step size
-            self.next_time += self.step_size(el, el_rate);
             // Update current state
             self.state.replace(new_state);
-            // If transit found then return it, otherwise continue
+            // If a transit was found, detect_transit already advanced next_time to the
+            // first confirmed outside sample; no further step needed.
+            // Otherwise, advance by an adaptive step based on current elevation and rate.
             if let Some(transit) = result {
                 return Some(Ok(transit));
             }
+            self.next_time += self.step_size(el, el_rate);
         }
         None
     }
@@ -171,7 +170,7 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
 
 #[derive(Debug, Clone)]
 enum TransitState {
-    Inside(DateTime<Utc>, f64),
+    Inside(DateTime<Utc>),
     Outside(DateTime<Utc>),
 }
 
@@ -186,10 +185,18 @@ where
     // falling through to Brent (the same evaluation point would fail there too).
     match roots::newton_raphson(t, &mut f, 1e-3, 20) {
         Ok(root) => return Ok(root),
-        Err(e @ roots::Error::CostFn(_)) => return Err(Error::Roots(e)),
+        Err(e @ roots::Error::CostFn(_)) => return Err(LibError::Roots(e)),
         Err(_) => {} // convergence failure, fall through to Brent
     }
 
     // Fall back to Brent
-    roots::brent(t0, t1, |x| f(x).map(|(el, _)| el), 1e-3, 50).map_err(Error::Roots)
+    roots::brent(t0, t1, |x| f(x).map(|(el, _)| el), 1e-3, 50).map_err(LibError::Roots)
+}
+
+#[derive(Debug, ThisError)]
+pub enum Error {
+    #[error(
+        "transit end not found: satellite remained above minimum elevation for more than 1 hour from {start}"
+    )]
+    TransitEndNotFound { start: DateTime<Utc> },
 }
