@@ -19,6 +19,51 @@ fn test_observe() {
     assert!(!observations.is_empty());
 }
 
+/// Cross-validate a single `observe_at` result against skyfield 1.49 (Python).
+///
+/// Reference values were computed with:
+///   sat = EarthSatellite(line1, line2, "SENTINEL-2C", ts)
+///   observer = wgs84.latlon(55.8642, -4.2518, elevation_m=40.0)
+///   t = ts.utc(2025, 12, 20, 12, 35, 0)
+///   alt, az, dist = (sat - observer).at(t).altaz()
+///
+/// Both implementations use the same SGP4 propagator; differences arise only
+/// from GMST and ENU projection details. Observed agreement: az 0.002°, el 0.001°, range 2 m.
+#[test]
+fn test_observe_cross_validate_skyfield() {
+    let tle = common::create_tle();
+    let p = Predictor::new(&tle).unwrap();
+    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+
+    let t = common::datetime("2025-12-20T12:35:00Z");
+    let obs = p.observe_at(t, &gs).unwrap();
+
+    let az_deg = obs.azimuth.to_degrees().rem_euclid(360.0);
+    let el_deg = obs.elevation.to_degrees();
+    let range_km = obs.range / 1_000.0;
+
+    // skyfield reference (computed offline)
+    let ref_az_deg = 311.314_513_67_f64;
+    let ref_el_deg = 37.581_643_93_f64;
+    let ref_range_km = 1204.652_907_f64;
+
+    assert!(
+        (az_deg - ref_az_deg).abs() < 0.01,
+        "azimuth {:.6}° differs from skyfield reference {:.6}° by more than 0.01°",
+        az_deg, ref_az_deg
+    );
+    assert!(
+        (el_deg - ref_el_deg).abs() < 0.01,
+        "elevation {:.6}° differs from skyfield reference {:.6}° by more than 0.01°",
+        el_deg, ref_el_deg
+    );
+    assert!(
+        (range_km - ref_range_km).abs() < 0.1,
+        "range {:.3} km differs from skyfield reference {:.3} km by more than 100 m",
+        range_km, ref_range_km
+    );
+}
+
 #[test]
 #[ignore]
 fn test_next_transit_observations_to_csv() {
