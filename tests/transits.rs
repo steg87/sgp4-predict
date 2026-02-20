@@ -30,6 +30,60 @@ fn test_transits() {
 }
 
 #[test]
+fn test_transit_start_inside_interval() {
+    // Design decision: a transit already in progress when the search window opens is
+    // excluded. Only transits whose AOS falls within the window are returned.
+    let tle = common::create_tle();
+    let p = Predictor::new(&tle).unwrap();
+    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+
+    // Find the first two transits over a wide window.
+    let wide_start = common::datetime("2025-12-20T12:00:00Z");
+    let wide_end = common::datetime("2026-01-21T12:00:00Z");
+    let all_transits = p
+        .transits_iter(&gs, wide_start..wide_end, 0.0)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(
+        all_transits.len() >= 2,
+        "need at least two transits for this test"
+    );
+
+    let first = &all_transits[0];
+    let second = &all_transits[1];
+
+    // Open a new search window mid-way through the first transit.
+    let mid_first = first.start + (first.end - first.start) / 2;
+    let trimmed = p
+        .transits_iter(&gs, mid_first..wide_end, 0.0)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    // The in-progress transit must be absent; the next complete transit must be first.
+    assert!(
+        !trimmed.is_empty(),
+        "expected at least one transit after mid-transit window start"
+    );
+    assert!(
+        trimmed[0].start >= first.end,
+        "in-progress transit was returned; its start {:?} should be >= first transit end {:?}",
+        trimmed[0].start,
+        first.end
+    );
+    // The AoS of the next transit should match the wide-search result to within 1ms.
+    // Root-finding starts from a different bracket, so the refinement may converge
+    // to a slightly different value even for the same crossing.
+    let start_diff = (trimmed[0].start - second.start).num_milliseconds().abs();
+    assert!(
+        start_diff < 1,
+        "first returned transit start {:?} differs from wide-search second transit start {:?} by {} ms",
+        trimmed[0].start,
+        second.start,
+        start_diff
+    );
+}
+
+#[test]
 #[ignore]
 fn test_transits_to_csv() {
     use std::io::Write;

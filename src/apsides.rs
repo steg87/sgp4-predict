@@ -4,7 +4,6 @@ use std::ops::Range;
 use crate::{Error, Predictor, Result, roots, time};
 
 const STEP: Duration = Duration::seconds(60);
-const TOL: f64 = 1e-3;
 const WGS84_A: f64 = 6_378_137.0; // WGS-84 equatorial radius, metres
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,8 +66,8 @@ impl Iterator for ApsisIter {
                         let t = time::f64_to_datetime(x);
                         predictor.propagate(t).map(|s| s.radial_velocity())
                     },
-                    TOL,
-                    50,
+                    1e-6,
+                    100,
                 ) {
                     Ok(t_refined) => {
                         self.prev = Some((t_f64, rv));
@@ -80,8 +79,7 @@ impl Iterator for ApsisIter {
                             Err(e) => return Some(Err(e)),
                         };
                         let p = state.position;
-                        let altitude =
-                            (p.x * p.x + p.y * p.y + p.z * p.z).sqrt() - WGS84_A;
+                        let altitude = (p.x * p.x + p.y * p.y + p.z * p.z).sqrt() - WGS84_A;
 
                         let event = if prev_rv > 0.0 {
                             ApsisEvent::Apogee // r·v went positive → negative: apogee

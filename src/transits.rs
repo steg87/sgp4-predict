@@ -184,14 +184,16 @@ where
 
     // Try Newton-Raphson first; on cost-function error propagate immediately rather than
     // falling through to Brent (the same evaluation point would fail there too).
-    match roots::newton_raphson(t, &mut f, 1e-3, 20) {
+    // Tolerance is on the elevation function value (radians). At a typical AoS/LoS
+    // elevation rate of ~2 mrad/s, 1e-6 rad gives < 1 ms time precision.
+    match roots::newton_raphson(t, &mut f, 1e-6, 50) {
         Ok(root) => return Ok(root),
         Err(e @ roots::Error::CostFn(_)) => return Err(LibError::Roots(e)),
         Err(_) => {} // convergence failure, fall through to Brent
     }
 
     // Fall back to Brent
-    roots::brent(t0, t1, |x| f(x).map(|(el, _)| el), 1e-3, 50).map_err(LibError::Roots)
+    roots::brent(t0, t1, |x| f(x).map(|(el, _)| el), 1e-6, 100).map_err(LibError::Roots)
 }
 
 #[derive(Debug, ThisError)]
