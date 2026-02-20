@@ -61,8 +61,9 @@ impl Predictor {
     ///
     /// Returns a predicted state vector in the TEME frame.
     pub fn propagate(&self, t: DateTime<Utc>) -> Result<TemeState> {
-        let minutes_since_epoch =
-            MinutesSinceEpoch(self.time_since_epoch(t).num_milliseconds() as f64 / 60e3);
+        let minutes_since_epoch = MinutesSinceEpoch(
+            t.signed_duration_since(self.epoch()).num_milliseconds() as f64 / 60e3,
+        );
         let prediction = self.constants.propagate(minutes_since_epoch)?;
         Ok(prediction.into())
     }
@@ -121,7 +122,7 @@ impl Predictor {
     ///
     /// Scans in 10-second steps to bracket the point where the elevation rate crosses
     /// zero (ascending → descending), then refines with Brent's method to 1 ms accuracy.
-    /// If no sign change is found (satellite never peaks within the interval), a 
+    /// If no sign change is found (satellite never peaks within the interval), a
     /// roots::Error::Unbracketed is returned.
     pub fn max_elevation<O: Observer>(
         &self,
@@ -137,10 +138,15 @@ impl Predictor {
 
         while t <= end_t {
             let t_f64 = time::datetime_to_f64(t);
-            let (_, el_rate) = self.propagate(t)?.to_ecef(t).to_enu(observer).elevation_and_rate();
+            let (_, el_rate) = self
+                .propagate(t)?
+                .to_ecef(t)
+                .to_enu(observer)
+                .elevation_and_rate();
 
             if let Some((prev_t, prev_er)) = prev
-                && prev_er > 0.0 && el_rate < 0.0
+                && prev_er > 0.0
+                && el_rate < 0.0
             {
                 // el_rate crossed zero: peak is bracketed in [prev_t, t_f64]
                 let peak_t_f64 = roots::brent(
@@ -168,9 +174,16 @@ impl Predictor {
         Err(Error::Roots(roots::Error::Unbracketed))
     }
 
-    pub(crate) fn time_since_epoch(&self, t: DateTime<Utc>) -> Duration {
-        let epoch = DateTime::<Utc>::from_naive_utc_and_offset(self.elements.datetime, Utc);
-        t.signed_duration_since(epoch)
+    /// Return the epoch of the TLE.
+    pub fn epoch(&self) -> DateTime<Utc> {
+        DateTime::<Utc>::from_naive_utc_and_offset(self.elements.datetime, Utc)
+    }
+
+    /// Return the age of the TLE relative to `now`.
+    ///
+    /// Positive means the TLE epoch is in the past (normal operation).
+    pub fn tle_age(&self, now: DateTime<Utc>) -> Duration {
+        now.signed_duration_since(self.epoch())
     }
 }
 
