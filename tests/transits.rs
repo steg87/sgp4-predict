@@ -16,6 +16,17 @@ fn test_transits() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!transits.is_empty());
+
+    // A nadir pass of Sentinel-2C (~788 km) from Glasgow is at most ~905 s long.
+    // Allow up to 960 s (16 min) for headroom; minimum 60 s to reject false detections.
+    for transit in &transits {
+        let duration_secs = (transit.end - transit.start).num_seconds();
+        assert!(
+            (60..=960).contains(&duration_secs),
+            "transit duration {} s is outside expected [1 min, 16 min] range",
+            duration_secs
+        );
+    }
 }
 
 #[test]

@@ -36,6 +36,58 @@ fn test_apsides() {
         apsides.iter().any(|a| a.event == ApsisEvent::Apogee),
         "expected at least one apogee"
     );
+
+    // Sentinel-2C orbits at ~786 km. J2 perturbations modulate the geocentric radius
+    // by up to ~18 km for a polar orbit, so all altitudes should be within ±20 km.
+    for apsis in &apsides {
+        assert!(
+            (766_000.0..=806_000.0).contains(&apsis.altitude),
+            "{:?} altitude {:.1} m is outside expected 786 km ± 20 km range",
+            apsis.event,
+            apsis.altitude
+        );
+    }
+
+    // Each detected apsis must be a local extremum: |r| at the event time should
+    // exceed (apogee) or be less than (perigee) |r| at ±10 s.
+    let offset = Duration::seconds(10);
+    for apsis in &apsides {
+        let r_at = |t| {
+            let s = p.propagate(t).unwrap();
+            let pos = s.position;
+            (pos.x * pos.x + pos.y * pos.y + pos.z * pos.z).sqrt()
+        };
+        let r = r_at(apsis.time);
+        let r_before = r_at(apsis.time - offset);
+        let r_after = r_at(apsis.time + offset);
+        match apsis.event {
+            ApsisEvent::Apogee => assert!(
+                r > r_before && r > r_after,
+                "apogee |r|={:.1} m is not a local maximum (before={:.1}, after={:.1})",
+                r, r_before, r_after
+            ),
+            ApsisEvent::Perigee => assert!(
+                r < r_before && r < r_after,
+                "perigee |r|={:.1} m is not a local minimum (before={:.1}, after={:.1})",
+                r, r_before, r_after
+            ),
+        }
+    }
+
+    // Each apogee must have a higher altitude than its adjacent perigee.
+    for window in apsides.windows(2) {
+        let (apogee, perigee) = if window[0].event == ApsisEvent::Apogee {
+            (&window[0], &window[1])
+        } else {
+            (&window[1], &window[0])
+        };
+        assert!(
+            apogee.altitude > perigee.altitude,
+            "apogee altitude {:.1} m should exceed adjacent perigee altitude {:.1} m",
+            apogee.altitude,
+            perigee.altitude
+        );
+    }
 }
 
 #[test]
