@@ -5,6 +5,7 @@ use crate::{Error, Predictor, Result, roots, time};
 
 const STEP: Duration = Duration::seconds(60);
 const TOL: f64 = 1e-3;
+const WGS84_A: f64 = 6_378_137.0; // WGS-84 equatorial radius, metres
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApsisEvent {
@@ -16,6 +17,7 @@ pub enum ApsisEvent {
 pub struct Apsis {
     pub time: DateTime<Utc>,
     pub event: ApsisEvent,
+    pub altitude: f64, // metres above WGS-84 equatorial radius
 }
 
 pub struct ApsisIter {
@@ -72,6 +74,15 @@ impl Iterator for ApsisIter {
                         self.prev = Some((t_f64, rv));
                         self.next_time += STEP;
 
+                        let refined_dt = time::f64_to_datetime(t_refined);
+                        let state = match self.predictor.propagate(refined_dt) {
+                            Ok(s) => s,
+                            Err(e) => return Some(Err(e)),
+                        };
+                        let p = state.position;
+                        let altitude =
+                            (p.x * p.x + p.y * p.y + p.z * p.z).sqrt() - WGS84_A;
+
                         let event = if prev_rv > 0.0 {
                             ApsisEvent::Apogee // r·v went positive → negative: apogee
                         } else {
@@ -79,8 +90,9 @@ impl Iterator for ApsisIter {
                         };
 
                         return Some(Ok(Apsis {
-                            time: time::f64_to_datetime(t_refined),
+                            time: refined_dt,
                             event,
+                            altitude,
                         }));
                     }
                     Err(e) => {

@@ -16,7 +16,7 @@ pub use crate::{
     frames::TemeState,
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,
-    time::IntervalRange,
+    time::{DateTimeIter, IntervalRange},
     transits::{Transit, TransitIter},
     vectors::{Position, StateVector, Velocity},
 };
@@ -70,11 +70,7 @@ impl Predictor {
     /// Calculate observation at time t.
     ///
     /// Returns a predicted local observation.
-    pub fn observe_at<O: Observer>(
-        &self,
-        t: DateTime<Utc>,
-        observer: &O,
-    ) -> Result<Observation> {
+    pub fn observe_at<O: Observer>(&self, t: DateTime<Utc>, observer: &O) -> Result<Observation> {
         let observation = self
             .propagate(t)?
             .to_ecef(t)
@@ -119,6 +115,57 @@ impl Predictor {
         min_elevation: f64,
     ) -> TransitIter<'a, O> {
         TransitIter::new(self.clone(), observer, interval, min_elevation)
+    }
+
+    /// Find the peak elevation of the satellite over an observer within a time interval.
+    ///
+    /// Scans in 10-second steps to bracket the point where the elevation rate crosses
+    /// zero (ascending → descending), then refines with Brent's method to 1 ms accuracy.
+    /// If no sign change is found (satellite never peaks within the interval), a 
+    /// roots::Error::Unbracketed is returned.
+    pub fn max_elevation<O: Observer>(
+        &self,
+        interval: &impl IntervalRange,
+        observer: &O,
+    ) -> Result<(DateTime<Utc>, Observation)> {
+        const SCAN_STEP: Duration = Duration::seconds(10);
+        let start_t = interval.start();
+        let end_t = interval.end();
+
+        let mut prev: Option<(f64, f64)> = None; // (t_f64, el_rate)
+        let mut t = start_t;
+
+        while t <= end_t {
+            let t_f64 = time::datetime_to_f64(t);
+            let (_, el_rate) = self.propagate(t)?.to_ecef(t).to_enu(observer).elevation_and_rate();
+
+            if let Some((prev_t, prev_er)) = prev
+                && prev_er > 0.0 && el_rate < 0.0
+            {
+                // el_rate crossed zero: peak is bracketed in [prev_t, t_f64]
+                let peak_t_f64 = roots::brent(
+                    prev_t,
+                    t_f64,
+                    |x| {
+                        let tx = time::f64_to_datetime(x);
+                        self.propagate(tx)
+                            .map(|s| s.to_ecef(tx).to_enu(observer).elevation_and_rate().1)
+                    },
+                    1e-3,
+                    50,
+                )
+                .map_err(Error::Roots)?;
+
+                let peak_t = time::f64_to_datetime(peak_t_f64);
+                return Ok((peak_t, self.observe_at(peak_t, observer)?));
+            }
+
+            prev = Some((t_f64, el_rate));
+            t += SCAN_STEP;
+        }
+
+        // No sign change found — no peak within the interval
+        Err(Error::Roots(roots::Error::Unbracketed))
     }
 
     /// Calculate the number of minutes since the predictor epoch

@@ -39,7 +39,11 @@ fn test_transits_to_csv() {
     let filepath = format!("tests/results/{}", filename);
 
     let mut file = std::fs::File::create(&filepath).unwrap();
-    writeln!(file, "start,end,aos_azimuth_deg,los_azimuth_deg,duration").unwrap();
+    writeln!(
+        file,
+        "start,end,aos_azimuth_deg,los_azimuth_deg,tca_elevation_deg,duration"
+    )
+    .unwrap();
 
     let mut count = 0;
     for transit in p.transits_iter(&gs, start_dt..end_dt, 0.0) {
@@ -47,6 +51,7 @@ fn test_transits_to_csv() {
 
         let obs_start = p.observe_at(transit.start, &gs).unwrap();
         let obs_end = p.observe_at(transit.end, &gs).unwrap();
+        let (_, obs_tca) = p.max_elevation(&transit, &gs).unwrap();
 
         let duration = transit.end - transit.start;
         let duration_str = humantime::format_duration(std::time::Duration::from_secs_f32(
@@ -56,11 +61,12 @@ fn test_transits_to_csv() {
 
         writeln!(
             file,
-            "{},{},{:.2},{:.2},{}",
+            "{},{},{:.2},{:.2},{:.2},{}",
             transit.start.format("%Y-%m-%d %H:%M:%S"),
             transit.end.format("%Y-%m-%d %H:%M:%S"),
             obs_start.azimuth.to_degrees(),
             obs_end.azimuth.to_degrees(),
+            obs_tca.elevation.to_degrees(),
             duration_str
         )
         .unwrap();
