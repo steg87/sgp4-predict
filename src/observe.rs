@@ -68,7 +68,10 @@ impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
     type Item = Result<(DateTime<Utc>, Observation), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (time, teme_state) = self.predict_iter.next()?.ok()?;
+        let (time, teme_state) = match self.predict_iter.next()? {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
         Some(Ok((
             time,
             teme_state

@@ -42,19 +42,17 @@ pub struct Predictor {
 }
 
 impl Predictor {
-    pub fn new(sat: &impl Satellite) -> Self {
+    pub fn new(sat: &impl Satellite) -> Result<Self, Error> {
         let elements = Elements::from_tle(
             Some(sat.id()),
             sat.line_1().as_bytes(),
             sat.line_2().as_bytes(),
-        )
-        .expect("Failed to generate elements for sat");
-        let constants =
-            Constants::from_elements(&elements).expect("Failed to generate constants for sat");
-        Self {
+        )?;
+        let constants = Constants::from_elements(&elements)?;
+        Ok(Self {
             elements,
             constants,
-        }
+        })
     }
 
     /// Propagate the TLE to given time t.
@@ -63,10 +61,7 @@ impl Predictor {
     pub fn propagate(&self, t: DateTime<Utc>) -> Result<TemeState, Error> {
         let minutes_since_epoch =
             MinutesSinceEpoch(self.time_since_epoch(t).num_milliseconds() as f64 / 60e3);
-        let prediction = self
-            .constants
-            .propagate(minutes_since_epoch)
-            .map_err(Error::Sgp4)?;
+        let prediction = self.constants.propagate(minutes_since_epoch)?;
         Ok(prediction.into())
     }
 
@@ -133,10 +128,14 @@ impl Predictor {
 
 #[derive(Debug, ThisError)]
 pub enum Error {
-    #[error("SGP4 error: {0}")]
-    Sgp4(sgp4::Error),
+    #[error("TLE parse error: {0}")]
+    Tle(#[from] sgp4::TleError),
+    #[error("SGP4 elements error: {0}")]
+    Elements(#[from] sgp4::ElementsError),
+    #[error("SGP4 propagation error: {0}")]
+    Sgp4(#[from] sgp4::Error),
     #[error("Interval error: {0}")]
     Interval(String),
     #[error("Roots error: {0}")]
-    Roots(roots::Error),
+    Roots(#[from] roots::Error),
 }

@@ -6,7 +6,7 @@ use sgp4_predict::{ApsisEvent, Predictor};
 #[test]
 fn test_apsides() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle);
+    let p = Predictor::new(&tle).unwrap();
 
     // Two orbital periods for Sentinel-2C (~100 min/orbit → ~200 min)
     let start_dt = common::datetime("2025-12-20T12:00:00Z");
@@ -45,7 +45,7 @@ fn test_apsides_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite.clone();
-    let p = Predictor::new(&tle);
+    let p = Predictor::new(&tle).unwrap();
 
     let start_dt = common::datetime("2025-12-20T12:00:00Z");
     let end_dt = common::datetime("2025-12-23T12:00:00Z");

@@ -5,7 +5,7 @@ use sgp4_predict::Predictor;
 #[test]
 fn test_transits() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle);
+    let p = Predictor::new(&tle).unwrap();
     let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
     let transits = p
         .transits_iter(
@@ -25,7 +25,7 @@ fn test_transits_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite.clone();
-    let p = Predictor::new(&tle);
+    let p = Predictor::new(&tle).unwrap();
     let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
 
     let start_dt = common::datetime("2025-12-20T12:00:00Z");

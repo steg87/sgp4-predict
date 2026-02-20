@@ -186,11 +186,9 @@ where
     let t = (t0 + t1) / 2.0;
 
     // Try Newton-Raphson first
-    let result = roots::newton_raphson(t, &mut f, 1e-3, 50)
-        // TODO: log Newton-Raphson failure
+    let result = roots::newton_raphson(t, &mut f, 1e-3, 50) // TODO: log Newton-Raphson failure
         // Fall back to Brent if Newton-Raphson fails
-        .or_else(|_| roots::brent(t0, t1, |x| f(x).0, 1e-3, 100))
-        // TODO: log Brent failure
-        .map_err(Error::Roots)?;
+        .or_else(|_| roots::brent(t0, t1, |x| f(x).0, 1e-3, 100))?; // TODO: log Brent failure
+
     Ok(result)
 }
