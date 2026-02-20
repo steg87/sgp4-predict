@@ -26,7 +26,13 @@ where
         // Newton step
         x0 -= fx / dfx;
     }
-    Err(Error::FailedToConverge(max_iter))
+    let (fx, _) = f(x0);
+    Err(Error::FailedToConverge {
+        iterations: max_iter,
+        tolerance: tol,
+        result: x0,
+        error: fx.abs(),
+    })
 }
 
 /// Brent root finder. Optimally combines bisection (guaranteed convergence), Secant method and
@@ -137,15 +143,25 @@ where
 
         fb = f(b);
     }
-    Err(Error::FailedToConverge(max_iter))
+    Err(Error::FailedToConverge {
+        iterations: max_iter,
+        tolerance: tol,
+        result: b,
+        error: fb.abs(),
+    })
 }
 
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error("derivative dfx too small, unsafe")]
     Unstable,
-    #[error("failed to converge after {0} iterations")]
-    FailedToConverge(usize),
+    #[error("failed to converge after {iterations} iterations")]
+    FailedToConverge {
+        iterations: usize,
+        tolerance: f64,
+        result: f64,
+        error: f64,
+    },
     #[error("root is not bracketed")]
     Unbracketed,
 }
@@ -191,7 +207,10 @@ mod tests {
         let f = |_x: f64| (1.0, 1.0);
 
         let result = newton_raphson(0.0, f, 1e-6, 10);
-        assert!(matches!(result, Err(Error::FailedToConverge(10))));
+        assert!(matches!(
+            result,
+            Err(Error::FailedToConverge { iterations: 10, .. })
+        ));
     }
 
     #[test]
@@ -228,6 +247,9 @@ mod tests {
         let f = |x: f64| x.powi(3) - 8.0;
 
         let result = brent(0.0, 3.0, f, 1e-6, 10);
-        assert!(matches!(result, Err(Error::FailedToConverge(10))));
+        assert!(matches!(
+            result,
+            Err(Error::FailedToConverge { iterations: 10, .. })
+        ));
     }
 }
