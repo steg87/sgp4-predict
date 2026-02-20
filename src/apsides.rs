@@ -4,6 +4,7 @@ use std::ops::Range;
 use crate::{Error, Predictor, Result, roots, time};
 
 const STEP: Duration = Duration::seconds(60);
+const TOL: f64 = 1e-3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApsisEvent {
@@ -64,7 +65,7 @@ impl Iterator for ApsisIter {
                         let t = time::f64_to_datetime(x);
                         predictor.propagate(t).map(|s| s.radial_velocity())
                     },
-                    1e-3,
+                    TOL,
                     50,
                 ) {
                     Ok(t_refined) => {
@@ -82,7 +83,11 @@ impl Iterator for ApsisIter {
                             event,
                         }));
                     }
-                    Err(e) => return Some(Err(Error::Roots(e))),
+                    Err(e) => {
+                        self.prev = Some((t_f64, rv));
+                        self.next_time += STEP;
+                        return Some(Err(Error::Roots(e)));
+                    }
                 };
             }
 
