@@ -120,7 +120,7 @@ impl EnuState {
 }
 
 fn julian_date(t: DateTime<Utc>) -> JulianDate {
-    let unix_seconds = t.timestamp() as f64;
+    let unix_seconds = t.timestamp() as f64 + t.timestamp_subsec_nanos() as f64 * 1e-9;
     JulianDate(unix_seconds / 86400.0 + 2440587.5)
 }
 
