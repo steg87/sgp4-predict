@@ -120,11 +120,29 @@ impl EnuState {
     }
 }
 
+/// Convert a UTC instant to a Julian Date.
+///
+/// The Unix epoch (1970-01-01T00:00:00Z) corresponds to JD 2440587.5.
+/// Subsecond precision is preserved by including the nanosecond component.
 fn julian_date(t: DateTime<Utc>) -> JulianDate {
     let unix_seconds = t.timestamp() as f64 + t.timestamp_subsec_nanos() as f64 * 1e-9;
     JulianDate(unix_seconds / 86400.0 + 2440587.5)
 }
 
+/// Compute Greenwich Mean Sidereal Time (GMST) from a Julian Date.
+///
+/// Uses the IAU 1982 polynomial (Aoki et al. 1982), which expresses GMST in
+/// seconds of time as a cubic in Julian centuries `T` since J2000.0
+/// (JD 2451545.0):
+///
+/// ```text
+/// GMST [s] = 67310.54841
+///          + (876600 × 3600 + 8640184.812866) T
+///          + 0.093104 T²
+///          − 6.2×10⁻⁶ T³
+/// ```
+///
+/// The result is reduced to `[0, 2π)` and returned in radians.
 fn gmst(jd: JulianDate) -> Radians {
     let t = (jd.0 - 2451545.0) / 36525.0;
 

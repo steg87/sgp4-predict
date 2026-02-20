@@ -61,6 +61,7 @@ pub type Velocity<F> = Vec3<markers::Velocity, F>;
 mod markers {
     #[derive(Debug, Clone, Copy, Default)]
     pub struct Position;
+    
     #[derive(Debug, Clone, Copy, Default)]
     pub struct Velocity;
 }
