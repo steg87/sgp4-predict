@@ -130,8 +130,11 @@ fn gmst(jd: JulianDate) -> Radians {
     let gmst_sec = 67310.54841 + (876600.0 * 3600.0 + 8640184.812866) * t + 0.093104 * t * t
         - 6.2e-6 * t * t * t;
 
-    // Convert seconds → radians
-    Radians(((gmst_sec % 86400.0) * std::f64::consts::TAU) / 86400.0)
+    // Convert seconds → radians.
+    // Use two-step modulo to guard against negative gmst_sec (dates before J2000): Rust's %
+    // preserves the sign of the dividend, so a single `% 86400.0` can produce a negative
+    // remainder. Adding 86400.0 before the second `%` ensures the result is always in [0, 86400).
+    Radians((((gmst_sec % 86400.0) + 86400.0) % 86400.0) * std::f64::consts::TAU / 86400.0)
 }
 
 mod markers {

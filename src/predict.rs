@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 
 use crate::{
-    Error, Predictor,
+    Result, Predictor,
     frames::TemeState,
     time::{DateTimeIter, IntervalRange},
     vectors::{Position, Velocity},
@@ -41,7 +41,7 @@ impl PredictionIter {
 }
 
 impl Iterator for PredictionIter {
-    type Item = Result<(DateTime<Utc>, TemeState), Error>;
+    type Item = Result<(DateTime<Utc>, TemeState)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t = self.dt_iter.next()?;

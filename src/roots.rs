@@ -3,17 +3,16 @@ use thiserror::Error as ThisError;
 /// Newton–Raphson root finder
 ///
 /// - `x0`: initial guess
-/// - `f`: f(x) -> (y, dy)
+/// - `f`: f(x) -> (y, dy), or an error if evaluation fails
 /// - `tol`: acceptable absolute error in f(x)
 /// - `max_iter`: safety cap
-///
-/// Returns `Some(root)` on success, or `None` if it fails to converge.
-pub fn newton_raphson<F>(mut x0: f64, mut f: F, tol: f64, max_iter: usize) -> Result<f64, Error>
+pub fn newton_raphson<F, E>(mut x0: f64, mut f: F, tol: f64, max_iter: usize) -> Result<f64, Error>
 where
-    F: FnMut(f64) -> (f64, f64),
+    F: FnMut(f64) -> Result<(f64, f64), E>,
+    E: std::error::Error,
 {
     for _ in 0..max_iter {
-        let (fx, dfx) = f(x0);
+        let (fx, dfx) = f(x0).map_err(|e| Error::CostFn(e.to_string()))?;
         if fx.abs() < tol {
             return Ok(x0);
         }
@@ -26,7 +25,7 @@ where
         // Newton step
         x0 -= fx / dfx;
     }
-    let (fx, _) = f(x0);
+    let (fx, _) = f(x0).map_err(|e| Error::CostFn(e.to_string()))?;
     Err(Error::FailedToConverge {
         iterations: max_iter,
         tolerance: tol,
@@ -40,15 +39,16 @@ where
 ///
 /// - `a`: bracket start
 /// - `b`: bracket end
-/// - `f`: f(x) -> y
+/// - `f`: f(x) -> y, or an error if evaluation fails
 /// - `tol`: acceptable absolute error in f(x)
 /// - `max_iter`: safety cap
-pub fn brent<F>(mut a: f64, mut b: f64, mut f: F, tol: f64, max_iter: usize) -> Result<f64, Error>
+pub fn brent<F, E>(mut a: f64, mut b: f64, mut f: F, tol: f64, max_iter: usize) -> Result<f64, Error>
 where
-    F: FnMut(f64) -> f64,
+    F: FnMut(f64) -> Result<f64, E>,
+    E: std::error::Error,
 {
-    let mut fa = f(a);
-    let mut fb = f(b);
+    let mut fa = f(a).map_err(|e| Error::CostFn(e.to_string()))?;
+    let mut fb = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
 
     if fa * fb >= 0.0 {
         return Err(Error::Unbracketed);
@@ -141,7 +141,7 @@ where
 
         b += if d.abs() > tol1 { d } else { tol1.copysign(m) };
 
-        fb = f(b);
+        fb = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
     }
     Err(Error::FailedToConverge {
         iterations: max_iter,
@@ -164,17 +164,30 @@ pub enum Error {
     },
     #[error("root is not bracketed")]
     Unbracketed,
+    #[error("cost function error: {0}")]
+    CostFn(String),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::Infallible;
+
+    // Minimal error type for cost-function failure tests.
+    #[derive(Debug)]
+    struct TestError(&'static str);
+    impl std::fmt::Display for TestError {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+    impl std::error::Error for TestError {}
 
     #[test]
     fn test_newton_raphson_cubic() {
         // f(x) = x³ - 8, f'(x) = 3x²
         // Root at x = 2
-        let f = |x: f64| (x.powi(3) - 8.0, 3.0 * x.powi(2));
+        let f = |x: f64| Ok::<_, Infallible>((x.powi(3) - 8.0, 3.0 * x.powi(2)));
 
         let result = newton_raphson(1.0, f, 1e-6, 10);
         assert!(result.is_ok());
@@ -185,7 +198,7 @@ mod tests {
     fn test_newton_raphson_converges() {
         // f(x) = x² - 4, f'(x) = 2x
         // Roots at x = ±2
-        let f = |x: f64| (x * x - 4.0, 2.0 * x);
+        let f = |x: f64| Ok::<_, Infallible>((x * x - 4.0, 2.0 * x));
 
         let result = newton_raphson(1.0, f, 1e-9, 10);
         assert!(result.is_ok());
@@ -195,7 +208,7 @@ mod tests {
     #[test]
     fn test_newton_raphson_unstable() {
         // Force zero f'(x), triggering instability
-        let f = |_x: f64| (1.0, 0.0);
+        let f = |_x: f64| Ok::<_, Infallible>((1.0, 0.0));
 
         let result = newton_raphson(1.0, f, 1e-6, 10);
         assert!(matches!(result, Err(Error::Unstable)));
@@ -204,7 +217,7 @@ mod tests {
     #[test]
     fn test_newton_raphson_max_iterations() {
         // Pathological case that won't converge
-        let f = |_x: f64| (1.0, 1.0);
+        let f = |_x: f64| Ok::<_, Infallible>((1.0, 1.0));
 
         let result = newton_raphson(0.0, f, 1e-6, 10);
         assert!(matches!(
@@ -214,10 +227,18 @@ mod tests {
     }
 
     #[test]
+    fn test_newton_raphson_cost_fn_error() {
+        let f = |_x: f64| Err::<(f64, f64), _>(TestError("something went wrong"));
+
+        let result = newton_raphson(0.0, f, 1e-6, 10);
+        assert!(matches!(result, Err(Error::CostFn(_))));
+    }
+
+    #[test]
     fn test_brent_cubic() {
-        // f(x) = x³ - 8, f'(x) = 3x²
+        // f(x) = x³ - 8
         // Root at x = 2
-        let f = |x: f64| x.powi(3) - 8.0;
+        let f = |x: f64| Ok::<_, Infallible>(x.powi(3) - 8.0);
 
         let result = brent(0.0, 3.0, f, 1e-6, 20);
         assert!(result.is_ok());
@@ -226,17 +247,15 @@ mod tests {
 
     #[test]
     fn test_brent_converges() {
-        // f(x) = x² - 4, f'(x) = 2x
+        // f(x) = x² - 4
         // Roots at x = ±2
-        let f = |x: f64| x * x - 4.0;
-
-        assert!(brent(-3.1, -0.6, f, 1e-6, 20).unwrap() + 2.0 < 1e-6);
-        assert!(brent(1.5, 3.9, f, 1e-6, 20).unwrap() - 2.0 < 1e-6);
+        assert!(brent(-3.1, -0.6, |x: f64| Ok::<_, Infallible>(x * x - 4.0), 1e-6, 20).unwrap() + 2.0 < 1e-6);
+        assert!(brent(1.5, 3.9, |x: f64| Ok::<_, Infallible>(x * x - 4.0), 1e-6, 20).unwrap() - 2.0 < 1e-6);
     }
 
     #[test]
     fn test_brent_bracketing_error() {
-        let f = |x: f64| x.powi(3) - 8.0;
+        let f = |x: f64| Ok::<_, Infallible>(x.powi(3) - 8.0);
 
         let result = brent(2.4, 3.0, f, 1e-6, 10);
         assert!(matches!(result, Err(Error::Unbracketed)));
@@ -244,12 +263,20 @@ mod tests {
 
     #[test]
     fn test_brent_max_iterations() {
-        let f = |x: f64| x.powi(3) - 8.0;
+        let f = |x: f64| Ok::<_, Infallible>(x.powi(3) - 8.0);
 
         let result = brent(0.0, 3.0, f, 1e-6, 10);
         assert!(matches!(
             result,
             Err(Error::FailedToConverge { iterations: 10, .. })
         ));
+    }
+
+    #[test]
+    fn test_brent_cost_fn_error() {
+        let f = |_x: f64| Err::<f64, _>(TestError("something went wrong"));
+
+        let result = brent(0.0, 3.0, f, 1e-6, 10);
+        assert!(matches!(result, Err(Error::CostFn(_))));
     }
 }

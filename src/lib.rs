@@ -21,6 +21,8 @@ pub use crate::{
     vectors::{Position, StateVector, Velocity},
 };
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 pub trait Satellite: HasId + HasTle {}
 impl<T> Satellite for T where T: HasId + HasTle {}
 
@@ -42,7 +44,7 @@ pub struct Predictor {
 }
 
 impl Predictor {
-    pub fn new(sat: &impl Satellite) -> Result<Self, Error> {
+    pub fn new(sat: &impl Satellite) -> Result<Self> {
         let elements = Elements::from_tle(
             Some(sat.id()),
             sat.line_1().as_bytes(),
@@ -58,7 +60,7 @@ impl Predictor {
     /// Propagate the TLE to given time t.
     ///
     /// Returns a predicted state vector in the TEME frame.
-    pub fn propagate(&self, t: DateTime<Utc>) -> Result<TemeState, Error> {
+    pub fn propagate(&self, t: DateTime<Utc>) -> Result<TemeState> {
         let minutes_since_epoch =
             MinutesSinceEpoch(self.time_since_epoch(t).num_milliseconds() as f64 / 60e3);
         let prediction = self.constants.propagate(minutes_since_epoch)?;
@@ -72,7 +74,7 @@ impl Predictor {
         &self,
         t: DateTime<Utc>,
         observer: &O,
-    ) -> Result<Observation, Error> {
+    ) -> Result<Observation> {
         let observation = self
             .propagate(t)?
             .to_ecef(t)

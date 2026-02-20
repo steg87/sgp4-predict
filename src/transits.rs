@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
-use crate::{Error, Predictor, observe::Observer, roots, time};
+use crate::{Error, Predictor, Result, observe::Observer, roots, time};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -56,41 +56,36 @@ impl<'a, O: Observer> TransitIter<'a, O> {
     /// observation state with the previous.
     ///
     /// On entering a transit it will calculate the roots (start, end) of the transit and return it.
-    fn detect_transit(&mut self, new_state: &mut TransitState) -> Option<Transit> {
-        // Define refinement cost function closure
-        let mut f = |t| {
-            let t = DateTime::from_timestamp(t as i64, 0).unwrap();
-            let (el, el_rate) = self.calculate_elevation(t).unwrap(); // TODO
-            (el - self.min_elevation, el_rate)
+    fn detect_transit(&mut self, new_state: &mut TransitState) -> Result<Option<Transit>> {
+        let mut f = |t: f64| {
+            self.calculate_elevation(time::f64_to_datetime(t))
+                .map(|(el, el_rate)| (el - self.min_elevation, el_rate))
         };
 
         // Determine if state transition indicates that a new transit has been found
         let start = match &self.state {
-            // Previous example exists, check if we have transitioned into a transit
+            // Previous state exists, check if we have transitioned into a transit
             Some(prev_state) => {
                 match (prev_state, &*new_state) {
                     (TransitState::Outside(t0), TransitState::Inside(t1, _)) => {
-                        // Transitioned into a transit, refine transit start and return
+                        // Transitioned into a transit, refine transit start
                         let start = refine_crossing(
                             time::datetime_to_f64(*t0),
                             time::datetime_to_f64(*t1),
                             &mut f,
-                        )
-                        .ok()?;
+                        )?;
                         time::f64_to_datetime(start)
                     }
-                    _ => return None, // No other state transitions of interest
+                    _ => return Ok(None), // No other state transitions of interest
                 }
             }
             None => {
                 match &*new_state {
                     TransitState::Inside(t1, el) if *el == self.min_elevation => {
-                        // This is an edge case where the first observation is the start of a
-                        // transit, i.e. the start of the first transit is exactly concurrent with
-                        // the start of iter interval.
+                        // Edge case: first observation is exactly the start of a transit.
                         *t1
                     }
-                    _ => return None,
+                    _ => return Ok(None),
                 }
             }
         };
@@ -101,15 +96,13 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         let mut t1 = t0 + step;
         let end = loop {
             if (t1 - start) > Duration::hours(1) {
-                // TODO: log warning transit was longer than an hour and was ignored
-                return None;
+                return Ok(None);
             }
-            let observation = self.predictor.observe_at(t1, self.observer).unwrap(); // TODO
+            let observation = self.predictor.observe_at(t1, self.observer)?;
             if observation.elevation < self.min_elevation {
-                // Transitioned out of a transit, refine transit end and return
+                // Transitioned out of a transit, refine transit end
                 let end =
-                    refine_crossing(time::datetime_to_f64(t0), time::datetime_to_f64(t1), &mut f)
-                        .ok()?;
+                    refine_crossing(time::datetime_to_f64(t0), time::datetime_to_f64(t1), &mut f)?;
                 break time::f64_to_datetime(end);
             };
             t0 = t1;
@@ -117,10 +110,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         };
         // Update the state and next time so the next iteration picks up from here
         (self.next_time, *new_state) = (t1, TransitState::Outside(t1));
-        Some(Transit::new(start, end))
+        Ok(Some(Transit::new(start, end)))
     }
 
-    fn calculate_elevation(&self, t: DateTime<Utc>) -> Result<(f64, f64), Error> {
+    fn calculate_elevation(&self, t: DateTime<Utc>) -> Result<(f64, f64)> {
         let (el, el_rate) = self
             .predictor
             .propagate(t)?
@@ -142,7 +135,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
 }
 
 impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
-    type Item = Result<Transit, Error>;
+    type Item = Result<Transit>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.interval.contains(&self.next_time) {
@@ -159,7 +152,10 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
             };
 
             // Detect transit, if any. Calculate step size based on result.
-            let result = self.detect_transit(&mut new_state);
+            let result = match self.detect_transit(&mut new_state) {
+                Ok(r) => r,
+                Err(e) => return Some(Err(e)),
+            };
             // Calculate next step size
             self.next_time += self.step_size(el, el_rate);
             // Update current state
@@ -179,16 +175,21 @@ enum TransitState {
     Outside(DateTime<Utc>),
 }
 
-fn refine_crossing<F>(t0: f64, t1: f64, mut f: F) -> Result<f64, Error>
+fn refine_crossing<F, E>(t0: f64, t1: f64, mut f: F) -> Result<f64>
 where
-    F: FnMut(f64) -> (f64, f64),
+    F: FnMut(f64) -> std::result::Result<(f64, f64), E>,
+    E: std::error::Error,
 {
     let t = (t0 + t1) / 2.0;
 
-    // Try Newton-Raphson first
-    let result = roots::newton_raphson(t, &mut f, 1e-3, 50) // TODO: log Newton-Raphson failure
-        // Fall back to Brent if Newton-Raphson fails
-        .or_else(|_| roots::brent(t0, t1, |x| f(x).0, 1e-3, 100))?; // TODO: log Brent failure
+    // Try Newton-Raphson first; on cost-function error propagate immediately rather than
+    // falling through to Brent (the same evaluation point would fail there too).
+    match roots::newton_raphson(t, &mut f, 1e-3, 20) {
+        Ok(root) => return Ok(root),
+        Err(e @ roots::Error::CostFn(_)) => return Err(Error::Roots(e)),
+        Err(_) => {} // convergence failure, fall through to Brent
+    }
 
-    Ok(result)
+    // Fall back to Brent
+    roots::brent(t0, t1, |x| f(x).map(|(el, _)| el), 1e-3, 50).map_err(Error::Roots)
 }

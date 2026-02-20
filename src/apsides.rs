@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
-use crate::{Error, Predictor, roots, time};
+use crate::{Error, Predictor, Result, roots, time};
 
 const STEP: Duration = Duration::seconds(60);
 
@@ -34,13 +34,13 @@ impl ApsisIter {
         }
     }
 
-    fn radial_velocity_at(&self, t: DateTime<Utc>) -> Result<f64, Error> {
+    fn radial_velocity_at(&self, t: DateTime<Utc>) -> Result<f64> {
         Ok(self.predictor.propagate(t)?.radial_velocity())
     }
 }
 
 impl Iterator for ApsisIter {
-    type Item = Result<Apsis, Error>;
+    type Item = Result<Apsis>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.interval.contains(&self.next_time) {
@@ -57,36 +57,33 @@ impl Iterator for ApsisIter {
             {
                 // Sign change detected — bracket is [prev_t, t_f64]
                 let predictor = self.predictor.clone();
-                let refined = roots::brent(
+                match roots::brent(
                     prev_t,
                     t_f64,
                     |x| {
                         let t = time::f64_to_datetime(x);
-                        predictor
-                            .propagate(t)
-                            .map(|s| s.radial_velocity())
-                            .unwrap_or(0.0)
+                        predictor.propagate(t).map(|s| s.radial_velocity())
                     },
                     1e-3,
-                    100,
-                );
+                    50,
+                ) {
+                    Ok(t_refined) => {
+                        self.prev = Some((t_f64, rv));
+                        self.next_time += STEP;
 
-                self.prev = Some((t_f64, rv));
-                self.next_time += STEP;
+                        let event = if prev_rv > 0.0 {
+                            ApsisEvent::Apogee // r·v went positive → negative: apogee
+                        } else {
+                            ApsisEvent::Perigee // r·v went negative → positive: perigee
+                        };
 
-                let event = if prev_rv > 0.0 {
-                    ApsisEvent::Apogee // r·v went positive→negative: apogee
-                } else {
-                    ApsisEvent::Perigee // r·v went negative→positive: perigee
+                        return Some(Ok(Apsis {
+                            time: time::f64_to_datetime(t_refined),
+                            event,
+                        }));
+                    }
+                    Err(e) => return Some(Err(Error::Roots(e))),
                 };
-
-                return Some(match refined {
-                    Ok(t_refined) => Ok(Apsis {
-                        time: time::f64_to_datetime(t_refined),
-                        event,
-                    }),
-                    Err(e) => Err(Error::Roots(e)),
-                });
             }
 
             self.prev = Some((t_f64, rv));
