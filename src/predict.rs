@@ -32,7 +32,7 @@ impl From<sgp4::Prediction> for TemeState {
 }
 
 impl PredictionIter {
-    pub(crate) fn new(predictor: Predictor, interval: &impl IntervalRange, step: Duration) -> Self {
+    pub(crate) fn new(predictor: Predictor, interval: impl IntervalRange, step: Duration) -> Self {
         Self {
             predictor,
             dt_iter: DateTimeIter::new(interval, step),

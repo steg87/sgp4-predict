@@ -11,7 +11,7 @@ fn test_observe() {
     let observations = p
         .observation_iter(
             &gs,
-            &(common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-23T12:00:00Z")),
+            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-23T12:00:00Z"),
             Duration::minutes(1),
         )
         .collect::<Result<Vec<_>, _>>()
@@ -55,7 +55,7 @@ fn test_next_transit_observations_to_csv() {
 
     let mut count = 0;
     for obs in p
-        .observation_iter(&gs, &next_transit, Duration::seconds(10))
+        .observation_iter(&gs, next_transit, Duration::seconds(10))
         .chain(std::iter::once(Ok((
             next_transit.end,
             p.observe_at(next_transit.end, &gs).unwrap(),

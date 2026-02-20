@@ -10,17 +10,17 @@ pub struct Tle {
 }
 
 impl HasId for Tle {
-    fn id(&self) -> String {
-        self.satellite.clone()
+    fn id(&self) -> &str {
+        &self.satellite
     }
 }
 
 impl HasTle for Tle {
-    fn line_1(&self) -> String {
-        self.line_1.clone()
+    fn line_1(&self) -> &str {
+        &self.line_1
     }
-    fn line_2(&self) -> String {
-        self.line_2.clone()
+    fn line_2(&self) -> &str {
+        &self.line_2
     }
 }
 

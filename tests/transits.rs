@@ -51,7 +51,7 @@ fn test_transits_to_csv() {
 
         let obs_start = p.observe_at(transit.start, &gs).unwrap();
         let obs_end = p.observe_at(transit.end, &gs).unwrap();
-        let (_, obs_tca) = p.max_elevation(&transit, &gs).unwrap();
+        let (_, obs_tca) = p.max_elevation(transit, &gs).unwrap();
 
         let duration = transit.end - transit.start;
         let duration_str = humantime::format_duration(std::time::Duration::from_secs_f32(

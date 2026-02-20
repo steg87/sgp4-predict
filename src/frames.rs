@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     Observation, Observer,
+    observe::ObserverExt,
     vectors::{Position, StateVector, Velocity},
 };
 

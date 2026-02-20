@@ -12,7 +12,9 @@ pub trait Observer {
     fn latitude(&self) -> f64;
     fn longitude(&self) -> f64;
     fn altitude(&self) -> f64;
+}
 
+pub(crate) trait ObserverExt: Observer {
     fn to_ecef(&self) -> EcefState {
         let h = self.altitude();
         let a = 6378137.0; // meters
@@ -37,6 +39,8 @@ pub trait Observer {
     }
 }
 
+impl<T: Observer> ObserverExt for T {}
+
 #[derive(Debug, Clone)]
 pub struct Observation {
     pub azimuth: f64,
@@ -54,7 +58,7 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
     pub fn new(
         predictor: Predictor,
         observer: &'a O,
-        interval: &impl IntervalRange,
+        interval: impl IntervalRange,
         step: Duration,
     ) -> Self {
         Self {

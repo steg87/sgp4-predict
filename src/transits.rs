@@ -7,7 +7,7 @@ use crate::{Error as LibError, Predictor, Result, observe::Observer, roots, time
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Transit {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,

@@ -27,12 +27,12 @@ pub trait Satellite: HasId + HasTle {}
 impl<T> Satellite for T where T: HasId + HasTle {}
 
 pub trait HasId {
-    fn id(&self) -> String;
+    fn id(&self) -> &str;
 }
 
 pub trait HasTle {
-    fn line_1(&self) -> String;
-    fn line_2(&self) -> String;
+    fn line_1(&self) -> &str;
+    fn line_2(&self) -> &str;
 }
 
 /// Stores orbital elements and constants. Has methods to create iterators to propagate predictions
@@ -46,7 +46,7 @@ pub struct Predictor {
 impl Predictor {
     pub fn new(sat: &impl Satellite) -> Result<Self> {
         let elements = Elements::from_tle(
-            Some(sat.id()),
+            Some(sat.id().to_owned()),
             sat.line_1().as_bytes(),
             sat.line_2().as_bytes(),
         )?;
@@ -82,7 +82,7 @@ impl Predictor {
     /// Propagate the TLE over a time interval.
     ///
     /// Returns an iterator over predicted state vectors in the TEME frame.
-    pub fn prediction_iter(&self, interval: &impl IntervalRange, step: Duration) -> PredictionIter {
+    pub fn prediction_iter(&self, interval: impl IntervalRange, step: Duration) -> PredictionIter {
         PredictionIter::new(self.clone(), interval, step)
     }
 
@@ -92,7 +92,7 @@ impl Predictor {
     pub fn observation_iter<'a, O: Observer>(
         &self,
         observer: &'a O,
-        interval: &impl IntervalRange,
+        interval: impl IntervalRange,
         step: Duration,
     ) -> ObservationIter<'a, O> {
         ObservationIter::new(self.clone(), observer, interval, step)
@@ -125,7 +125,7 @@ impl Predictor {
     /// roots::Error::Unbracketed is returned.
     pub fn max_elevation<O: Observer>(
         &self,
-        interval: &impl IntervalRange,
+        interval: impl IntervalRange,
         observer: &O,
     ) -> Result<(DateTime<Utc>, Observation)> {
         const SCAN_STEP: Duration = Duration::seconds(10);
@@ -168,8 +168,7 @@ impl Predictor {
         Err(Error::Roots(roots::Error::Unbracketed))
     }
 
-    /// Calculate the number of minutes since the predictor epoch
-    pub fn time_since_epoch(&self, t: DateTime<Utc>) -> Duration {
+    pub(crate) fn time_since_epoch(&self, t: DateTime<Utc>) -> Duration {
         let epoch = DateTime::<Utc>::from_naive_utc_and_offset(self.elements.datetime, Utc);
         t.signed_duration_since(epoch)
     }
