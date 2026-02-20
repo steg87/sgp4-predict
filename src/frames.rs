@@ -12,19 +12,36 @@ pub struct Radians(f64);
 pub type TemeState = StateVector<markers::Teme>;
 
 impl TemeState {
-    /// Rotation about the Z-axis by GMST
+    /// Convert TEME state to ECEF by rotating about the Z-axis by GMST.
+    ///
+    /// Position: `r_ECEF = R(θ) · r_TEME`
+    ///
+    /// Velocity requires an extra term because ECEF is a rotating frame.
+    /// Differentiating `r_ECEF = R(θ) · r_TEME` with respect to time gives:
+    ///   `v_ECEF = R(θ) · v_TEME + ω_Earth × r_ECEF`
+    ///
+    /// where `ω_Earth = [0, 0, ω_E]`. Expanding the cross product:
+    ///   `ω_Earth × r_ECEF = [ω_E · ry, -ω_E · rx, 0]`
     pub fn to_ecef(&self, t: DateTime<Utc>) -> EcefState {
+        // Earth's sidereal rotation rate (rad/s), WGS-84
+        const OMEGA_EARTH: f64 = 7.292_115_0e-5;
+
         let (sin_g, cos_g) = gmst(julian_date(t)).0.sin_cos();
 
+        // Rotate position into ECEF: r_ECEF = R(θ) · r_TEME
+        let rx = cos_g * self.position.x + sin_g * self.position.y;
+        let ry = -sin_g * self.position.x + cos_g * self.position.y;
+        let rz = self.position.z;
+
+        // Rotate velocity into ECEF, then add the frame-drag term ω_Earth × r_ECEF
+        let vx_rot = cos_g * self.velocity.x + sin_g * self.velocity.y;
+        let vy_rot = -sin_g * self.velocity.x + cos_g * self.velocity.y;
+
         StateVector::new(
-            Position::new(
-                cos_g * self.position.x + sin_g * self.position.y,
-                -sin_g * self.position.x + cos_g * self.position.y,
-                self.position.z,
-            ),
+            Position::new(rx, ry, rz),
             Velocity::new(
-                cos_g * self.velocity.x + sin_g * self.velocity.y,
-                -sin_g * self.velocity.x + cos_g * self.velocity.y,
+                vx_rot + OMEGA_EARTH * ry,
+                vy_rot - OMEGA_EARTH * rx,
                 self.velocity.z,
             ),
         )
