@@ -1,0 +1,42 @@
+tles:
+  sentinel-2c:
+    name: SENTINEL-2C
+    line_1: "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
+    line_2: "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+
+observers:
+  glasgow:
+    latitude_deg: 55.8642
+    longitude_deg: -4.2518
+    altitude_m: 40.0
+  svalbard:
+    latitude_deg: 78.2232
+    longitude_deg: 15.6267
+    altitude_m: 28.0
+  christchurch:
+    latitude_deg: -43.5321
+    longitude_deg: 172.6362
+    altitude_m: 10.0
+
+test_cases:
+  - name: sentinel-2c-glasgow
+    tle: sentinel-2c
+    observer: glasgow
+    tolerances:
+      aos_los_time_s: 2.0
+      azimuth_deg: 0.1
+      tca_elevation_deg: 0.2
+  - name: sentinel-2c-svalbard
+    tle: sentinel-2c
+    observer: svalbard
+    tolerances:
+      aos_los_time_s: 2.0
+      azimuth_deg: 0.1
+      tca_elevation_deg: 0.2
+  - name: sentinel-2c-christchurch
+    tle: sentinel-2c
+    observer: christchurch
+    tolerances:
+      aos_los_time_s: 2.0
+      azimuth_deg: 0.1
+      tca_elevation_deg: 0.2

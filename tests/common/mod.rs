@@ -52,6 +52,17 @@ impl Observer for GroundStation {
     }
 }
 
+pub fn load_tle_from_file(path: &std::path::Path) -> Tle {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("failed to read TLE file {}: {}", path.display(), e));
+    let mut lines = content.lines();
+    Tle {
+        satellite: lines.next().unwrap().trim().to_string(),
+        line_1: lines.next().unwrap().trim().to_string(),
+        line_2: lines.next().unwrap().trim().to_string(),
+    }
+}
+
 pub fn create_tle() -> Tle {
     Tle {
         satellite: "SENTINEL-2C".to_string(),

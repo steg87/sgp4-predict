@@ -1,0 +1,58 @@
+====================================================================
+  Validation Report
+====================================================================
+
+  Test case : sentinel-2c-glasgow
+  TLE       : sentinel-2c
+  Observer  : glasgow
+  Window    : 2025-12-22 16:03:33 UTC  +  3 days
+  Transits  : 31 (skyfield: 31)
+
+  --------------------------------------------------------------------
+  Metric                   Avg        Max        Tol  Result
+  --------------------------------------------------------------------
+  AOS time (s)          0.576s     0.982s     2.000s  PASS
+  LOS time (s)          0.478s     0.983s     2.000s  PASS
+  AOS azimuth (°)       0.003°     0.009°     0.100°  PASS
+  LOS azimuth (°)       0.002°     0.008°     0.100°  PASS
+  TCA elevation (°)     0.007°     0.050°     0.200°  PASS
+  --------------------------------------------------------------------
+  Result: PASS
+
+  Test case : sentinel-2c-svalbard
+  TLE       : sentinel-2c
+  Observer  : svalbard
+  Window    : 2025-12-22 16:03:33 UTC  +  3 days
+  Transits  : 43 (skyfield: 43)
+
+  --------------------------------------------------------------------
+  Metric                   Avg        Max        Tol  Result
+  --------------------------------------------------------------------
+  AOS time (s)          0.445s     0.912s     2.000s  PASS
+  LOS time (s)          0.373s     0.876s     2.000s  PASS
+  AOS azimuth (°)       0.006°     0.022°     0.100°  PASS
+  LOS azimuth (°)       0.005°     0.016°     0.100°  PASS
+  TCA elevation (°)     0.008°     0.068°     0.200°  PASS
+  --------------------------------------------------------------------
+  Result: PASS
+
+  Test case : sentinel-2c-christchurch
+  TLE       : sentinel-2c
+  Observer  : christchurch
+  Window    : 2025-12-22 16:03:33 UTC  +  3 days
+  Transits  : 19 (skyfield: 19)
+
+  --------------------------------------------------------------------
+  Metric                   Avg        Max        Tol  Result
+  --------------------------------------------------------------------
+  AOS time (s)          0.412s     0.986s     2.000s  PASS
+  LOS time (s)          0.507s     0.859s     2.000s  PASS
+  AOS azimuth (°)       0.003°     0.008°     0.100°  PASS
+  LOS azimuth (°)       0.004°     0.012°     0.100°  PASS
+  TCA elevation (°)     0.005°     0.016°     0.200°  PASS
+  --------------------------------------------------------------------
+  Result: PASS
+
+====================================================================
+  3/3 test case(s) passed
+====================================================================
