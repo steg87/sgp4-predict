@@ -45,22 +45,25 @@ fn test_observe_cross_validate_skyfield() {
     // skyfield reference (computed offline)
     let ref_az_deg = 311.314_513_67_f64;
     let ref_el_deg = 37.581_643_93_f64;
-    let ref_range_km = 1204.652_907_f64;
+    let ref_range_km = 1_204.652_907_f64;
 
     assert!(
         (az_deg - ref_az_deg).abs() < 0.01,
         "azimuth {:.6}° differs from skyfield reference {:.6}° by more than 0.01°",
-        az_deg, ref_az_deg
+        az_deg,
+        ref_az_deg
     );
     assert!(
         (el_deg - ref_el_deg).abs() < 0.01,
         "elevation {:.6}° differs from skyfield reference {:.6}° by more than 0.01°",
-        el_deg, ref_el_deg
+        el_deg,
+        ref_el_deg
     );
     assert!(
         (range_km - ref_range_km).abs() < 0.1,
         "range {:.3} km differs from skyfield reference {:.3} km by more than 100 m",
-        range_km, ref_range_km
+        range_km,
+        ref_range_km
     );
 }
 
@@ -74,11 +77,11 @@ fn test_next_transit_observations_to_csv() {
     let p = Predictor::new(&tle).unwrap();
     let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
 
-    let start_dt = common::datetime("2025-12-20T12:00:00Z");
-    let end_dt = start_dt + Duration::hours(3);
+    let start = p.epoch();
+    let end = start + Duration::hours(3);
 
     let next_transit = p
-        .transits_iter(&gs, start_dt..end_dt, 0.0)
+        .transits_iter(&gs, start..end, 0.0)
         .next()
         .expect("No transits found in the next 3 hours")
         .unwrap();
@@ -96,7 +99,11 @@ fn test_next_transit_observations_to_csv() {
     let filepath = format!("tests/results/{}", filename);
 
     let mut file = std::fs::File::create(&filepath).unwrap();
-    writeln!(file, "time,azimuth_deg,elevation_deg,range_km,range_rate_km_s").unwrap();
+    writeln!(
+        file,
+        "time,azimuth_deg,elevation_deg,range_km,range_rate_km_s"
+    )
+    .unwrap();
 
     let mut count = 0;
     for obs in p

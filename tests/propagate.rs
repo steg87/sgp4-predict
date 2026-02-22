@@ -22,11 +22,11 @@ fn test_propagate() {
         altitude_m
     );
 
+    let start = p.epoch();
+    let end = start + Duration::days(3);
+
     let predictions = p
-        .prediction_iter(
-            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-23T12:00:00Z"),
-            Duration::minutes(1),
-        )
+        .prediction_iter(start..end, Duration::minutes(1))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!predictions.is_empty());

@@ -156,6 +156,40 @@ fn gmst(jd: JulianDate) -> Radians {
     Radians((((gmst_sec % 86400.0) + 86400.0) % 86400.0) * std::f64::consts::TAU / 86400.0)
 }
 
+/// Compute the position of the Sun in the geocentric equatorial (ECI) frame.
+///
+/// Uses the low-precision algorithm from the Astronomical Almanac, accurate to
+/// approximately 0.01° over 1950–2050. Sufficient for satellite illumination and
+/// shadow calculations.
+///
+/// Returns `[x, y, z]` in **metres** with origin at Earth's centre. Axes are
+/// aligned with the J2000 mean equator (ECI ≈ TEME to this precision).
+pub(crate) fn sun_position_eci(t: DateTime<Utc>) -> [f64; 3] {
+    const AU_M: f64 = 1.495_978_707e11; // 1 AU in metres
+
+    let n = julian_date(t).0 - 2_451_545.0; // days from J2000.0
+
+    // Mean longitude and mean anomaly (degrees)
+    let l_deg = 280.460 + 0.985_647_4 * n;
+    let g_deg = 357.528 + 0.985_600_3 * n;
+    let g = g_deg.to_radians();
+
+    // Ecliptic longitude (radians)
+    let lambda = (l_deg + 1.915 * g.sin() + 0.020 * (2.0 * g).sin()).to_radians();
+
+    // Sun–Earth distance in AU
+    let r_au = 1.000_14 - 0.016_71 * g.cos() - 0.000_14 * (2.0 * g).cos();
+
+    // Mean obliquity of the ecliptic (radians)
+    let eps = (23.439 - 0.000_000_4 * n).to_radians();
+
+    [
+        r_au * AU_M * lambda.cos(),
+        r_au * AU_M * eps.cos() * lambda.sin(),
+        r_au * AU_M * eps.sin() * lambda.sin(),
+    ]
+}
+
 mod markers {
     /// Marker struct for TEME frame
     #[derive(Debug, Clone, Copy, Default)]

@@ -1,5 +1,6 @@
 mod common;
 
+use chrono::Duration;
 use sgp4_predict::Predictor;
 
 #[test]
@@ -93,11 +94,11 @@ fn test_transits_to_csv() {
     let p = Predictor::new(&tle).unwrap();
     let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
 
-    let start_dt = common::datetime("2025-12-20T12:00:00Z");
-    let end_dt = common::datetime("2025-12-23T12:00:00Z");
+    let start = p.epoch();
+    let end = start + Duration::days(3);
 
-    let start_str = start_dt.format("%Y%m%dT%H%M%S").to_string();
-    let end_str = end_dt.format("%Y%m%dT%H%M%S").to_string();
+    let start_str = start.format("%Y%m%dT%H%M%S").to_string();
+    let end_str = end.format("%Y%m%dT%H%M%S").to_string();
     let filename = format!("{}_transits_{}_{}.csv", sat_id, start_str, end_str);
 
     std::fs::create_dir_all("tests/results").unwrap();
@@ -111,7 +112,7 @@ fn test_transits_to_csv() {
     .unwrap();
 
     let mut count = 0;
-    for transit in p.transits_iter(&gs, start_dt..end_dt, 0.0) {
+    for transit in p.transits_iter(&gs, start..end, 0.0) {
         let transit = transit.unwrap();
 
         let obs_start = p.observe_at(transit.start, &gs).unwrap();

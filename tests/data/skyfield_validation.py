@@ -92,9 +92,7 @@ def main() -> None:
         tle = tles[tc["tle"]]
         observer = observers[tc["observer"]]
 
-        sat = EarthSatellite(
-            tle["line_1"], tle["line_2"], tle["name"], ts
-        )
+        sat = EarthSatellite(tle["line_1"], tle["line_2"], tle["name"], ts)
         observer = wgs84.latlon(
             observer["latitude_deg"],
             observer["longitude_deg"],
@@ -102,15 +100,15 @@ def main() -> None:
         )
 
         if tc.get("start"):
-            start_dt = parse_utc(tc["start"])
+            start = parse_utc(tc["start"])
         else:
-            start_dt = sat.epoch.utc_datetime()
+            start = sat.epoch.utc_datetime()
 
         duration_days = tc.get("duration_days", 3)
-        end_dt = start_dt + timedelta(days=duration_days)
+        end = start + timedelta(days=duration_days)
 
-        t0 = ts.from_datetime(start_dt)
-        t1 = ts.from_datetime(end_dt)
+        t0 = ts.from_datetime(start)
+        t1 = ts.from_datetime(end)
         passes = collect_passes(sat, observer, t0, t1)
 
         out_path = OUTPUT_DIR / f"{name}.csv"

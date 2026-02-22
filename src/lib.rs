@@ -1,5 +1,6 @@
 mod apsides;
 mod frames;
+mod illumination;
 mod observe;
 mod predict;
 mod roots;
@@ -14,6 +15,7 @@ use thiserror::Error as ThisError;
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
     frames::TemeState,
+    illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,
     time::{DateTimeIter, IntervalRange},
@@ -172,6 +174,24 @@ impl Predictor {
 
         // No sign change found — no peak within the interval
         Err(Error::Roots(roots::Error::Unbracketed))
+    }
+
+    /// Determine whether the satellite is in sunlight or eclipse at time t.
+    ///
+    /// Uses a cylindrical Earth shadow model: the satellite is in eclipse when it
+    /// is on the anti-Sun side of Earth and within one Earth radius of the
+    /// Earth–Sun axis.
+    pub fn is_sunlit(&self, t: DateTime<Utc>) -> Result<bool> {
+        Ok(illumination::shadow_value(self, t)? < 0.0)
+    }
+
+    /// Detect all sunlit and eclipse windows over a time interval.
+    ///
+    /// Returns an iterator over illumination windows, each clamped to the search
+    /// interval. Uses a cylindrical Earth shadow model with 60-second scan steps
+    /// and Brent's method to refine shadow-boundary crossings to millisecond accuracy.
+    pub fn illumination_iter(&self, interval: impl IntervalRange) -> IlluminationIter {
+        IlluminationIter::new(self.clone(), interval)
     }
 
     /// Return the epoch of the TLE.

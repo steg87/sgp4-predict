@@ -9,11 +9,11 @@ fn test_apsides() {
     let p = Predictor::new(&tle).unwrap();
 
     // Two orbital periods for Sentinel-2C (~100 min/orbit → ~200 min)
-    let start_dt = common::datetime("2025-12-20T12:00:00Z");
-    let end_dt = start_dt + Duration::minutes(200);
+    let start = common::datetime("2025-12-20T12:00:00Z");
+    let end = start + Duration::minutes(200);
 
     let apsides = p
-        .apsis_iter(start_dt..end_dt)
+        .apsis_iter(start..end)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
@@ -64,12 +64,16 @@ fn test_apsides() {
             ApsisEvent::Apogee => assert!(
                 r > r_before && r > r_after,
                 "apogee |r|={:.1} m is not a local maximum (before={:.1}, after={:.1})",
-                r, r_before, r_after
+                r,
+                r_before,
+                r_after
             ),
             ApsisEvent::Perigee => assert!(
                 r < r_before && r < r_after,
                 "perigee |r|={:.1} m is not a local minimum (before={:.1}, after={:.1})",
-                r, r_before, r_after
+                r,
+                r_before,
+                r_after
             ),
         }
     }
@@ -99,11 +103,11 @@ fn test_apsides_to_csv() {
     let sat_id = tle.satellite.clone();
     let p = Predictor::new(&tle).unwrap();
 
-    let start_dt = common::datetime("2025-12-20T12:00:00Z");
-    let end_dt = common::datetime("2025-12-23T12:00:00Z");
+    let start = p.epoch();
+    let end = start + Duration::days(3);
 
-    let start_str = start_dt.format("%Y%m%dT%H%M%S").to_string();
-    let end_str = end_dt.format("%Y%m%dT%H%M%S").to_string();
+    let start_str = start.format("%Y%m%dT%H%M%S").to_string();
+    let end_str = end.format("%Y%m%dT%H%M%S").to_string();
     let filename = format!("{}_apsides_{}_{}.csv", sat_id, start_str, end_str);
 
     std::fs::create_dir_all("tests/results").unwrap();
@@ -113,7 +117,7 @@ fn test_apsides_to_csv() {
     writeln!(file, "time,event").unwrap();
 
     let mut count = 0;
-    for apsis in p.apsis_iter(start_dt..end_dt) {
+    for apsis in p.apsis_iter(start..end) {
         let apsis = apsis.unwrap();
         let event_str = match apsis.event {
             ApsisEvent::Perigee => "perigee",
