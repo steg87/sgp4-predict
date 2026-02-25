@@ -102,10 +102,10 @@ fn test_illumination_both_states_present() {
     );
 }
 
-/// `is_sunlit()` at the midpoint of every window must agree with the window
-/// state returned by the iterator.
+/// `illumination_state()` at the midpoint of every window must agree with the
+/// window state returned by the iterator.
 #[test]
-fn test_illumination_is_sunlit_consistent() {
+fn test_illumination_state_consistent() {
     let p = predictor();
     let (start, end) = interval();
 
@@ -121,11 +121,10 @@ fn test_illumination_is_sunlit_consistent() {
             continue;
         }
         let mid = window.start + (window.end - window.start) / 2;
-        let sunlit = p.is_sunlit(mid).unwrap();
-        let expected_sunlit = window.state == IlluminationState::Sunlit;
+        let state = p.illumination_state(mid).unwrap();
         assert_eq!(
-            sunlit, expected_sunlit,
-            "is_sunlit at {mid} disagrees with window state {:?} (window {:.0?}–{:.0?})",
+            state, window.state,
+            "illumination_state at {mid} disagrees with window state {:?} (window {:.0?}–{:.0?})",
             window.state, window.start, window.end,
         );
     }

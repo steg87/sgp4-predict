@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::Predictor;
+use sgp4_predict::{IlluminationState, Predictor};
 
 /// Find the next ground station pass above 15° that is fully sunlit and sample the observations
 /// for it, including the end time.
@@ -21,10 +21,9 @@ fn next_ground_station_pass_observations() {
             match transit {
                 Ok(transit) => {
                     // Assume if transit start and end both sunlit then entire transit is
-                    // sunlit. We can unwrap_or_default to skip this transit if either
-                    // method fails.
-                    p.is_sunlit(transit.start).unwrap_or_default()
-                        && p.is_sunlit(transit.end).unwrap_or_default()
+                    // sunlit. Skip this transit if either call fails.
+                    matches!(p.illumination_state(transit.start), Ok(IlluminationState::Sunlit))
+                        && matches!(p.illumination_state(transit.end), Ok(IlluminationState::Sunlit))
                 }
                 Err(_) => false, // Skip transits that could not be calculated
             }

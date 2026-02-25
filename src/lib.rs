@@ -176,13 +176,17 @@ impl Predictor {
         Err(Error::Roots(roots::Error::Unbracketed))
     }
 
-    /// Determine whether the satellite is in sunlight or eclipse at time t.
+    /// Determine whether the satellite is sunlit or in eclipse at time t.
     ///
     /// Uses a cylindrical Earth shadow model: the satellite is in eclipse when it
     /// is on the anti-Sun side of Earth and within one Earth radius of the
     /// Earth–Sun axis.
-    pub fn is_sunlit(&self, t: DateTime<Utc>) -> Result<bool> {
-        Ok(illumination::shadow_value(self, t)? < 0.0)
+    pub fn illumination_state(&self, t: DateTime<Utc>) -> Result<IlluminationState> {
+        Ok(if illumination::shadow_value(self, t)? < 0.0 {
+            IlluminationState::Sunlit
+        } else {
+            IlluminationState::Eclipse
+        })
     }
 
     /// Detect all sunlit and eclipse windows over a time interval.
