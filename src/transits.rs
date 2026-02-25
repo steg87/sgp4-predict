@@ -175,7 +175,7 @@ enum TransitState {
     Outside(DateTime<Utc>),
 }
 
-fn refine_crossing<F, E>(t0: f64, t1: f64, mut f: F) -> Result<f64>
+pub(crate) fn refine_crossing<F, E>(t0: f64, t1: f64, mut f: F) -> Result<f64>
 where
     F: FnMut(f64) -> std::result::Result<(f64, f64), E>,
     E: std::error::Error,
@@ -199,7 +199,13 @@ where
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error(
-        "transit end not found: satellite remained above minimum elevation for more than 1 hour from {start}"
+        "transit end not found: satellite remained above minimum elevation \
+        for more than 1 hour from {start}"
     )]
     TransitEndNotFound { start: DateTime<Utc> },
+    #[error(
+        "transit start not found: satellite remained above minimum elevation \
+         for more than 1 hour before {at}"
+    )]
+    TransitStartNotFound { at: DateTime<Utc> },
 }

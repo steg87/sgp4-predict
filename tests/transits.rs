@@ -85,6 +85,58 @@ fn test_transit_start_inside_interval() {
 }
 
 #[test]
+fn test_detect_transit() {
+    let tle = common::create_tle();
+    let p = Predictor::new(&tle).unwrap();
+    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+
+    // Find the first transit via the iterator (ground truth).
+    let transits = p
+        .transits_iter(
+            &gs,
+            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
+            0.0,
+        )
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(!transits.is_empty(), "need at least one transit for this test");
+
+    let reference = &transits[0];
+    let midpoint = reference.start + (reference.end - reference.start) / 2;
+
+    // detect_transit at the midpoint must return Some and match the iterator result to ~1 s.
+    let detected = p.detect_transit(midpoint, &gs, 0.0).unwrap();
+    let detected = detected.expect("expected Some(Transit) at midpoint of a known pass");
+
+    let start_diff = (detected.start - reference.start).num_milliseconds().abs();
+    let end_diff = (detected.end - reference.end).num_milliseconds().abs();
+    assert!(
+        start_diff <= 1000,
+        "detected start {:?} differs from reference {:?} by {} ms",
+        detected.start,
+        reference.start,
+        start_diff
+    );
+    assert!(
+        end_diff <= 1000,
+        "detected end {:?} differs from reference {:?} by {} ms",
+        detected.end,
+        reference.end,
+        end_diff
+    );
+
+    // detect_transit at a time clearly outside any transit must return None.
+    // Use a time 5 minutes before the first transit's AoS.
+    let before_transit = reference.start - Duration::minutes(5);
+    let outside = p.detect_transit(before_transit, &gs, 0.0).unwrap();
+    assert!(
+        outside.is_none(),
+        "expected None before any transit, got {:?}",
+        outside
+    );
+}
+
+#[test]
 #[ignore]
 fn test_transits_to_csv() {
     use std::io::Write;

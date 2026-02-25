@@ -120,6 +120,84 @@ impl Predictor {
         TransitIter::new(self.clone(), observer, interval, min_elevation)
     }
 
+    /// Detect whether a transit is in progress at time `t`.
+    ///
+    /// If the satellite is below `min_elevation` at `t`, returns `Ok(None)`.
+    /// Otherwise, searches backward and forward in 30-second steps to bracket the
+    /// AoS and LoS crossings, then refines each boundary with Newton-Raphson /
+    /// Brent's method to millisecond accuracy.
+    ///
+    /// Returns an error if either boundary is not found within 1 hour.
+    pub fn detect_transit<O: Observer>(
+        &self,
+        t: DateTime<Utc>,
+        observer: &O,
+        min_elevation: f64,
+    ) -> Result<Option<Transit>> {
+        let calculate = |t: DateTime<Utc>| -> Result<(f64, f64)> {
+            let (el, el_rate) = self
+                .propagate(t)?
+                .to_ecef(t)
+                .to_enu(observer)
+                .elevation_and_rate();
+            Ok((el, el_rate))
+        };
+
+        let mut f = |t: f64| {
+            calculate(time::f64_to_datetime(t))
+                .map(|(el, el_rate)| (el - min_elevation, el_rate))
+        };
+
+        let (el, _) = calculate(t)?;
+        if el < min_elevation {
+            return Ok(None);
+        }
+
+        const STEP: Duration = Duration::seconds(30);
+
+        // --- Find start (search backward) ---
+        let mut t_inner = t;
+        let mut t_outer = t - STEP;
+        let start = loop {
+            if t - t_outer > Duration::hours(1) {
+                return Err(transits::Error::TransitStartNotFound { at: t }.into());
+            }
+            let (el, _) = calculate(t_outer)?;
+            if el < min_elevation {
+                let s = transits::refine_crossing(
+                    time::datetime_to_f64(t_outer),
+                    time::datetime_to_f64(t_inner),
+                    &mut f,
+                )?;
+                break time::f64_to_datetime(s);
+            }
+            t_inner = t_outer;
+            t_outer -= STEP;
+        };
+
+        // --- Find end (search forward) ---
+        let mut t_inner = t;
+        let mut t_outer = t + STEP;
+        let end = loop {
+            if t_outer - t > Duration::hours(1) {
+                return Err(transits::Error::TransitEndNotFound { start }.into());
+            }
+            let (el, _) = calculate(t_outer)?;
+            if el < min_elevation {
+                let e = transits::refine_crossing(
+                    time::datetime_to_f64(t_inner),
+                    time::datetime_to_f64(t_outer),
+                    &mut f,
+                )?;
+                break time::f64_to_datetime(e);
+            }
+            t_inner = t_outer;
+            t_outer += STEP;
+        };
+
+        Ok(Some(Transit::new(start, end)))
+    }
+
     /// Find the peak elevation of the satellite over an observer within a time interval.
     ///
     /// Scans in 10-second steps to bracket the point where the elevation rate crosses
