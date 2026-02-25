@@ -1,3 +1,16 @@
+//! Satellite illumination (sunlit/eclipse) detection and iteration.
+//!
+//! Uses a cylindrical Earth shadow model: the satellite is in eclipse when
+//! it is on the anti-Sun side of Earth and its perpendicular distance from
+//! the Earth–Sun axis is less than one Earth radius. Shadow boundaries are
+//! located with a 60-second scan and refined to sub-millisecond accuracy
+//! with Brent's method.
+//!
+//! [`Illumination`] implements [`IntervalRange`], so illumination windows
+//! can be passed directly to prediction and observation iterators.
+//!
+//! [`IntervalRange`]: crate::IntervalRange
+
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
@@ -31,8 +44,11 @@ impl IlluminationState {
 /// A contiguous window of constant illumination state.
 #[derive(Debug, Clone, Copy)]
 pub struct Illumination {
+    /// Start of the window (inclusive).
     pub start: DateTime<Utc>,
+    /// End of the window (exclusive).
     pub end: DateTime<Utc>,
+    /// Illumination state throughout this window.
     pub state: IlluminationState,
 }
 
@@ -78,6 +94,7 @@ impl IlluminationIter {
         }
     }
 
+    /// Override the Brent solver configuration used to refine shadow-boundary crossings.
     pub fn with_brent(mut self, b: Brent) -> Self {
         self.brent = b;
         self

@@ -1,3 +1,18 @@
+//! Transit (satellite pass) detection and iteration.
+//!
+//! [`TransitIter`] uses an adaptive step-size strategy to scan efficiently:
+//! large steps when the satellite is descending or far below `min_elevation`,
+//! smaller steps as it approaches. Each Outside→Inside transition is refined
+//! to millisecond accuracy using Newton-Raphson with a Brent fallback.
+//!
+//! A [`Transit`] also implements [`IntervalRange`], so it can be passed
+//! directly to [`Predictor::prediction_iter`] or [`Predictor::observation_iter`]
+//! to iterate over a specific pass.
+//!
+//! [`IntervalRange`]: crate::IntervalRange
+//! [`Predictor::prediction_iter`]: crate::Predictor::prediction_iter
+//! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
+
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 use thiserror::Error as ThisError;
@@ -8,9 +23,16 @@ use roots::Refinement;
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
 
+/// A satellite pass — the window during which the satellite is above
+/// `min_elevation` as seen from the observer.
+///
+/// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
+/// directly to prediction and observation iterators to cover a specific pass.
 #[derive(Debug, Clone, Copy)]
 pub struct Transit {
+    /// Acquisition of Signal: when the satellite rises above `min_elevation`.
     pub start: DateTime<Utc>,
+    /// Loss of Signal: when the satellite drops below `min_elevation`.
     pub end: DateTime<Utc>,
 }
 
@@ -29,6 +51,9 @@ impl time::IntervalRange for Transit {
     }
 }
 
+/// Iterator over satellite passes visible to an observer within a time interval.
+///
+/// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
 pub struct TransitIter<'a, O: Observer> {
     predictor: Predictor,
     observer: &'a O,
@@ -217,6 +242,7 @@ where
         .map_err(LibError::Roots)
 }
 
+/// Errors that can occur during transit detection.
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error(

@@ -1,3 +1,9 @@
+//! Apsis (apogee and perigee) detection over a time interval.
+//!
+//! [`ApsisIter`] scans with a fixed 60-second step, monitoring the sign of
+//! the radial velocity `r·v`. A sign change brackets an apsis event, which
+//! is then refined with Brent's method.
+
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
@@ -7,19 +13,30 @@ use roots::Brent;
 const STEP: Duration = Duration::seconds(60);
 const WGS84_A: f64 = 6_378_137.0; // WGS-84 equatorial radius, metres
 
+/// The type of an apsis event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApsisEvent {
+    /// Point of closest approach to Earth (minimum altitude).
     Perigee,
+    /// Point of greatest distance from Earth (maximum altitude).
     Apogee,
 }
 
+/// A detected apsis event with refined time and altitude.
 #[derive(Debug, Clone)]
 pub struct Apsis {
+    /// Time of the apsis.
     pub time: DateTime<Utc>,
+    /// Whether this is an apogee or perigee.
     pub event: ApsisEvent,
-    pub altitude: f64, // metres above WGS-84 equatorial radius
+    /// Altitude above the WGS-84 equatorial radius in metres.
+    pub altitude: f64,
 }
 
+/// Iterator over apogee and perigee events within a time interval.
+///
+/// Created by [`Predictor::apsis_iter`](crate::Predictor::apsis_iter).
+/// Scans in 60-second steps and refines each crossing with Brent's method.
 pub struct ApsisIter {
     predictor: Predictor,
     interval: Range<DateTime<Utc>>,

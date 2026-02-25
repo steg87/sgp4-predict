@@ -1,8 +1,20 @@
+//! Time interval types and the [`DateTimeIter`] stepping iterator.
+
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
+/// A half-open time interval `[start, end)`.
+///
+/// Implemented for `Range<DateTime<Utc>>` and for [`Transit`] and
+/// [`Illumination`], so either can be passed directly to the prediction and
+/// observation iterators.
+///
+/// [`Transit`]: crate::Transit
+/// [`Illumination`]: crate::Illumination
 pub trait IntervalRange {
+    /// Inclusive start of the interval.
     fn start(&self) -> DateTime<Utc>;
+    /// Exclusive end of the interval.
     fn end(&self) -> DateTime<Utc>;
 }
 
@@ -15,6 +27,11 @@ impl IntervalRange for Range<DateTime<Utc>> {
     }
 }
 
+/// Iterator that yields equally-spaced [`DateTime<Utc>`] values over an interval.
+///
+/// Yields times `[start, start + step, start + 2·step, …)` up to but not
+/// including `end`. Call [`include_end`](DateTimeIter::include_end) to append
+/// the exact end time as a final sample.
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,
@@ -32,6 +49,7 @@ impl DateTimeIter {
         }
     }
 
+    /// Append the exact interval end time as a final sample.
     pub(crate) fn include_end(mut self) -> Self {
         self.pending_end = Some(self.interval.end);
         self

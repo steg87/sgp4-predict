@@ -1,3 +1,15 @@
+//! Coordinate frame types and the conversions between them.
+//!
+//! Three frames are used in the prediction pipeline:
+//!
+//! - **TEME** ([`TemeState`]): True Equator Mean Equinox — the native SGP4 output frame.
+//! - **ECEF** ([`EcefState`]): Earth-Centred Earth-Fixed — rotates with Earth.
+//! - **ENU** ([`EnuState`]): East-North-Up — local frame relative to a ground observer.
+//!
+//! The normal conversion chain is `TEME → ECEF → ENU → [`Observation`]`.
+//!
+//! [`Observation`]: crate::Observation
+
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -9,7 +21,7 @@ use crate::{
 pub struct JulianDate(f64);
 pub struct Radians(f64);
 
-/// TEME state vector
+/// State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
 pub type TemeState = StateVector<markers::Teme>;
 
 impl TemeState {
@@ -49,10 +61,15 @@ impl TemeState {
     }
 }
 
-/// ECEF state vector
+/// State vector in the Earth-Centred Earth-Fixed (ECEF) frame.
 pub type EcefState = StateVector<markers::Ecef>;
 
 impl EcefState {
+    /// Convert ECEF state to ENU relative to an observer.
+    ///
+    /// Subtracts the observer's ECEF position (derived from geodetic
+    /// coordinates via the WGS-84 ellipsoid) and rotates into the local
+    /// East-North-Up frame at the observer's location.
     pub fn to_enu(&self, observer: &impl Observer) -> EnuState {
         let obs_ecef = observer.to_ecef();
         let dp = self.position - obs_ecef.position;
@@ -76,7 +93,7 @@ impl EcefState {
     }
 }
 
-/// ENU state vector
+/// State vector in the East-North-Up (ENU) frame, relative to a ground observer.
 pub type EnuState = StateVector<markers::Enu>;
 
 impl EnuState {
@@ -98,7 +115,10 @@ impl EnuState {
         }
     }
 
-    /// Convert to an (elevation, elevation rate)
+    /// Return `(elevation, elevation_rate)` in radians and radians per second.
+    ///
+    /// Used internally as the derivative function for Newton-Raphson refinement
+    /// of transit crossing times.
     pub(crate) fn elevation_and_rate(&self) -> (f64, f64) {
         let (e, n, u) = (self.position.x, self.position.y, self.position.z);
         let (ed, nd, ud) = (self.velocity.x, self.velocity.y, self.velocity.z);

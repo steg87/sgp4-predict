@@ -1,3 +1,5 @@
+//! Iterator over propagated TEME state vectors at regular time intervals.
+
 use chrono::{DateTime, Duration, Utc};
 
 use crate::{
@@ -7,6 +9,9 @@ use crate::{
     vectors::{Position, Velocity},
 };
 
+/// Iterator over time-stamped TEME state vectors at regular intervals.
+///
+/// Created by [`Predictor::prediction_iter`](crate::Predictor::prediction_iter).
 pub struct PredictionIter {
     predictor: Predictor,
     dt_iter: DateTimeIter,
@@ -39,6 +44,7 @@ impl PredictionIter {
         }
     }
 
+    /// Include the interval end time as an extra sample after the last regular step.
     pub fn include_end(mut self) -> Self {
         self.dt_iter = self.dt_iter.include_end();
         self

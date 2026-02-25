@@ -1,3 +1,15 @@
+//! Higher-level satellite prediction built on the [`sgp4`] crate.
+//!
+//! [`Predictor`] is the main entry point. Construct it from any type that
+//! implements [`Satellite`] (i.e. [`HasId`] + [`HasTle`]), then use its
+//! methods to propagate state vectors, compute ground observations, detect
+//! passes, find apsides, and query illumination.
+//!
+//! # Units
+//!
+//! All positions are in **metres** and velocities in **m/s**.
+//! Observer latitude and longitude must be supplied in **radians**.
+
 mod apsides;
 mod frames;
 mod illumination;
@@ -24,22 +36,33 @@ pub use crate::{
     vectors::{Position, StateVector, Velocity},
 };
 
+/// Crate-wide result type, parameterised over [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Marker supertrait for a satellite that has both an identifier and TLE lines.
+///
+/// Any type implementing both [`HasId`] and [`HasTle`] automatically
+/// implements `Satellite`.
 pub trait Satellite: HasId + HasTle {}
 impl<T> Satellite for T where T: HasId + HasTle {}
 
+/// A type that provides a satellite identifier.
 pub trait HasId {
+    /// Returns the satellite name or NORAD catalog number string.
     fn id(&self) -> &str;
 }
 
+/// A type that provides the two lines of a TLE.
 pub trait HasTle {
+    /// Returns TLE line 1.
     fn line_1(&self) -> &str;
+    /// Returns TLE line 2.
     fn line_2(&self) -> &str;
 }
 
-/// Stores orbital elements and constants. Has methods to create iterators to propagate predictions
-/// in given frames.
+/// Parsed TLE with pre-computed SGP4 constants, ready for propagation.
+///
+/// Construct with [`Predictor::new`] from any [`Satellite`].
 #[derive(Debug, Clone)]
 pub struct Predictor {
     elements: Elements,
@@ -48,6 +71,10 @@ pub struct Predictor {
 }
 
 impl Predictor {
+    /// Parse a TLE and initialise SGP4 constants.
+    ///
+    /// Returns an error if the TLE text is malformed or if SGP4
+    /// element initialisation fails.
     pub fn new(sat: &impl Satellite) -> Result<Self> {
         let elements = Elements::from_tle(
             Some(sat.id().to_owned()),
@@ -299,6 +326,7 @@ impl Predictor {
     }
 }
 
+/// Errors returned by this crate.
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error("TLE parse error: {0}")]

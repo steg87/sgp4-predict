@@ -1,11 +1,23 @@
+//! Root-finding algorithms used to refine satellite event times.
+//!
+//! [`NewtonRaphson`] is tried first when a derivative is available (fast
+//! quadratic convergence). [`Brent`] is used as a guaranteed-convergence
+//! fallback when Newton-Raphson fails or the derivative is unavailable.
+//! [`Refinement`] bundles both and is passed to
+//! [`Predictor::with_refinement`](crate::Predictor::with_refinement) to
+//! customise solver behaviour across the whole predictor.
+
 use thiserror::Error as ThisError;
 
 /// Newton–Raphson root finder.
 ///
-/// Configured by `tolerance` (acceptable absolute error in f(x)) and `max_iter` (safety cap).
+/// Requires the function to return both a value and its derivative.
+/// Converges quadratically when the initial guess is close to the root.
 #[derive(Debug, Clone, Copy)]
 pub struct NewtonRaphson {
+    /// Convergence threshold: iteration stops when `|f(x)| < tolerance`.
     pub tolerance: f64,
+    /// Maximum number of iterations before returning [`Error::FailedToConverge`].
     pub max_iter: usize,
 }
 
@@ -22,6 +34,18 @@ impl NewtonRaphson {
     /// Find the root of `f` starting from `x0`.
     ///
     /// `f(x)` must return `(y, dy)` — the function value and its derivative — or an error.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sgp4_predict::NewtonRaphson;
+    ///
+    /// // Find the root of f(x) = x² – 4 near x = 1 (root at x = 2).
+    /// let root = NewtonRaphson::default()
+    ///     .solve(1.0, |x| Ok::<_, std::convert::Infallible>((x * x - 4.0, 2.0 * x)))
+    ///     .unwrap();
+    /// assert!((root - 2.0).abs() < 1e-6);
+    /// ```
     pub fn solve<F, E>(&self, x0: f64, mut f: F) -> Result<f64, Error>
     where
         F: FnMut(f64) -> Result<(f64, f64), E>,
@@ -52,13 +76,17 @@ impl NewtonRaphson {
     }
 }
 
-/// Brent root finder. Optimally combines bisection (guaranteed convergence), Secant method and
-/// inverse quadratic interpolation.
+/// Brent's root finder.
 ///
-/// Configured by `tolerance` (acceptable absolute error in f(x)) and `max_iter` (safety cap).
+/// Combines bisection (guaranteed convergence), the secant method, and
+/// inverse quadratic interpolation to converge superlinearly without
+/// requiring a derivative. Requires the root to be bracketed: `f(a)` and
+/// `f(b)` must have opposite signs.
 #[derive(Debug, Clone, Copy)]
 pub struct Brent {
+    /// Convergence threshold: iteration stops when `|f(b)| < tolerance`.
     pub tolerance: f64,
+    /// Maximum number of iterations before returning [`Error::FailedToConverge`].
     pub max_iter: usize,
 }
 
@@ -75,6 +103,18 @@ impl Brent {
     /// Find the root of `f` bracketed in `[a, b]`.
     ///
     /// `f(a)` and `f(b)` must have opposite signs (i.e. the root is bracketed).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sgp4_predict::Brent;
+    ///
+    /// // Find the root of f(x) = x³ – 8 in [0, 3] (root at x = 2).
+    /// let root = Brent::default()
+    ///     .solve(0.0, 3.0, |x| Ok::<_, std::convert::Infallible>(x.powi(3) - 8.0))
+    ///     .unwrap();
+    /// assert!((root - 2.0).abs() < 1e-6);
+    /// ```
     pub fn solve<F, E>(&self, mut a: f64, mut b: f64, mut f: F) -> Result<f64, Error>
     where
         F: FnMut(f64) -> Result<f64, E>,
@@ -185,13 +225,26 @@ impl Brent {
     }
 }
 
-/// Combined solver for the Newton-Raphson → Brent fallback used in transit crossing refinement.
+/// Combined Newton-Raphson → Brent solver configuration.
+///
+/// Newton-Raphson is attempted first; if it fails to converge or becomes
+/// numerically unstable, Brent's method is used as a fallback.
+/// Pass to [`Predictor::with_refinement`](crate::Predictor::with_refinement)
+/// to customise the solvers used by [`transits_iter`], [`detect_transit`],
+/// and [`max_elevation`].
+///
+/// [`transits_iter`]: crate::Predictor::transits_iter
+/// [`detect_transit`]: crate::Predictor::detect_transit
+/// [`max_elevation`]: crate::Predictor::max_elevation
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Refinement {
+    /// Configuration for the Newton-Raphson solver.
     pub newton_raphson: NewtonRaphson,
+    /// Configuration for the Brent fallback solver.
     pub brent: Brent,
 }
 
+/// Errors returned by the root-finding algorithms.
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error("derivative dfx too small, unsafe")]
