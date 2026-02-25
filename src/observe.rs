@@ -66,6 +66,11 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
             observer,
         }
     }
+
+    pub fn include_end(mut self) -> Self {
+        self.predict_iter = self.predict_iter.include_end();
+        self
+    }
 }
 
 impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {

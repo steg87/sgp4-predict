@@ -38,6 +38,11 @@ impl PredictionIter {
             dt_iter: DateTimeIter::new(interval, step),
         }
     }
+
+    pub fn include_end(mut self) -> Self {
+        self.dt_iter = self.dt_iter.include_end();
+        self
+    }
 }
 
 impl Iterator for PredictionIter {

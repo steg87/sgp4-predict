@@ -37,12 +37,8 @@ fn next_ground_station_pass_observations() {
     for observation in p
         // Transit implements IntervalRange, so we can pass it as arg to observation_iter as interval
         .observation_iter(&gs, next_transit, Duration::seconds(10))
-        // To ensure we include the transit end point we need to chain an explicit observe_at
-        .chain(std::iter::once(Ok((
-            next_transit.end,
-            p.observe_at(next_transit.end, &gs)
-                .expect("error calculating observation"),
-        ))))
+        // Include the transit end time in the output
+        .include_end()
     {
         // Unwrap and shadow observation
         let (t, observation) = observation.expect("error calculating observation");
