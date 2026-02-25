@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
 use crate::{Error, Predictor, Result, roots, time};
+use roots::Brent;
 
 const STEP: Duration = Duration::seconds(60);
 const WGS84_A: f64 = 6_378_137.0; // WGS-84 equatorial radius, metres
@@ -24,6 +25,7 @@ pub struct ApsisIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,
     prev: Option<(f64, f64)>, // (timestamp as f64, r·v)
+    brent: Brent,
 }
 
 impl ApsisIter {
@@ -33,7 +35,13 @@ impl ApsisIter {
             interval: interval.start()..interval.end(),
             next_time: interval.start(),
             prev: None,
+            brent: Brent::default(),
         }
+    }
+
+    pub fn with_brent(mut self, b: Brent) -> Self {
+        self.brent = b;
+        self
     }
 
     fn radial_velocity_at(&self, t: DateTime<Utc>) -> Result<f64> {
@@ -59,16 +67,10 @@ impl Iterator for ApsisIter {
             {
                 // Sign change detected — bracket is [prev_t, t_f64]
                 let predictor = self.predictor.clone();
-                match roots::brent(
-                    prev_t,
-                    t_f64,
-                    |x| {
-                        let t = time::f64_to_datetime(x);
-                        predictor.propagate(t).map(|s| s.radial_velocity())
-                    },
-                    1e-6,
-                    100,
-                ) {
+                match self.brent.solve(prev_t, t_f64, |x| {
+                    let t = time::f64_to_datetime(x);
+                    predictor.propagate(t).map(|s| s.radial_velocity())
+                }) {
                     Ok(t_refined) => {
                         self.prev = Some((t_f64, rv));
                         self.next_time += STEP;

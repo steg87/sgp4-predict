@@ -18,6 +18,7 @@ pub use crate::{
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,
+    roots::{Brent, NewtonRaphson, Refinement},
     time::{DateTimeIter, IntervalRange},
     transits::{Transit, TransitIter},
     vectors::{Position, StateVector, Velocity},
@@ -43,6 +44,7 @@ pub trait HasTle {
 pub struct Predictor {
     elements: Elements,
     constants: Constants,
+    refinement: Refinement,
 }
 
 impl Predictor {
@@ -56,7 +58,17 @@ impl Predictor {
         Ok(Self {
             elements,
             constants,
+            refinement: Refinement::default(),
         })
+    }
+
+    /// Set the root-finder configuration used by [`detect_transit`] and [`max_elevation`].
+    ///
+    /// [`detect_transit`]: Predictor::detect_transit
+    /// [`max_elevation`]: Predictor::max_elevation
+    pub fn with_refinement(mut self, refinement: Refinement) -> Self {
+        self.refinement = refinement;
+        self
     }
 
     /// Propagate the TLE to given time t.
@@ -105,7 +117,7 @@ impl Predictor {
     ///
     /// Returns an iterator over apsis events in the TEME frame.
     pub fn apsis_iter(&self, interval: impl IntervalRange) -> ApsisIter {
-        ApsisIter::new(self.clone(), interval)
+        ApsisIter::new(self.clone(), interval).with_brent(self.refinement.brent)
     }
 
     /// Calculate all of the transits visible to the observer.
@@ -118,6 +130,7 @@ impl Predictor {
         min_elevation: f64,
     ) -> TransitIter<'a, O> {
         TransitIter::new(self.clone(), observer, interval, min_elevation)
+            .with_refinement(self.refinement)
     }
 
     /// Detect whether a transit is in progress at time `t`.
@@ -168,6 +181,7 @@ impl Predictor {
                     time::datetime_to_f64(t_outer),
                     time::datetime_to_f64(t_inner),
                     &mut f,
+                    &self.refinement,
                 )?;
                 break time::f64_to_datetime(s);
             }
@@ -188,6 +202,7 @@ impl Predictor {
                     time::datetime_to_f64(t_inner),
                     time::datetime_to_f64(t_outer),
                     &mut f,
+                    &self.refinement,
                 )?;
                 break time::f64_to_datetime(e);
             }
@@ -201,7 +216,7 @@ impl Predictor {
     /// Find the peak elevation of the satellite over an observer within a time interval.
     ///
     /// Scans in 10-second steps to bracket the point where the elevation rate crosses
-    /// zero (ascending → descending), then refines with Brent's method to 1 ms accuracy.
+    /// zero (ascending → descending), then refines with Brent's method.
     /// If no sign change is found (satellite never peaks within the interval), a
     /// roots::Error::Unbracketed is returned.
     pub fn max_elevation<O: Observer>(
@@ -229,18 +244,13 @@ impl Predictor {
                 && el_rate < 0.0
             {
                 // el_rate crossed zero: peak is bracketed in [prev_t, t_f64]
-                let peak_t_f64 = roots::brent(
-                    prev_t,
-                    t_f64,
-                    |x| {
+                let peak_t_f64 = self.refinement.brent
+                    .solve(prev_t, t_f64, |x| {
                         let tx = time::f64_to_datetime(x);
                         self.propagate(tx)
                             .map(|s| s.to_ecef(tx).to_enu(observer).elevation_and_rate().1)
-                    },
-                    1e-3,
-                    50,
-                )
-                .map_err(Error::Roots)?;
+                    })
+                    .map_err(Error::Roots)?;
 
                 let peak_t = time::f64_to_datetime(peak_t_f64);
                 return Ok((peak_t, self.observe_at(peak_t, observer)?));
@@ -273,7 +283,7 @@ impl Predictor {
     /// interval. Uses a cylindrical Earth shadow model with 60-second scan steps
     /// and Brent's method to refine shadow-boundary crossings to millisecond accuracy.
     pub fn illumination_iter(&self, interval: impl IntervalRange) -> IlluminationIter {
-        IlluminationIter::new(self.clone(), interval)
+        IlluminationIter::new(self.clone(), interval).with_brent(self.refinement.brent)
     }
 
     /// Return the epoch of the TLE.

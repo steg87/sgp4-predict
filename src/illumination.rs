@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
 use crate::{Error, Predictor, Result, frames, roots, time};
+use roots::Brent;
 
 const STEP: Duration = Duration::seconds(60);
 
@@ -47,7 +48,7 @@ impl time::IntervalRange for Illumination {
 /// Iterator over sunlit and eclipse windows within a time interval.
 ///
 /// Scans with a fixed 60-second step and refines shadow-boundary crossings with
-/// Brent's method to millisecond accuracy.
+/// Brent's method to sub-millisecond accuracy.
 ///
 /// Windows that extend beyond the search interval are clamped to its boundaries:
 /// the first window always starts at `interval.start` and the last always ends at
@@ -60,6 +61,7 @@ pub struct IlluminationIter {
     current: Option<IlluminationState>,
     prev: Option<(f64, f64)>, // (t as f64, shadow_value) at previous scan point
     finished: bool,
+    brent: Brent,
 }
 
 impl IlluminationIter {
@@ -72,7 +74,13 @@ impl IlluminationIter {
             current: None,
             prev: None,
             finished: false,
+            brent: Brent::default(),
         }
+    }
+
+    pub fn with_brent(mut self, b: Brent) -> Self {
+        self.brent = b;
+        self
     }
 }
 
@@ -106,12 +114,10 @@ impl Iterator for IlluminationIter {
                     } else {
                         // Refine crossing with Brent's method.
                         let predictor = self.predictor.clone();
-                        let crossing_f64 = match roots::brent(
+                        let crossing_f64 = match self.brent.solve(
                             prev_t,
                             t_f64,
                             |x| shadow_value(&predictor, time::f64_to_datetime(x)),
-                            1e-3, // 1 ms tolerance
-                            50,
                         ) {
                             Ok(t) => t,
                             Err(e) => return Some(Err(Error::Roots(e))),

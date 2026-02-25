@@ -15,7 +15,7 @@
   LOS time (s)          0.478s     0.983s     2.000s  PASS
   AOS azimuth (°)       0.003°     0.009°     0.100°  PASS
   LOS azimuth (°)       0.002°     0.008°     0.100°  PASS
-  TCA elevation (°)     0.007°     0.050°     0.200°  PASS
+  TCA elevation (°)     0.002°     0.006°     0.200°  PASS
   --------------------------------------------------------------------
   Result: PASS
 
@@ -32,7 +32,7 @@
   LOS time (s)          0.373s     0.876s     2.000s  PASS
   AOS azimuth (°)       0.006°     0.022°     0.100°  PASS
   LOS azimuth (°)       0.005°     0.016°     0.100°  PASS
-  TCA elevation (°)     0.008°     0.068°     0.200°  PASS
+  TCA elevation (°)     0.002°     0.005°     0.200°  PASS
   --------------------------------------------------------------------
   Result: PASS
 
@@ -49,7 +49,7 @@
   LOS time (s)          0.507s     0.859s     2.000s  PASS
   AOS azimuth (°)       0.003°     0.008°     0.100°  PASS
   LOS azimuth (°)       0.004°     0.012°     0.100°  PASS
-  TCA elevation (°)     0.005°     0.016°     0.200°  PASS
+  TCA elevation (°)     0.003°     0.005°     0.200°  PASS
   --------------------------------------------------------------------
   Result: PASS
 

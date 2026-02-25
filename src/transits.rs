@@ -3,6 +3,7 @@ use std::ops::Range;
 use thiserror::Error as ThisError;
 
 use crate::{Error as LibError, Predictor, Result, observe::Observer, roots, time};
+use roots::Refinement;
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -35,6 +36,7 @@ pub struct TransitIter<'a, O: Observer> {
     min_elevation: f64,
     next_time: DateTime<Utc>,
     state: Option<TransitState>,
+    refinement: Refinement,
 }
 
 impl<'a, O: Observer> TransitIter<'a, O> {
@@ -51,7 +53,13 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             min_elevation,
             next_time: interval.start(),
             state: None,
+            refinement: Refinement::default(),
         }
+    }
+
+    pub fn with_refinement(mut self, r: Refinement) -> Self {
+        self.refinement = r;
+        self
     }
 
     /// Takes a new observation and determines if a transit has been entered by comparing the new
@@ -75,6 +83,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                             time::datetime_to_f64(*t0),
                             time::datetime_to_f64(*t1),
                             &mut f,
+                            &self.refinement,
                         )?;
                         time::f64_to_datetime(start)
                     }
@@ -100,8 +109,12 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             let observation = self.predictor.observe_at(t1, self.observer)?;
             if observation.elevation < self.min_elevation {
                 // Transitioned out of a transit, refine transit end
-                let end =
-                    refine_crossing(time::datetime_to_f64(t0), time::datetime_to_f64(t1), &mut f)?;
+                let end = refine_crossing(
+                    time::datetime_to_f64(t0),
+                    time::datetime_to_f64(t1),
+                    &mut f,
+                    &self.refinement,
+                )?;
                 break time::f64_to_datetime(end);
             };
             t0 = t1;
@@ -175,7 +188,12 @@ enum TransitState {
     Outside(DateTime<Utc>),
 }
 
-pub(crate) fn refine_crossing<F, E>(t0: f64, t1: f64, mut f: F) -> Result<f64>
+pub(crate) fn refine_crossing<F, E>(
+    t0: f64,
+    t1: f64,
+    mut f: F,
+    refinement: &Refinement,
+) -> Result<f64>
 where
     F: FnMut(f64) -> std::result::Result<(f64, f64), E>,
     E: std::error::Error,
@@ -186,14 +204,17 @@ where
     // falling through to Brent (the same evaluation point would fail there too).
     // Tolerance is on the elevation function value (radians). At a typical AoS/LoS
     // elevation rate of ~2 mrad/s, 1e-6 rad gives < 1 ms time precision.
-    match roots::newton_raphson(t, &mut f, 1e-6, 50) {
+    match refinement.newton_raphson.solve(t, &mut f) {
         Ok(root) => return Ok(root),
         Err(e @ roots::Error::CostFn(_)) => return Err(LibError::Roots(e)),
         Err(_) => {} // convergence failure, fall through to Brent
     }
 
     // Fall back to Brent
-    roots::brent(t0, t1, |x| f(x).map(|(el, _)| el), 1e-6, 100).map_err(LibError::Roots)
+    refinement
+        .brent
+        .solve(t0, t1, |x| f(x).map(|(el, _)| el))
+        .map_err(LibError::Roots)
 }
 
 #[derive(Debug, ThisError)]
