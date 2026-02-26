@@ -1,0 +1,19 @@
+rust:
+  - changed-files:
+    - any-glob-to-any-file: ["src/**/*.rs", "Cargo.toml", "Cargo.lock"]
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file: "tests/**"
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file: [".github/**", "Makefile"]
+
+python:
+  - changed-files:
+    - any-glob-to-any-file: "**/*.py"
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: ["**/*.md", "docs/**"]
