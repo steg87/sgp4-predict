@@ -291,7 +291,7 @@ fn skyfield_validation() {
     // --- 2. Parse spec ---
     let spec_text = std::fs::read_to_string(spec_path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", spec_path.display()));
-    let spec: TestVectors = serde_yml::from_str(&spec_text)
+    let spec: TestVectors = serde_yaml::from_str(&spec_text)
         .unwrap_or_else(|e| panic!("cannot parse {}: {e}", spec_path.display()));
 
     // --- 3. Validate each test case ---
