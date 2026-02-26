@@ -83,7 +83,51 @@ pub type Velocity<F> = Vec3<markers::Velocity, F>;
 mod markers {
     #[derive(Debug, Clone, Copy, Default)]
     pub struct Position;
-    
+
     #[derive(Debug, Clone, Copy, Default)]
     pub struct Velocity;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Convenience frame marker just for these tests — we only care about the
+    // arithmetic, not which coordinate frame is in use.
+    #[derive(Debug, Clone, Copy, Default)]
+    struct TestFrame;
+
+    type TestState = StateVector<TestFrame>;
+    type TestPos = Position<TestFrame>;
+    type TestVel = Velocity<TestFrame>;
+
+    #[test]
+    fn test_radial_velocity_away() {
+        // Position and velocity point in the same direction → positive r·v
+        let sv = TestState::new(
+            TestPos::new(7_000_000.0, 0.0, 0.0),
+            TestVel::new(7_000.0, 0.0, 0.0),
+        );
+        assert!(sv.radial_velocity() > 0.0);
+    }
+
+    #[test]
+    fn test_radial_velocity_toward() {
+        // Velocity opposes position → negative r·v (approaching)
+        let sv = TestState::new(
+            TestPos::new(7_000_000.0, 0.0, 0.0),
+            TestVel::new(-7_000.0, 0.0, 0.0),
+        );
+        assert!(sv.radial_velocity() < 0.0);
+    }
+
+    #[test]
+    fn test_radial_velocity_perpendicular() {
+        // Velocity perpendicular to position → zero r·v (at apsis or circular orbit)
+        let sv = TestState::new(
+            TestPos::new(7_000_000.0, 0.0, 0.0),
+            TestVel::new(0.0, 7_000.0, 0.0),
+        );
+        assert_eq!(sv.radial_velocity(), 0.0);
+    }
 }

@@ -223,3 +223,142 @@ mod markers {
     #[derive(Debug, Clone, Copy, Default)]
     pub struct Enu;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{gmst, julian_date, sun_position_eci, EnuState};
+    use crate::vectors::{Position, Velocity};
+    use chrono::{TimeZone, Utc};
+
+    // --- julian_date ---
+
+    #[test]
+    fn test_julian_date_j2000() {
+        // J2000.0 is defined as 2000-01-01T12:00:00 UTC = JD 2451545.0.
+        // Verifies the Unix-epoch offset constant (2440587.5) and the
+        // seconds-to-days divisor.
+        let t = Utc.with_ymd_and_hms(2000, 1, 1, 12, 0, 0).unwrap();
+        let jd = julian_date(t);
+        assert!(
+            (jd.0 - 2451545.0).abs() < 1e-9,
+            "JD at J2000.0 = {}, expected 2451545.0",
+            jd.0
+        );
+    }
+
+    // --- gmst ---
+
+    #[test]
+    fn test_gmst_j2000_constant_term() {
+        // At J2000.0 T = 0, so the polynomial collapses to its constant term:
+        //   GMST_sec = 67310.54841
+        //   GMST_rad = 67310.54841 × 2π / 86400 ≈ 4.894961...
+        // Catches coefficient-transcription errors in the IAU 1982 polynomial.
+        let t = Utc.with_ymd_and_hms(2000, 1, 1, 12, 0, 0).unwrap();
+        let g = gmst(julian_date(t));
+        let expected = 67310.54841 * std::f64::consts::TAU / 86400.0;
+        assert!(
+            (g.0 - expected).abs() < 1e-9,
+            "GMST at J2000.0 = {:.9}, expected {:.9}",
+            g.0,
+            expected
+        );
+    }
+
+    #[test]
+    fn test_gmst_always_in_range() {
+        // GMST must always be in [0, 2π) regardless of date.
+        // The negative-modulo guard is tested with a pre-J2000 date.
+        let dates = [
+            Utc.with_ymd_and_hms(1990, 1, 1, 0, 0, 0).unwrap(), // T < 0
+            Utc.with_ymd_and_hms(2000, 1, 1, 12, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2025, 6, 21, 0, 0, 0).unwrap(),
+        ];
+        for t in &dates {
+            let g = gmst(julian_date(*t));
+            assert!(
+                g.0 >= 0.0 && g.0 < std::f64::consts::TAU,
+                "GMST {:.6} out of [0, 2π) for {t:?}",
+                g.0
+            );
+        }
+    }
+
+    // --- sun_position_eci ---
+
+    #[test]
+    fn test_sun_position_approx_one_au() {
+        // Sun–Earth distance must be approximately 1 AU (±2 %) year-round.
+        let t = Utc.with_ymd_and_hms(2024, 6, 21, 0, 0, 0).unwrap();
+        let sun = sun_position_eci(t);
+        let r = (sun[0].powi(2) + sun[1].powi(2) + sun[2].powi(2)).sqrt();
+        let au = 1.495_978_707e11_f64;
+        assert!(
+            (r / au - 1.0).abs() < 0.02,
+            "Sun distance {r:.3e} m deviates > 2 % from 1 AU"
+        );
+    }
+
+    #[test]
+    fn test_sun_position_solstice_z_sign() {
+        // At northern summer solstice the Sun is north of the equatorial plane (z > 0);
+        // at northern winter solstice it is south (z < 0).
+        let summer = Utc.with_ymd_and_hms(2024, 6, 21, 0, 0, 0).unwrap();
+        assert!(
+            sun_position_eci(summer)[2] > 0.0,
+            "Sun z should be positive at northern summer solstice"
+        );
+
+        let winter = Utc.with_ymd_and_hms(2024, 12, 21, 0, 0, 0).unwrap();
+        assert!(
+            sun_position_eci(winter)[2] < 0.0,
+            "Sun z should be negative at northern winter solstice"
+        );
+    }
+
+    // --- EnuState::elevation_and_rate ---
+
+    #[test]
+    fn test_elevation_and_rate_45_degrees() {
+        // ENU position (r, 0, r): satellite is due east at 45° elevation.
+        // Stationary → el_rate must be zero.
+        let r = 1_000_000.0_f64;
+        let sv = EnuState::new(
+            Position::new(r, 0.0, r),
+            Velocity::new(0.0, 0.0, 0.0),
+        );
+        let (el, el_rate) = sv.elevation_and_rate();
+        assert!(
+            (el - std::f64::consts::FRAC_PI_4).abs() < 1e-12,
+            "elevation should be π/4, got {el}"
+        );
+        assert_eq!(el_rate, 0.0);
+    }
+
+    #[test]
+    fn test_elevation_and_rate_ascending() {
+        // Satellite on the eastern horizon, moving upward → el_rate > 0.
+        let sv = EnuState::new(
+            Position::new(1_000_000.0, 0.0, 0.0),
+            Velocity::new(0.0, 0.0, 1_000.0),
+        );
+        let (_, el_rate) = sv.elevation_and_rate();
+        assert!(el_rate > 0.0, "el_rate should be positive for ascending satellite");
+    }
+
+    #[test]
+    fn test_elevation_and_rate_near_zenith_branch() {
+        // horiz² = e² + n² ≈ 0 → hits the near-zenith guard branch and returns
+        // el_rate = 0.0 instead of dividing by zero.
+        let sv = EnuState::new(
+            Position::new(0.0, 0.0, 800_000.0), // straight overhead
+            Velocity::new(100.0, 0.0, 0.0),      // moving east
+        );
+        let (el, el_rate) = sv.elevation_and_rate();
+        assert!(
+            (el - std::f64::consts::FRAC_PI_2).abs() < 1e-6,
+            "elevation should be π/2 overhead, got {el}"
+        );
+        assert_eq!(el_rate, 0.0, "el_rate should be 0 in near-zenith branch");
+    }
+}

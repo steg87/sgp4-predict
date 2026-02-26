@@ -242,6 +242,155 @@ where
         .map_err(LibError::Roots)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{HasId, HasTle, Predictor, roots::{Brent, NewtonRaphson, Refinement}};
+    use chrono::{TimeZone, Utc};
+    use std::convert::Infallible;
+
+    // --- refine_crossing ---
+    // These tests use synthetic elevation functions and need no Predictor.
+
+    #[test]
+    fn test_refine_crossing_newton_raphson_converges() {
+        // Linear f(x) = x − 0.5: Newton-Raphson should converge in one step
+        // from the midpoint of [0, 1].
+        let result = refine_crossing(
+            0.0,
+            1.0,
+            |x| Ok::<_, Infallible>((x - 0.5, 1.0)),
+            &Refinement::default(),
+        );
+        assert!(result.is_ok());
+        assert!((result.unwrap() - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_refine_crossing_falls_back_to_brent_on_unstable() {
+        // Derivative is always zero → Newton-Raphson returns Unstable.
+        // Brent must find the root of f(x) = x − 0.5 in [0, 2].
+        // (Midpoint is 1.0; f(1.0) = 0.5 ≠ 0, so NR won't converge first.)
+        let result = refine_crossing(
+            0.0,
+            2.0,
+            |x| Ok::<_, Infallible>((x - 0.5, 0.0)),
+            &Refinement::default(),
+        );
+        assert!(result.is_ok(), "Brent fallback should succeed: {result:?}");
+        assert!((result.unwrap() - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_refine_crossing_falls_back_to_brent_on_max_iter() {
+        // Newton-Raphson limited to 1 iteration won't converge on a cubic;
+        // Brent must pick up and find the root of x³ − 0.5 in [0, 1].
+        let refinement = Refinement {
+            newton_raphson: NewtonRaphson { tolerance: 1e-6, max_iter: 1 },
+            brent: Brent::default(),
+        };
+        let result = refine_crossing(
+            0.0,
+            1.0,
+            |x| Ok::<_, Infallible>((x.powi(3) - 0.5, 3.0 * x.powi(2))),
+            &refinement,
+        );
+        assert!(result.is_ok(), "Brent fallback should succeed: {result:?}");
+        // root is 0.5^(1/3) ≈ 0.7937
+        assert!((result.unwrap() - 0.5_f64.cbrt()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_refine_crossing_cost_fn_error_propagates() {
+        // A cost-function error on the first NR evaluation must surface
+        // immediately rather than falling through to Brent.
+        #[derive(Debug)]
+        struct CostErr;
+        impl std::fmt::Display for CostErr {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "cost error")
+            }
+        }
+        impl std::error::Error for CostErr {}
+
+        let result = refine_crossing(
+            0.0,
+            1.0,
+            |_| Err::<(f64, f64), CostErr>(CostErr),
+            &Refinement::default(),
+        );
+        assert!(result.is_err());
+    }
+
+    // --- step_size ---
+
+    struct TestSat;
+    impl HasId for TestSat {
+        fn id(&self) -> &str { "SENTINEL-2C" }
+    }
+    impl HasTle for TestSat {
+        fn line_1(&self) -> &str {
+            "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
+        }
+        fn line_2(&self) -> &str {
+            "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+        }
+    }
+
+    struct TestObs;
+    impl Observer for TestObs {
+        fn latitude(&self) -> f64 { 0.0 }
+        fn longitude(&self) -> f64 { 0.0 }
+        fn altitude(&self) -> f64 { 0.0 }
+    }
+
+    fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, TestObs> {
+        static OBS: TestObs = TestObs;
+        let predictor = Predictor::new(&TestSat).unwrap();
+        let t = Utc.with_ymd_and_hms(2025, 12, 22, 0, 0, 0).unwrap();
+        TransitIter::new(predictor, &OBS, t..(t + chrono::Duration::hours(1)), min_elevation_deg.to_radians())
+    }
+
+    #[test]
+    fn test_step_size_descending_uses_max_step() {
+        // el_rate ≤ 0 → always use MAX_STEP regardless of current elevation.
+        let iter = make_iter(5.0);
+        assert_eq!(iter.step_size(0.0, -0.01), MAX_STEP);
+        assert_eq!(iter.step_size(0.0, 0.0), MAX_STEP);
+    }
+
+    #[test]
+    fn test_step_size_large_gap_clamps_to_max() {
+        // Satellite far below horizon rising slowly → formula produces > MAX_STEP → clamped.
+        let iter = make_iter(5.0);
+        let el = (-60_f64).to_radians();
+        let el_rate = 0.0001; // rad/s — very slow rise
+        assert_eq!(iter.step_size(el, el_rate), MAX_STEP);
+    }
+
+    #[test]
+    fn test_step_size_near_horizon_clamps_to_min() {
+        // Satellite just below min-elevation rising quickly → formula < MIN_STEP → clamped.
+        let min_el = 5_f64.to_radians();
+        let iter = make_iter(5.0);
+        let el = min_el - 0.0001; // 0.1 mrad below threshold
+        let el_rate = 1.0;        // 1 rad/s — very fast rise
+        assert_eq!(iter.step_size(el, el_rate), MIN_STEP);
+    }
+
+    #[test]
+    fn test_step_size_mid_range() {
+        // Satellite 3° below min-elevation rising at 0.001 rad/s:
+        //   (3° in rad) / 0.001 ≈ 52 s — well within (MIN_STEP=10s, MAX_STEP=600s).
+        let min_el = 5_f64.to_radians();
+        let iter = make_iter(5.0);
+        let el = min_el - 3_f64.to_radians(); // 3° below threshold
+        let el_rate = 0.001;                   // rad/s
+        let step = iter.step_size(el, el_rate);
+        assert!(step > MIN_STEP && step < MAX_STEP, "expected mid-range step, got {step:?}");
+    }
+}
+
 /// Errors that can occur during transit detection.
 #[derive(Debug, ThisError)]
 pub enum Error {

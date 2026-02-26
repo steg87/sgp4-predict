@@ -85,6 +85,33 @@ mod tests {
     use chrono::TimeZone;
 
     #[test]
+    fn test_datetime_roundtrip() {
+        // datetime_to_f64 followed by f64_to_datetime must preserve the value
+        // to at least millisecond precision; f64 has ~7 fractional decimal
+        // digits for 2024-era Unix timestamps (≈ 1.7 × 10⁹ s).
+        let dt = Utc.with_ymd_and_hms(2024, 6, 15, 12, 30, 45).unwrap()
+            + Duration::milliseconds(123);
+        let dt2 = f64_to_datetime(datetime_to_f64(dt));
+        assert!(
+            (dt2 - dt).num_milliseconds().abs() < 1,
+            "round-trip error: {dt2} vs {dt}"
+        );
+    }
+
+    #[test]
+    fn test_f64_subsecond_roundtrip() {
+        // Verify that a sub-second component survives the round-trip.
+        let t = 1_718_448_645.5_f64; // arbitrary timestamp with 0.5 s fractional part
+        let dt = f64_to_datetime(t);
+        let t2 = datetime_to_f64(dt);
+        // f64 precision for a 2024 timestamp gives < 10 µs accuracy; check 1 ms.
+        assert!(
+            (t2 - t).abs() < 1e-3,
+            "f64 subsecond round-trip error: {t2} vs {t}"
+        );
+    }
+
+    #[test]
     fn test_datetime_iter_include_end() {
         let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let end = start + Duration::seconds(25);

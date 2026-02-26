@@ -210,6 +210,82 @@ pub(crate) fn shadow_value(predictor: &Predictor, t: DateTime<Utc>) -> Result<f6
     ))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{shadow_fn, WGS84_A};
+    use crate::frames::sun_position_eci;
+    use chrono::{TimeZone, Utc};
+
+    /// Normalise a 3-vector and return the unit vector.
+    fn normalise(v: [f64; 3]) -> [f64; 3] {
+        let mag = (v[0].powi(2) + v[1].powi(2) + v[2].powi(2)).sqrt();
+        [v[0] / mag, v[1] / mag, v[2] / mag]
+    }
+
+    /// A vector perpendicular to `v`, found via cross product with (0, 0, 1)
+    /// or (1, 0, 0) if v is nearly parallel to the z-axis.
+    fn perpendicular(v: [f64; 3]) -> [f64; 3] {
+        let cross = if v[2].abs() < 0.9 {
+            [v[1] * 0.0 - v[2] * 0.0, v[2] * 1.0 - v[0] * 0.0, v[0] * 0.0 - v[1] * 1.0]
+            // cross(v, z) = [vy*0 - vz*0, vz*1 - vx*0, vx*0 - vy*1] — simplified:
+        } else {
+            // cross(v, x) when v is near z-axis
+            [0.0, v[2] * 1.0 - v[1] * 0.0, v[1] * 0.0 - v[2] * 0.0]
+        };
+        // cross(v, z_hat) = (vy, -vx, 0)
+        let perp = if v[2].abs() < 0.9 {
+            [-v[1], v[0], 0.0]
+        } else {
+            [0.0, -v[2], v[1]]
+        };
+        let _ = cross; // suppress unused warning from the first branch above
+        normalise(perp)
+    }
+
+    #[test]
+    fn test_shadow_fn_sunlit_sun_side() {
+        // Satellite placed in the direction of the Sun at LEO altitude (d_sun > 0)
+        // must always be sunlit (shadow_fn < 0).
+        let t = Utc.with_ymd_and_hms(2024, 6, 21, 12, 0, 0).unwrap();
+        let sun_hat = normalise(sun_position_eci(t));
+        let r = 7_000_000.0_f64; // 7 000 km
+        let sv = shadow_fn(sun_hat[0] * r, sun_hat[1] * r, sun_hat[2] * r, t);
+        assert!(sv < 0.0, "satellite on sun-side should be sunlit (got {sv})");
+    }
+
+    #[test]
+    fn test_shadow_fn_eclipse_on_axis() {
+        // Satellite placed directly behind Earth on the shadow axis (d_sun < 0,
+        // d_perp = 0) must be in eclipse (shadow_fn > 0).
+        let t = Utc.with_ymd_and_hms(2024, 6, 21, 12, 0, 0).unwrap();
+        let sun_hat = normalise(sun_position_eci(t));
+        let r = 7_000_000.0_f64;
+        let sv = shadow_fn(-sun_hat[0] * r, -sun_hat[1] * r, -sun_hat[2] * r, t);
+        assert!(sv > 0.0, "satellite on shadow axis should be in eclipse (got {sv})");
+    }
+
+    #[test]
+    fn test_shadow_fn_sunlit_outside_cylinder() {
+        // Satellite on the anti-Sun side but displaced 2 Earth-radii laterally
+        // from the shadow axis must be sunlit (d_perp > WGS84_A → shadow_fn < 0).
+        let t = Utc.with_ymd_and_hms(2024, 6, 21, 12, 0, 0).unwrap();
+        let sun_hat = normalise(sun_position_eci(t));
+        let perp = perpendicular(sun_hat);
+
+        let d_back = 1_000_000.0_f64; // 1 000 km behind Earth centre
+        let d_lateral = 2.0 * WGS84_A; // twice Earth's radius — well outside the cylinder
+        let px = -sun_hat[0] * d_back + perp[0] * d_lateral;
+        let py = -sun_hat[1] * d_back + perp[1] * d_lateral;
+        let pz = -sun_hat[2] * d_back + perp[2] * d_lateral;
+
+        let sv = shadow_fn(px, py, pz, t);
+        assert!(
+            sv < 0.0,
+            "satellite outside shadow cylinder should be sunlit (got {sv})"
+        );
+    }
+}
+
 /// Evaluate the cylindrical-shadow scalar for a satellite position in TEME.
 ///
 /// The cylindrical model treats Earth's shadow as an infinite cylinder of radius
