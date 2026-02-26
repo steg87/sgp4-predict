@@ -6,7 +6,7 @@ test:
 
 .PHONY: lint
 lint:
-	cargo clippy --all-targets --all-features -- -D warnings
+	cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings
 
 .PHONY: coverage
 coverage:

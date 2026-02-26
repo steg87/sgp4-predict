@@ -10,7 +10,12 @@ cargo check                    # fast type-check without full compile
 cargo test --all-targets --all-features  # run all tests
 cargo test <name>              # run a single test by name (e.g. cargo test test_brent_cubic)
 cargo clippy                   # lint
+make lint                      # cargo fmt + clippy (preferred — matches CI and pre-commit hook)
+make test                      # full test suite (preferred — matches CI and pre-push hook)
+make coverage                  # llvm-cov summary
 ```
+
+**Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.
 
 ## Architecture
 
@@ -55,3 +60,23 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 ### `IntervalRange` trait (`time.rs`)
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
+
+## Repo infrastructure
+
+- **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.
+- **CI** (`.github/workflows/`):
+  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`. Also installs `uv` in the test job.
+  - `audit.yml` — weekly `cargo audit` for security advisories.
+  - `labeler.yml` — auto-labels PRs based on changed files (config in `.github/labeler.yml`).
+- **Dependencies**: `serde_yaml` (not `serde_yml`) is used for YAML parsing in dev/tests.
+
+## Domain knowledge
+
+This library operates in the LEO (Low Earth Orbit) domain. Meaningful review of functionality requires expertise in:
+
+- **SGP4 propagation**: the underlying orbital mechanics model, its assumptions, and known limitations (e.g. accuracy degrades beyond ~7 days from TLE epoch).
+- **Coordinate frames**: TEME (True Equator Mean Equinox), ECEF (Earth-Centred Earth-Fixed), ENU (East-North-Up). Mistakes in frame conversions produce silently wrong results.
+- **Ground station geometry**: azimuth/elevation calculations, horizon masking, atmospheric refraction (not modelled here).
+- **Apsis timing**: apogee/perigee detection via radial velocity sign change is correct for near-circular LEO orbits; behaviour near highly elliptical orbits should be verified carefully.
+- **Illumination model**: a cylindrical shadow model is used — this is an approximation. It is adequate for most LEO scheduling use cases but will have error near the penumbra boundary.
+- **TLE age**: SGP4 accuracy is sensitive to TLE age. `Predictor::tle_age()` exposes this; callers should warn or reject stale TLEs (typically > 3–7 days for LEO).
