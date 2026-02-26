@@ -204,11 +204,10 @@ impl Predictor {
             }
             let (el, _) = calculate(t_outer)?;
             if el < min_elevation {
-                let s = transits::refine_crossing(
+                let s = self.refinement.hybrid_solve(
                     time::datetime_to_f64(t_outer),
                     time::datetime_to_f64(t_inner),
                     &mut f,
-                    &self.refinement,
                 )?;
                 break time::f64_to_datetime(s);
             }
@@ -225,11 +224,10 @@ impl Predictor {
             }
             let (el, _) = calculate(t_outer)?;
             if el < min_elevation {
-                let e = transits::refine_crossing(
+                let e = self.refinement.hybrid_solve(
                     time::datetime_to_f64(t_inner),
                     time::datetime_to_f64(t_outer),
                     &mut f,
-                    &self.refinement,
                 )?;
                 break time::f64_to_datetime(e);
             }

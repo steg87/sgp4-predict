@@ -17,8 +17,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 use thiserror::Error as ThisError;
 
-use crate::{Error as LibError, Predictor, Result, observe::Observer, roots, time};
-use roots::Refinement;
+use crate::{Predictor, Result, observe::Observer, roots::Refinement, time};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -104,11 +103,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 match (prev_state, &*new_state) {
                     (TransitState::Outside(t0), TransitState::Inside(t1)) => {
                         // Transitioned into a transit, refine transit start
-                        let start = refine_crossing(
+                        let start = self.refinement.hybrid_solve(
                             time::datetime_to_f64(*t0),
                             time::datetime_to_f64(*t1),
                             &mut f,
-                            &self.refinement,
                         )?;
                         time::f64_to_datetime(start)
                     }
@@ -134,11 +132,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             let observation = self.predictor.observe_at(t1, self.observer)?;
             if observation.elevation < self.min_elevation {
                 // Transitioned out of a transit, refine transit end
-                let end = refine_crossing(
+                let end = self.refinement.hybrid_solve(
                     time::datetime_to_f64(t0),
                     time::datetime_to_f64(t1),
                     &mut f,
-                    &self.refinement,
                 )?;
                 break time::f64_to_datetime(end);
             };
@@ -213,114 +210,12 @@ enum TransitState {
     Outside(DateTime<Utc>),
 }
 
-pub(crate) fn refine_crossing<F, E>(
-    t0: f64,
-    t1: f64,
-    mut f: F,
-    refinement: &Refinement,
-) -> Result<f64>
-where
-    F: FnMut(f64) -> std::result::Result<(f64, f64), E>,
-    E: std::error::Error,
-{
-    let t = (t0 + t1) / 2.0;
-
-    // Try Newton-Raphson first; on cost-function error propagate immediately rather than
-    // falling through to Brent (the same evaluation point would fail there too).
-    // Tolerance is on the elevation function value (radians). At a typical AoS/LoS
-    // elevation rate of ~2 mrad/s, 1e-6 rad gives < 1 ms time precision.
-    match refinement.newton_raphson.solve(t, &mut f) {
-        Ok(root) => return Ok(root),
-        Err(e @ roots::Error::CostFn(_)) => return Err(LibError::Roots(e)),
-        Err(_) => {} // convergence failure, fall through to Brent
-    }
-
-    // Fall back to Brent
-    refinement
-        .brent
-        .solve(t0, t1, |x| f(x).map(|(el, _)| el))
-        .map_err(LibError::Roots)
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HasId, HasTle, Predictor, roots::{Brent, NewtonRaphson, Refinement}};
+    use crate::{HasId, HasTle, Predictor};
     use chrono::{TimeZone, Utc};
-    use std::convert::Infallible;
-
-    // --- refine_crossing ---
-    // These tests use synthetic elevation functions and need no Predictor.
-
-    #[test]
-    fn test_refine_crossing_newton_raphson_converges() {
-        // Linear f(x) = x − 0.5: Newton-Raphson should converge in one step
-        // from the midpoint of [0, 1].
-        let result = refine_crossing(
-            0.0,
-            1.0,
-            |x| Ok::<_, Infallible>((x - 0.5, 1.0)),
-            &Refinement::default(),
-        );
-        assert!(result.is_ok());
-        assert!((result.unwrap() - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_refine_crossing_falls_back_to_brent_on_unstable() {
-        // Derivative is always zero → Newton-Raphson returns Unstable.
-        // Brent must find the root of f(x) = x − 0.5 in [0, 2].
-        // (Midpoint is 1.0; f(1.0) = 0.5 ≠ 0, so NR won't converge first.)
-        let result = refine_crossing(
-            0.0,
-            2.0,
-            |x| Ok::<_, Infallible>((x - 0.5, 0.0)),
-            &Refinement::default(),
-        );
-        assert!(result.is_ok(), "Brent fallback should succeed: {result:?}");
-        assert!((result.unwrap() - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_refine_crossing_falls_back_to_brent_on_max_iter() {
-        // Newton-Raphson limited to 1 iteration won't converge on a cubic;
-        // Brent must pick up and find the root of x³ − 0.5 in [0, 1].
-        let refinement = Refinement {
-            newton_raphson: NewtonRaphson { tolerance: 1e-6, max_iter: 1 },
-            brent: Brent::default(),
-        };
-        let result = refine_crossing(
-            0.0,
-            1.0,
-            |x| Ok::<_, Infallible>((x.powi(3) - 0.5, 3.0 * x.powi(2))),
-            &refinement,
-        );
-        assert!(result.is_ok(), "Brent fallback should succeed: {result:?}");
-        // root is 0.5^(1/3) ≈ 0.7937
-        assert!((result.unwrap() - 0.5_f64.cbrt()).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_refine_crossing_cost_fn_error_propagates() {
-        // A cost-function error on the first NR evaluation must surface
-        // immediately rather than falling through to Brent.
-        #[derive(Debug)]
-        struct CostErr;
-        impl std::fmt::Display for CostErr {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "cost error")
-            }
-        }
-        impl std::error::Error for CostErr {}
-
-        let result = refine_crossing(
-            0.0,
-            1.0,
-            |_| Err::<(f64, f64), CostErr>(CostErr),
-            &Refinement::default(),
-        );
-        assert!(result.is_err());
-    }
 
     // --- step_size ---
 
