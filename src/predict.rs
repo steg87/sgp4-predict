@@ -3,7 +3,7 @@
 use chrono::{DateTime, Duration, Utc};
 
 use crate::{
-    Result, Predictor,
+    Predictor, Result,
     frames::TemeState,
     time::{DateTimeIter, IntervalRange},
     vectors::{Position, Velocity},

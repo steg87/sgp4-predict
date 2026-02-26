@@ -89,8 +89,8 @@ mod tests {
         // datetime_to_f64 followed by f64_to_datetime must preserve the value
         // to at least millisecond precision; f64 has ~7 fractional decimal
         // digits for 2024-era Unix timestamps (≈ 1.7 × 10⁹ s).
-        let dt = Utc.with_ymd_and_hms(2024, 6, 15, 12, 30, 45).unwrap()
-            + Duration::milliseconds(123);
+        let dt =
+            Utc.with_ymd_and_hms(2024, 6, 15, 12, 30, 45).unwrap() + Duration::milliseconds(123);
         let dt2 = f64_to_datetime(datetime_to_f64(dt));
         assert!(
             (dt2 - dt).num_milliseconds().abs() < 1,

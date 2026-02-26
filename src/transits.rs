@@ -210,7 +210,6 @@ enum TransitState {
     Outside(DateTime<Utc>),
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,7 +220,9 @@ mod tests {
 
     struct TestSat;
     impl HasId for TestSat {
-        fn id(&self) -> &str { "SENTINEL-2C" }
+        fn id(&self) -> &str {
+            "SENTINEL-2C"
+        }
     }
     impl HasTle for TestSat {
         fn line_1(&self) -> &str {
@@ -234,16 +235,27 @@ mod tests {
 
     struct TestObs;
     impl Observer for TestObs {
-        fn latitude(&self) -> f64 { 0.0 }
-        fn longitude(&self) -> f64 { 0.0 }
-        fn altitude(&self) -> f64 { 0.0 }
+        fn latitude(&self) -> f64 {
+            0.0
+        }
+        fn longitude(&self) -> f64 {
+            0.0
+        }
+        fn altitude(&self) -> f64 {
+            0.0
+        }
     }
 
     fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, TestObs> {
         static OBS: TestObs = TestObs;
         let predictor = Predictor::new(&TestSat).unwrap();
         let t = Utc.with_ymd_and_hms(2025, 12, 22, 0, 0, 0).unwrap();
-        TransitIter::new(predictor, &OBS, t..(t + chrono::Duration::hours(1)), min_elevation_deg.to_radians())
+        TransitIter::new(
+            predictor,
+            &OBS,
+            t..(t + chrono::Duration::hours(1)),
+            min_elevation_deg.to_radians(),
+        )
     }
 
     #[test]
@@ -269,7 +281,7 @@ mod tests {
         let min_el = 5_f64.to_radians();
         let iter = make_iter(5.0);
         let el = min_el - 0.0001; // 0.1 mrad below threshold
-        let el_rate = 1.0;        // 1 rad/s — very fast rise
+        let el_rate = 1.0; // 1 rad/s — very fast rise
         assert_eq!(iter.step_size(el, el_rate), MIN_STEP);
     }
 
@@ -280,9 +292,12 @@ mod tests {
         let min_el = 5_f64.to_radians();
         let iter = make_iter(5.0);
         let el = min_el - 3_f64.to_radians(); // 3° below threshold
-        let el_rate = 0.001;                   // rad/s
+        let el_rate = 0.001; // rad/s
         let step = iter.step_size(el, el_rate);
-        assert!(step > MIN_STEP && step < MAX_STEP, "expected mid-range step, got {step:?}");
+        assert!(
+            step > MIN_STEP && step < MAX_STEP,
+            "expected mid-range step, got {step:?}"
+        );
     }
 }
 

@@ -467,11 +467,8 @@ mod tests {
     fn test_hybrid_solve_newton_raphson_converges() {
         // Linear f(x) = x − 0.5: Newton-Raphson should converge in one step
         // from the midpoint of [0, 1].
-        let result = Refinement::default().hybrid_solve(
-            0.0,
-            1.0,
-            |x| Ok::<_, Infallible>((x - 0.5, 1.0)),
-        );
+        let result =
+            Refinement::default().hybrid_solve(0.0, 1.0, |x| Ok::<_, Infallible>((x - 0.5, 1.0)));
         assert!(result.is_ok());
         assert!((result.unwrap() - 0.5).abs() < 1e-6);
     }
@@ -481,11 +478,8 @@ mod tests {
         // Derivative is always zero → Newton-Raphson returns Unstable.
         // Brent must find the root of f(x) = x − 0.5 in [0, 2].
         // (Midpoint is 1.0; f(1.0) = 0.5 ≠ 0, so NR won't converge first.)
-        let result = Refinement::default().hybrid_solve(
-            0.0,
-            2.0,
-            |x| Ok::<_, Infallible>((x - 0.5, 0.0)),
-        );
+        let result =
+            Refinement::default().hybrid_solve(0.0, 2.0, |x| Ok::<_, Infallible>((x - 0.5, 0.0)));
         assert!(result.is_ok(), "Brent fallback should succeed: {result:?}");
         assert!((result.unwrap() - 0.5).abs() < 1e-6);
     }
@@ -495,14 +489,15 @@ mod tests {
         // Newton-Raphson limited to 1 iteration won't converge on a cubic;
         // Brent must pick up and find the root of x³ − 0.5 in [0, 1].
         let refinement = Refinement {
-            newton_raphson: NewtonRaphson { tolerance: 1e-6, max_iter: 1 },
+            newton_raphson: NewtonRaphson {
+                tolerance: 1e-6,
+                max_iter: 1,
+            },
             brent: Brent::default(),
         };
-        let result = refinement.hybrid_solve(
-            0.0,
-            1.0,
-            |x| Ok::<_, Infallible>((x.powi(3) - 0.5, 3.0 * x.powi(2))),
-        );
+        let result = refinement.hybrid_solve(0.0, 1.0, |x| {
+            Ok::<_, Infallible>((x.powi(3) - 0.5, 3.0 * x.powi(2)))
+        });
         assert!(result.is_ok(), "Brent fallback should succeed: {result:?}");
         // root is 0.5^(1/3) ≈ 0.7937
         assert!((result.unwrap() - 0.5_f64.cbrt()).abs() < 1e-6);
@@ -521,11 +516,8 @@ mod tests {
         }
         impl std::error::Error for CostErr {}
 
-        let result = Refinement::default().hybrid_solve(
-            0.0,
-            1.0,
-            |_| Err::<(f64, f64), CostErr>(CostErr),
-        );
+        let result =
+            Refinement::default().hybrid_solve(0.0, 1.0, |_| Err::<(f64, f64), CostErr>(CostErr));
         assert!(matches!(result, Err(Error::CostFn(_))));
     }
 }

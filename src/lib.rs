@@ -184,8 +184,7 @@ impl Predictor {
         };
 
         let mut f = |t: f64| {
-            calculate(time::f64_to_datetime(t))
-                .map(|(el, el_rate)| (el - min_elevation, el_rate))
+            calculate(time::f64_to_datetime(t)).map(|(el, el_rate)| (el - min_elevation, el_rate))
         };
 
         let (el, _) = calculate(t)?;
@@ -269,7 +268,9 @@ impl Predictor {
                 && el_rate < 0.0
             {
                 // el_rate crossed zero: peak is bracketed in [prev_t, t_f64]
-                let peak_t_f64 = self.refinement.brent
+                let peak_t_f64 = self
+                    .refinement
+                    .brent
                     .solve(prev_t, t_f64, |x| {
                         let tx = time::f64_to_datetime(x);
                         self.propagate(tx)

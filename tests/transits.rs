@@ -99,7 +99,10 @@ fn test_detect_transit() {
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert!(!transits.is_empty(), "need at least one transit for this test");
+    assert!(
+        !transits.is_empty(),
+        "need at least one transit for this test"
+    );
 
     let reference = &transits[0];
     let midpoint = reference.start + (reference.end - reference.start) / 2;

@@ -226,7 +226,7 @@ mod markers {
 
 #[cfg(test)]
 mod tests {
-    use super::{gmst, julian_date, sun_position_eci, EnuState};
+    use super::{EnuState, gmst, julian_date, sun_position_eci};
     use crate::vectors::{Position, Velocity};
     use chrono::{TimeZone, Utc};
 
@@ -323,10 +323,7 @@ mod tests {
         // ENU position (r, 0, r): satellite is due east at 45° elevation.
         // Stationary → el_rate must be zero.
         let r = 1_000_000.0_f64;
-        let sv = EnuState::new(
-            Position::new(r, 0.0, r),
-            Velocity::new(0.0, 0.0, 0.0),
-        );
+        let sv = EnuState::new(Position::new(r, 0.0, r), Velocity::new(0.0, 0.0, 0.0));
         let (el, el_rate) = sv.elevation_and_rate();
         assert!(
             (el - std::f64::consts::FRAC_PI_4).abs() < 1e-12,
@@ -343,7 +340,10 @@ mod tests {
             Velocity::new(0.0, 0.0, 1_000.0),
         );
         let (_, el_rate) = sv.elevation_and_rate();
-        assert!(el_rate > 0.0, "el_rate should be positive for ascending satellite");
+        assert!(
+            el_rate > 0.0,
+            "el_rate should be positive for ascending satellite"
+        );
     }
 
     #[test]
@@ -352,7 +352,7 @@ mod tests {
         // el_rate = 0.0 instead of dividing by zero.
         let sv = EnuState::new(
             Position::new(0.0, 0.0, 800_000.0), // straight overhead
-            Velocity::new(100.0, 0.0, 0.0),      // moving east
+            Velocity::new(100.0, 0.0, 0.0),     // moving east
         );
         let (el, el_rate) = sv.elevation_and_rate();
         assert!(
