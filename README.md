@@ -131,4 +131,4 @@ See [`tests/examples.rs`](tests/examples.rs) for complete, runnable examples cov
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md).
