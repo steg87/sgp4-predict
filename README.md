@@ -1,7 +1,7 @@
 # sgp4-predict
 
 [![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/steg87/sgp4-predict/branch/main/graph/badge.svg)](https://codecov.io/gh/steg87/sgp4-predict)
+[![Coverage](https://github.com/steg87/sgp4-predict/actions/workflows/coverage.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/coverage.yml)
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict)](https://crates.io/crates/sgp4-predict)
 [![docs.rs](https://img.shields.io/docsrs/sgp4-predict)](https://docs.rs/sgp4-predict)
 [![License: MIT](https://img.shields.io/crates/l/sgp4-predict)](LICENSE)

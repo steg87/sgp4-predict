@@ -20,9 +20,7 @@ jobs:
         with:
           components: llvm-tools-preview
       - uses: astral-sh/setup-uv@v5
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --all-targets --all-features --lcov --output-path lcov.info
-      - uses: codecov/codecov-action@v5
         with:
-          files: lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+          enable-cache: false
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --all-targets --all-features --summary-only >> $GITHUB_STEP_SUMMARY
