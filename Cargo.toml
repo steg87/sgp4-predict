@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "sgp4-predict-py"]
+members = [".", "python"]
 resolver = "2"
 
 [package]

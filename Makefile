@@ -16,16 +16,16 @@ coverage:
 
 .PHONY: py-dev
 py-dev:
-	cd sgp4-predict-py && maturin develop
+	cd python && maturin develop
 
 .PHONY: py-test
 py-test: py-dev
-	cd sgp4-predict-py && $(PYTHON) -m pytest tests/ -v
+	cd python && $(PYTHON) -m pytest tests/ -v
 
 .PHONY: py-stubs
 py-stubs:
-	cd sgp4-predict-py && cargo run --bin stub_gen
+	cd python && cargo run --bin stub_gen
 
 .PHONY: py-lint
 py-lint:
-	cd sgp4-predict-py && ruff check . && ruff format --check .
+	cd python && ruff check . && ruff format --check .
