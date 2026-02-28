@@ -6,7 +6,6 @@ Uses the canonical SENTINEL-2C TLE from tests/common/mod.rs.
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from sgp4_predict import (
     ApsisEvent,
     GroundStation,

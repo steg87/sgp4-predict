@@ -15,6 +15,6 @@ Run local testing with `make test`.
 
 ## Build Stubs
 
-The .pyi stub files provide type checking for the _sgp4_predict.so compiled Rust binary. They are not committed to the Git repo but can be generated from code on demand with `make stubs`.
+The .pyi stub files provide type info for type checkers for the _sgp4_predict.so compiled Rust binary. They are not committed to the Git repo but can be generated from code on demand with `make stubs`.
 
-The are built and included with the PyPI release in CI but developers may with to generate them locally.
+The are built and included with the PyPI release in CI but developers may with to generate them locally for local type checking.
