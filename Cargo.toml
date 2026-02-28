@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "sgp4-predict-py"]
+resolver = "2"
+
 [package]
 name = "sgp4-predict"
 version = "0.1.0"

@@ -26,7 +26,7 @@ use thiserror::Error as ThisError;
 
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
-    frames::TemeState,
+    frames::{EcefState, EnuState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "sgp4-predict"
+version = "0.1.0"
+description = "Python bindings for sgp4-predict satellite pass prediction"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.9"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "sgp4_predict._sgp4_predict"
+
+[tool.ruff]
+# Exclude auto-generated stub files from format checking
+extend-exclude = ["**/*.pyi"]

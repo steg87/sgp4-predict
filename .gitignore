@@ -2,3 +2,10 @@ Cargo.lock
 
 /target
 /tests/results
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.so
+*.pyi

@@ -1,0 +1,39 @@
+name: Python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install maturin and dev deps
+        run: pip install "maturin>=1.0,<2.0" pytest ruff
+      - name: Build and install bindings
+        run: maturin develop
+        working-directory: sgp4-predict-py
+      - name: Run tests
+        run: pytest tests/ -v
+        working-directory: sgp4-predict-py
+      - name: Generate type stubs
+        run: cargo run --bin stub_gen
+        working-directory: sgp4-predict-py
+      - name: Lint and format check
+        run: ruff check . && ruff format --check .
+        working-directory: sgp4-predict-py

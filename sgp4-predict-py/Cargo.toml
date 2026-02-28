@@ -1,0 +1,18 @@
+[package]
+name = "sgp4-predict-py"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sgp4-predict = { path = ".." }
+pyo3 = { version = "0.28", features = ["chrono"] }
+chrono = "0.4"
+ouroboros = "0.18"
+pyo3-stub-gen = "0.19"
+
+[[bin]]
+name = "stub_gen"
+path = "src/bin/stub_gen.rs"

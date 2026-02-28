@@ -36,3 +36,12 @@ entry = "cargo llvm-cov --all-targets --all-features --summary-only"
 stages = ["pre-push"]
 always_run = true
 pass_filenames = false
+
+[[repos.hooks]]
+id = "py-test"
+name = "python bindings test"
+language = "system"
+entry = "bash -c 'cd sgp4-predict-py && maturin develop -q && python -m pytest tests/ -v'"
+stages = ["pre-push"]
+always_run = true
+pass_filenames = false

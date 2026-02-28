@@ -14,6 +14,10 @@ python:
   - changed-files:
     - any-glob-to-any-file: "**/*.py"
 
+python-bindings:
+  - changed-files:
+    - any-glob-to-any-file: ["sgp4-predict-py/**", "**/*.pyi"]
+
 documentation:
   - changed-files:
     - any-glob-to-any-file: ["**/*.md", "docs/**"]
