@@ -129,6 +129,10 @@ All units in the public API are SI. This means all angles are in **radians**!
 
 See [`tests/examples.rs`](tests/examples.rs) for complete, runnable examples covering common use cases.
 
+## Python Bindings
+
+See [`python/README.md`](python/README.md).
+
 ## Contributing
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
