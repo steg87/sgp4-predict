@@ -235,11 +235,7 @@ def test_coordinate_chain():
     p = make_predictor()
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
 
-    sv_teme = p.propagate(t)
-    sv_ecef = sv_teme.to_ecef(t)
-    sv_enu = sv_ecef.to_enu(GLASGOW)
-    obs_chain = sv_enu.to_observation()
-
+    obs_chain = p.propagate(t).to_ecef(t).to_enu(GLASGOW).to_observation()
     obs_direct = p.observe_at(t, GLASGOW)
 
     assert abs(obs_chain.azimuth - obs_direct.azimuth) < 1e-10
