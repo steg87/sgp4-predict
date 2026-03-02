@@ -20,10 +20,7 @@ define_stub_info_gatherer!(stub_info);
 // Re-export all public symbols into the top-level sgp4_predict package stub.
 // Without this, the generated sgp4_predict/__init__.pyi has __all__ = [] and
 // type checkers (Pylance, mypy) cannot resolve `from sgp4_predict import X`.
-pyo3_stub_gen::reexport_module_members!(
-    "sgp4_predict",
-    "sgp4_predict._sgp4_predict"
-);
+pyo3_stub_gen::reexport_module_members!("sgp4_predict", "sgp4_predict._sgp4_predict");
 
 #[pymodule]
 fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {

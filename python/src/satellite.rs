@@ -52,14 +52,13 @@ impl HasTle for Satellite {
 
 /// A fixed point on Earth's surface from which satellite passes are observed.
 ///
-/// Latitude and longitude are accepted in degrees and stored internally as radians.
-/// Altitude is in metres above the WGS-84 ellipsoid.
+/// Latitude and longitude are in degrees. Altitude is in metres above the WGS-84 ellipsoid.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Clone)]
 pub struct GroundStation {
-    lat_rad: f64,
-    lon_rad: f64,
+    lat_deg: f64,
+    lon_deg: f64,
     alt: f64,
 }
 
@@ -69,8 +68,8 @@ impl GroundStation {
     #[new]
     pub fn new(lat_deg: f64, lon_deg: f64, altitude: f64) -> Self {
         Self {
-            lat_rad: lat_deg.to_radians(),
-            lon_rad: lon_deg.to_radians(),
+            lat_deg,
+            lon_deg,
             alt: altitude,
         }
     }
@@ -78,13 +77,13 @@ impl GroundStation {
     /// Geodetic latitude in degrees (positive north).
     #[getter]
     fn lat_deg(&self) -> f64 {
-        self.lat_rad.to_degrees()
+        self.lat_deg
     }
 
     /// Geodetic longitude in degrees (positive east).
     #[getter]
     fn lon_deg(&self) -> f64 {
-        self.lon_rad.to_degrees()
+        self.lon_deg
     }
 
     /// Height above the WGS-84 ellipsoid in metres.
@@ -95,11 +94,11 @@ impl GroundStation {
 }
 
 impl Observer for GroundStation {
-    fn latitude(&self) -> f64 {
-        self.lat_rad
+    fn latitude_deg(&self) -> f64 {
+        self.lat_deg
     }
-    fn longitude(&self) -> f64 {
-        self.lon_rad
+    fn longitude_deg(&self) -> f64 {
+        self.lon_deg
     }
     fn altitude(&self) -> f64 {
         self.alt

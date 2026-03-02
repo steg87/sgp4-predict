@@ -235,10 +235,10 @@ mod tests {
 
     struct TestObs;
     impl Observer for TestObs {
-        fn latitude(&self) -> f64 {
+        fn latitude_deg(&self) -> f64 {
             0.0
         }
-        fn longitude(&self) -> f64 {
+        fn longitude_deg(&self) -> f64 {
             0.0
         }
         fn altitude(&self) -> f64 {

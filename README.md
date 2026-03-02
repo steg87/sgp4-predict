@@ -51,7 +51,7 @@ use sgp4_predict::Predictor;
 let start = Utc::now();
 let end = start + Duration::days(1);
 
-// Observer: lat/lon in radians, altitude in metres
+// Observer: lat/lon in degrees, altitude in metres
 for transit in predictor.transits_iter(&observer, start..end, 5_f64.to_radians()) {
     let transit = transit?;
     println!("AoS: {}  LoS: {}", transit.start, transit.end);
@@ -69,8 +69,8 @@ for result in predictor.observation_iter(&observer, transit, Duration::seconds(1
     println!(
         "{} az={:.1}° el={:.1}° range={:.0}km",
         t,
-        obs.azimuth.to_degrees(),
-        obs.elevation.to_degrees(),
+        obs.azimuth_deg(),
+        obs.elevation_deg(),
         obs.range / 1000.0,
     );
 }
@@ -119,11 +119,16 @@ All units in the public API are SI. This means all angles are in **radians**!
 |---|---|
 | Position | metres |
 | Velocity | m/s |
-| Observer lat/lon | radians |
+| Observer lat/lon | degrees |
 | Observer altitude | metres |
 | Azimuth / elevation | radians |
 | Range | metres |
 | Range rate | m/s (positive = receding) |
+
+Degree convenience methods are available where angles appear in the public API:
+
+- `Observation::azimuth_deg()`, `Observation::elevation_deg()`
+- `Observer::latitude_deg()`, `Observer::longitude_deg()` (required by the trait — implement these, radians are derived internally)
 
 ## More examples
 
