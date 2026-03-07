@@ -1,10 +1,10 @@
 rust:
   - changed-files:
-    - any-glob-to-any-file: ["src/**/*.rs", "Cargo.toml", "Cargo.lock"]
+    - any-glob-to-any-file: ["sgp4-predict/src/**/*.rs", "sgp4-predict/Cargo.toml", "Cargo.lock"]
 
 tests:
   - changed-files:
-    - any-glob-to-any-file: "tests/**"
+    - any-glob-to-any-file: "sgp4-predict/tests/**"
 
 ci:
   - changed-files:

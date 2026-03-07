@@ -235,7 +235,7 @@ p2 = p.with_refinement(ref)
 ### Setup
 
 ```sh
-cd python/
+cd sgp4-predict-py/
 uv sync --extra dev
 source .venv/bin/activate
 ```

@@ -136,7 +136,7 @@ See [`tests/examples.rs`](tests/examples.rs) for complete, runnable examples cov
 
 ## Python Bindings
 
-See [`python/README.md`](python/README.md).
+See [`sgp4-predict-py/README.md`](sgp4-predict-py/README.md).
 
 ## Contributing
 

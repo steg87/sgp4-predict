@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-sgp4-predict = { path = ".." }
+sgp4-predict = { path = "../sgp4-predict" }
 pyo3 = { version = "0.28", features = ["chrono"] }
 chrono = "0.4"
 ouroboros = "0.18"
