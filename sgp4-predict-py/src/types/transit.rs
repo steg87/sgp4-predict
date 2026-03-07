@@ -4,7 +4,8 @@ use pyo3_stub_gen::derive::*;
 
 /// A satellite pass — the window during which the satellite is above the minimum elevation.
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(PartialEq)]
 pub struct Transit {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,

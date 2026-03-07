@@ -8,7 +8,7 @@
 //! # Units
 //!
 //! All positions are in **metres** and velocities in **m/s**.
-//! Observer latitude and longitude must be supplied in **radians**.
+//! Observer latitude and longitude must be supplied in **degrees**.
 
 mod apsides;
 mod frames;

@@ -3,6 +3,7 @@
 Uses the canonical SENTINEL-2C TLE from tests/common/mod.rs.
 """
 
+import math
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -79,8 +80,6 @@ def test_observe_at_fields_are_finite():
     # Pick a time when we know there's a transit (from transits test)
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
     obs = p.observe_at(t, GLASGOW)
-    import math
-
     assert math.isfinite(obs.azimuth)
     assert math.isfinite(obs.elevation)
     assert math.isfinite(obs.range)
@@ -92,8 +91,6 @@ def test_observe_at_degrees_properties():
     p = make_predictor()
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
     obs = p.observe_at(t, GLASGOW)
-    import math
-
     assert abs(obs.azimuth_deg - math.degrees(obs.azimuth)) < 1e-10
     assert abs(obs.elevation_deg - math.degrees(obs.elevation)) < 1e-10
 
