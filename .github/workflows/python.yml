@@ -23,17 +23,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install maturin and dev deps
-        run: pip install "maturin>=1.0,<2.0" pytest ruff
+      - name: Create virtualenv and install deps
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install "maturin>=1.0,<2.0" pytest ruff
+        working-directory: sgp4-predict-py
       - name: Build and install bindings
-        run: maturin develop
+        run: .venv/bin/maturin develop
         working-directory: sgp4-predict-py
       - name: Run tests
-        run: pytest tests/ -v
+        run: .venv/bin/pytest tests/ -v
         working-directory: sgp4-predict-py
       - name: Generate type stubs
         run: cargo run --bin stub_gen
         working-directory: sgp4-predict-py
       - name: Lint and format check
-        run: ruff check . && ruff format --check .
+        run: .venv/bin/ruff check . && .venv/bin/ruff format --check .
         working-directory: sgp4-predict-py
