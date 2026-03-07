@@ -9,7 +9,8 @@ Contributions are welcome. This document covers the standard workflow for submit
 | Rust stable | compiler, rustfmt, clippy | [rustup.rs](https://rustup.rs) |
 | cargo-llvm-cov | coverage (pre-push hook) | `cargo install cargo-llvm-cov` |
 | prek | git hook runner | [prek docs](https://github.com/blinpete/prek) |
-| uv | Python tooling (test scripts) | [docs.astral.sh/uv](https://docs.astral.sh/uv) |
+| uv | Python tooling | [docs.astral.sh/uv](https://docs.astral.sh/uv) |
+| maturin | build Python bindings | bundled via `uv sync --extra dev` |
 
 ## Getting started
 
@@ -24,6 +25,20 @@ Contributions are welcome. This document covers the standard workflow for submit
    ```
    This sets up pre-commit hooks (fmt, clippy) and pre-push hooks (test, coverage).
 4. Make your changes, then open a pull request against `main`.
+
+## Python bindings setup
+
+The `sgp4-predict-py/` crate contains Python bindings built with [maturin](https://github.com/PyO3/maturin). To work on them:
+
+```bash
+cd sgp4-predict-py/
+uv sync --extra dev   # create .venv and install dev dependencies
+make test             # compile the Rust extension + run pytest
+make stubs            # regenerate _sgp4_predict/__init__.pyi after Rust changes
+make lint             # ruff check + format
+```
+
+`make` targets use `uv run` internally, so no manual venv activation is needed.
 
 ## Before submitting
 

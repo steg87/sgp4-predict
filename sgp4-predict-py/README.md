@@ -14,7 +14,7 @@ Requires Python 3.10+.
 
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import Satellite, GroundStation, Predictor
+from sgp4_predict import Satellite, GroundStation, Predictor, Interval
 
 # Sentinel-2C TLE
 sat = Satellite(
@@ -29,11 +29,18 @@ predictor = Predictor(sat)
 glasgow = GroundStation(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
 
 # Find passes over the next 24 hours
-start = datetime(2025, 12, 22, tzinfo=timezone.utc)
-end = start + timedelta(days=1)
+window = Interval(
+    start=datetime(2025, 12, 22, tzinfo=timezone.utc),
+    end=datetime(2025, 12, 23, tzinfo=timezone.utc),
+)
 
-for transit in predictor.transits_iter(glasgow, start, end, min_elevation_deg=5.0):
+for transit in predictor.transits_iter(glasgow, window, min_elevation_deg=5.0):
     print(f"Pass: {transit.start} → {transit.end} ({transit.duration_seconds:.0f}s)")
+
+    # Iterate observations over just this transit — pass it directly as an interval
+    step = timedelta(seconds=10)
+    for t, obs in predictor.observation_iter(glasgow, transit, step):
+        print(f"  {t}: az={obs.azimuth_deg:.1f}° el={obs.elevation_deg:.1f}°")
 ```
 
 ## Core concepts
@@ -58,6 +65,22 @@ All values are in SI units unless noted otherwise:
 | `GroundStation` altitude input | metres |
 
 ## API reference
+
+### `Interval` and `IntervalRange`
+
+All iterator methods and `max_elevation` accept any object that exposes `.start` and `.end` `datetime` properties — the `IntervalRange` protocol. `Transit` and `Illumination` satisfy this protocol automatically, so they can be passed directly wherever an interval is expected.
+
+`Interval` is a concrete helper for constructing a plain datetime interval:
+
+```python
+from sgp4_predict import Interval, IntervalRange
+
+window = Interval(start=datetime(..., tzinfo=timezone.utc), end=datetime(..., tzinfo=timezone.utc))
+
+# isinstance check works at runtime
+assert isinstance(window, IntervalRange)   # True
+assert isinstance(transit, IntervalRange)  # True — Transit satisfies the protocol
+```
 
 ### `Satellite`
 
@@ -107,28 +130,42 @@ obs = p.observe_at(t, observer)  # Observation — az/el/range from observer at 
 
 #### Iterators
 
-All iterators are lazy and implement the Python iterator protocol.
+All iterators are lazy and implement the Python iterator protocol. Every method that takes a time range accepts any `IntervalRange` — an `Interval`, a `Transit`, an `Illumination`, or any object with `.start` and `.end`.
 
 ```python
+window = Interval(start, end)
+
 # State vectors at regular intervals
-for t, sv in p.prediction_iter(start, end, step):
+for t, sv in p.prediction_iter(window, step):
     ...  # t: datetime, sv: StateVectorTeme
 
 # Observations at regular intervals
-for t, obs in p.observation_iter(observer, start, end, step):
+for t, obs in p.observation_iter(observer, window, step):
     ...  # t: datetime, obs: Observation
 
 # Visible passes
-for transit in p.transits_iter(observer, start, end, min_elevation_deg=5.0):
+for transit in p.transits_iter(observer, window, min_elevation_deg=5.0):
     ...  # Transit
 
 # Apogee / perigee events
-for apsis in p.apsis_iter(start, end):
+for apsis in p.apsis_iter(window):
     ...  # Apsis
 
 # Sunlit / eclipse windows
-for window in p.illumination_iter(start, end):
+for illumination in p.illumination_iter(window):
     ...  # Illumination
+```
+
+Because `Transit` and `Illumination` satisfy `IntervalRange`, you can pass them directly:
+
+```python
+# Iterate observations over exactly one transit
+for t, obs in p.observation_iter(observer, transit, step):
+    ...
+
+# Predict over a sunlit window only
+for t, sv in p.prediction_iter(illumination, step):
+    ...
 ```
 
 #### Transit detection and peak elevation
@@ -140,7 +177,7 @@ transit = p.detect_transit(t, observer, min_elevation_deg=5.0)
 
 # Find the peak elevation moment within an interval
 # Returns (datetime, Observation) — raises RuntimeError if no peak found
-t_peak, obs_peak = p.max_elevation(start, end, observer)
+t_peak, obs_peak = p.max_elevation(observer, window)
 ```
 
 #### Illumination state
@@ -155,7 +192,7 @@ state = p.illumination_state(t)  # IlluminationState.Sunlit or .Eclipse
 
 #### `Transit`
 
-A window during which the satellite is above the minimum elevation.
+A window during which the satellite is above the minimum elevation. Satisfies `IntervalRange`.
 
 ```python
 transit.start             # datetime (UTC) — Acquisition of Signal (AoS)
@@ -188,6 +225,8 @@ apsis.altitude  # float — metres above WGS-84 equatorial radius
 ```
 
 #### `Illumination` and `IlluminationState`
+
+A contiguous sunlit or eclipse window. Satisfies `IntervalRange`.
 
 ```python
 from sgp4_predict import IlluminationState
@@ -237,7 +276,6 @@ p2 = p.with_refinement(ref)
 ```sh
 cd sgp4-predict-py/
 uv sync --extra dev
-source .venv/bin/activate
 ```
 
 ### Commands
@@ -245,16 +283,19 @@ source .venv/bin/activate
 ```sh
 make dev    # compile the Rust extension in-place (maturin develop)
 make test   # compile + run pytest
-make stubs  # regenerate .pyi stub files
+make stubs  # regenerate _sgp4_predict/__init__.pyi stub file
 make lint   # ruff check + ruff format --check
 ```
 
+No venv activation needed — `make` targets use `uv run` and resolve the local `.venv` automatically.
+
 ### Stub files
 
-The `.pyi` stub files provide type information for the compiled `_sgp4_predict.so` extension. They are not committed to the repository but are generated on demand:
+Type stubs live in two files with different ownership:
 
-```sh
-make stubs
-```
+| File | Ownership |
+|---|---|
+| `python/sgp4_predict/_sgp4_predict/__init__.pyi` | Auto-generated — run `make stubs` to update after Rust changes |
+| `python/sgp4_predict/__init__.pyi` | Hand-maintained — owns `IntervalRange`, `Interval`, and the typed `Predictor` overrides |
 
-Stubs are built and bundled automatically during the PyPI release CI run. Generate them locally if you want type checking in your editor while working on the bindings.
+The hand-maintained stub is committed to the repository. The auto-generated one is also committed so that type checkers work without a build step.

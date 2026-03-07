@@ -9,7 +9,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.9"]
+dev = ["maturin>=1.0,<2.0", "pytest>=8", "ruff>=0.9"]
 
 [tool.maturin]
 python-source = "python"

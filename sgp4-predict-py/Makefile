@@ -1,19 +1,12 @@
 SILENT:
 
-ifdef VIRTUAL_ENV
-PYTHON ?= $(VIRTUAL_ENV)/bin/python
-else
-PYTHON ?= python
-endif
-
 .PHONY: dev
 dev:
-	maturin develop
+	uv run maturin develop
 
-# The local .venv should be active to call this
 .PHONY: test
 test: dev
-	$(PYTHON) -m pytest tests/ -v
+	uv run pytest tests/ -v
 
 .PHONY: stubs
 stubs:
@@ -21,4 +14,4 @@ stubs:
 
 .PHONY: lint
 lint:
-	ruff check . && ruff format --check .
+	uv run ruff check . && uv run ruff format --check .

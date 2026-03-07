@@ -226,18 +226,18 @@ impl ObservationIter {
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Observation)>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
-            Some(Ok((t, obs))) => Ok(Some((
-                t,
-                Observation {
-                    azimuth: obs.azimuth,
-                    elevation: obs.elevation,
-                    range: obs.range,
-                    range_rate: obs.range_rate,
-                },
-            ))),
+            Some(Ok((t, obs))) => Ok(Some((t, Observation::from_inner(obs)))),
             Some(Err(e)) => Err(to_py_err(e)),
         })
     }
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+fn extract_interval(interval: &Bound<'_, PyAny>) -> PyResult<(DateTime<Utc>, DateTime<Utc>)> {
+    let start: DateTime<Utc> = interval.getattr("start")?.extract()?;
+    let end: DateTime<Utc> = interval.getattr("end")?.extract()?;
+    Ok((start, end))
 }
 
 // ── Predictor ──────────────────────────────────────────────────────────────────
@@ -286,80 +286,88 @@ impl Predictor {
     fn observe_at(&self, t: DateTime<Utc>, observer: &GroundStation) -> PyResult<Observation> {
         self.inner
             .observe_at(t, observer)
-            .map(|obs| Observation {
-                azimuth: obs.azimuth,
-                elevation: obs.elevation,
-                range: obs.range,
-                range_rate: obs.range_rate,
-            })
+            .map(Observation::from_inner)
             .map_err(to_py_err)
     }
 
     /// Iterate over state vectors in the TEME frame at regular intervals.
+    ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    /// Pass an `Interval`, `Transit`, or `Illumination` object.
     fn prediction_iter(
         &self,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
+        interval: &Bound<'_, PyAny>,
         step: Duration,
-    ) -> PredictionIter {
-        PredictionIter {
+    ) -> PyResult<PredictionIter> {
+        let (start, end) = extract_interval(interval)?;
+        Ok(PredictionIter {
             inner: self.inner.prediction_iter(start..end, step),
-        }
+        })
     }
 
     /// Iterate over observations from the given observer at regular intervals.
+    ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    /// Pass an `Interval`, `Transit`, or `Illumination` object.
     fn observation_iter(
         &self,
         observer: &GroundStation,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
+        interval: &Bound<'_, PyAny>,
         step: Duration,
-    ) -> ObservationIter {
+    ) -> PyResult<ObservationIter> {
+        let (start, end) = extract_interval(interval)?;
         let obs_clone = observer.clone();
         let predictor = self.inner.clone();
-        ObservationIter {
+        Ok(ObservationIter {
             inner: ObservationIterOwnedBuilder {
                 observer: obs_clone,
                 iter_builder: move |obs| predictor.observation_iter(obs, start..end, step),
             }
             .build(),
-        }
+        })
     }
 
-    /// Iterate over satellite passes visible to the observer within `[start, end)`.
+    /// Iterate over satellite passes visible to the observer within the interval.
     ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
     /// `min_elevation_deg`: minimum elevation above the horizon in degrees.
     fn transits_iter(
         &self,
         observer: &GroundStation,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
+        interval: &Bound<'_, PyAny>,
         min_elevation_deg: f64,
-    ) -> TransitIter {
+    ) -> PyResult<TransitIter> {
+        let (start, end) = extract_interval(interval)?;
         let obs_clone = observer.clone();
         let predictor = self.inner.clone();
         let min_elev_rad = min_elevation_deg.to_radians();
-        TransitIter {
+        Ok(TransitIter {
             inner: TransitIterOwnedBuilder {
                 observer: obs_clone,
                 iter_builder: move |obs| predictor.transits_iter(obs, start..end, min_elev_rad),
             }
             .build(),
-        }
+        })
     }
 
-    /// Iterate over apogee and perigee events within `[start, end)`.
-    fn apsis_iter(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> ApsisIter {
-        ApsisIter {
+    /// Iterate over apogee and perigee events within the interval.
+    ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    fn apsis_iter(&self, interval: &Bound<'_, PyAny>) -> PyResult<ApsisIter> {
+        let (start, end) = extract_interval(interval)?;
+        Ok(ApsisIter {
             inner: self.inner.apsis_iter(start..end),
-        }
+        })
     }
 
-    /// Iterate over sunlit and eclipse windows within `[start, end)`.
-    fn illumination_iter(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> IlluminationIter {
-        IlluminationIter {
+    /// Iterate over sunlit and eclipse windows within the interval.
+    ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    fn illumination_iter(&self, interval: &Bound<'_, PyAny>) -> PyResult<IlluminationIter> {
+        let (start, end) = extract_interval(interval)?;
+        Ok(IlluminationIter {
             inner: self.inner.illumination_iter(start..end),
-        }
+        })
     }
 
     /// Detect whether a transit is in progress at time `t`.
@@ -383,29 +391,20 @@ impl Predictor {
             .map_err(to_py_err)
     }
 
-    /// Find the peak elevation of the satellite over an observer within `[start, end)`.
+    /// Find the peak elevation of the satellite over an observer within the interval.
     ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
     /// Returns `(datetime, Observation)` at the peak.
     /// Raises `RuntimeError` if no peak is found in the interval.
     fn max_elevation(
         &self,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
         observer: &GroundStation,
+        interval: &Bound<'_, PyAny>,
     ) -> PyResult<(DateTime<Utc>, Observation)> {
+        let (start, end) = extract_interval(interval)?;
         self.inner
             .max_elevation(start..end, observer)
-            .map(|(t, obs)| {
-                (
-                    t,
-                    Observation {
-                        azimuth: obs.azimuth,
-                        elevation: obs.elevation,
-                        range: obs.range,
-                        range_rate: obs.range_rate,
-                    },
-                )
-            })
+            .map(|(t, obs)| (t, Observation::from_inner(obs)))
             .map_err(to_py_err)
     }
 

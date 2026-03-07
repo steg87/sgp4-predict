@@ -18,6 +18,17 @@ pub struct Observation {
     pub range_rate: f64,
 }
 
+impl Observation {
+    pub(crate) fn from_inner(obs: sgp4_predict::Observation) -> Self {
+        Self {
+            azimuth: obs.azimuth,
+            elevation: obs.elevation,
+            range: obs.range,
+            range_rate: obs.range_rate,
+        }
+    }
+}
+
 #[gen_stub_pymethods]
 #[pymethods]
 impl Observation {
