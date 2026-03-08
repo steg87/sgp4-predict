@@ -88,11 +88,14 @@ callers. No unit conversion is needed anywhere else in the library or in user co
 
 ## Observer Requirements
 
-When constructing an observer for `observe_at` or the observation/transit iterators:
+Implement the `Observer` trait on your ground-station type with three methods:
 
-- **Latitude**: radians (positive north)
-- **Longitude**: radians (positive east)
-- **Altitude**: metres above the WGS-84 ellipsoid
+- **`latitude_deg()`**: geodetic latitude in degrees (positive north)
+- **`longitude_deg()`**: geodetic longitude in degrees (positive east)
+- **`altitude()`**: metres above the WGS-84 ellipsoid
 
-Passing degrees will produce silently wrong azimuth/elevation values. The library does not validate
-units at runtime — this is a caller responsibility.
+The trait is intentionally degree-first since this is the commond human readable form. Radian 
+conversions are handled internally by `ObserverExt`.
+
+`Observation` provides `azimuth_deg()` and `elevation_deg()` convenience methods alongside the
+radian fields (`azimuth`, `elevation`).

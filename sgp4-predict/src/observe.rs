@@ -17,18 +17,28 @@ use crate::{
 
 /// A fixed point on Earth's surface from which satellite passes are observed.
 ///
-/// All angular values must be in **radians**. Altitude is in **metres**
+/// All angular values must be in **degrees**. Altitude is in **metres**
 /// above the WGS-84 ellipsoid.
 pub trait Observer {
-    /// Geodetic latitude in radians (positive north).
-    fn latitude(&self) -> f64;
-    /// Geodetic longitude in radians (positive east).
-    fn longitude(&self) -> f64;
+    /// Geodetic latitude in degrees (positive north).
+    fn latitude_deg(&self) -> f64;
+    /// Geodetic longitude in degrees (positive east).
+    fn longitude_deg(&self) -> f64;
     /// Height above the WGS-84 ellipsoid in metres.
     fn altitude(&self) -> f64;
 }
 
 pub(crate) trait ObserverExt: Observer {
+    /// Geodetic latitude in radians (positive north).
+    fn latitude(&self) -> f64 {
+        self.latitude_deg().to_radians()
+    }
+
+    /// Geodetic longitude in radians (positive east).
+    fn longitude(&self) -> f64 {
+        self.longitude_deg().to_radians()
+    }
+
     fn to_ecef(&self) -> EcefState {
         let h = self.altitude();
         let a = 6378137.0; // meters
@@ -58,7 +68,8 @@ impl<T: Observer> ObserverExt for T {}
 /// A point observation of a satellite from a ground location.
 ///
 /// Angular values are in **radians**, range in **metres**, range rate in
-/// **metres per second**.
+/// **metres per second**. Use [`azimuth_deg`](Observation::azimuth_deg) and
+/// [`elevation_deg`](Observation::elevation_deg) for degree equivalents.
 #[derive(Debug, Clone)]
 pub struct Observation {
     /// Azimuth from north, measured clockwise, in radians.
@@ -69,6 +80,18 @@ pub struct Observation {
     pub range: f64,
     /// Rate of change of slant range in metres per second (positive = receding).
     pub range_rate: f64,
+}
+
+impl Observation {
+    /// Azimuth in degrees (0 = North, clockwise).
+    pub fn azimuth_deg(&self) -> f64 {
+        self.azimuth.to_degrees()
+    }
+
+    /// Elevation above the horizon in degrees.
+    pub fn elevation_deg(&self) -> f64 {
+        self.elevation.to_degrees()
+    }
 }
 
 /// Iterator over time-stamped [`Observation`]s at regular intervals.
@@ -128,11 +151,11 @@ mod tests {
     }
 
     impl Observer for TestObserver {
-        fn latitude(&self) -> f64 {
-            self.lat_deg.to_radians()
+        fn latitude_deg(&self) -> f64 {
+            self.lat_deg
         }
-        fn longitude(&self) -> f64 {
-            self.lon_deg.to_radians()
+        fn longitude_deg(&self) -> f64 {
+            self.lon_deg
         }
         fn altitude(&self) -> f64 {
             self.alt

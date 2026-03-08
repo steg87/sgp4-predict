@@ -46,11 +46,11 @@ struct GroundStation {
 }
 
 impl Observer for GroundStation {
-    fn latitude(&self) -> f64 {
-        self.latitude_deg.to_radians()
+    fn latitude_deg(&self) -> f64 {
+        self.latitude_deg
     }
-    fn longitude(&self) -> f64 {
-        self.longitude_deg.to_radians()
+    fn longitude_deg(&self) -> f64 {
+        self.longitude_deg
     }
     fn altitude(&self) -> f64 {
         self.altitude_m

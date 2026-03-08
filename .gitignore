@@ -2,3 +2,12 @@ Cargo.lock
 
 /target
 /tests/results
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.so
+*.pyi
+!sgp4-predict-py/python/sgp4_predict/__init__.pyi
+uv.lock

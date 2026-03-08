@@ -11,3 +11,4 @@ lint:
 .PHONY: coverage
 coverage:
 	cargo llvm-cov --all-targets --all-features --summary-only
+

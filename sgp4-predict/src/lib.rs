@@ -8,7 +8,7 @@
 //! # Units
 //!
 //! All positions are in **metres** and velocities in **m/s**.
-//! Observer latitude and longitude must be supplied in **radians**.
+//! Observer latitude and longitude must be supplied in **degrees**.
 
 mod apsides;
 mod frames;
@@ -26,7 +26,7 @@ use thiserror::Error as ThisError;
 
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
-    frames::TemeState,
+    frames::{EcefState, EnuState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,

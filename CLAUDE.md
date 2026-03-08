@@ -19,11 +19,11 @@ make coverage                  # llvm-cov summary
 
 ## Architecture
 
-This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes.
+This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has two crates: `sgp4-predict/` (the Rust library) and `sgp4-predict-py/` (the Python bindings).
 
 ### Entry point: `Predictor`
 
-`lib.rs` defines `Predictor` as the main struct. It is constructed from any type implementing `Satellite` (a supertrait of `HasId + HasTle`). It exposes:
+`sgp4-predict/src/lib.rs` defines `Predictor` as the main struct. It is constructed from any type implementing `Satellite` (a supertrait of `HasId + HasTle`). It exposes:
 - `propagate(t)` → `StateVector<Teme>` — raw SGP4 propagation at a moment in time
 - `observe_at(t, observer)` → `Observation` — azimuth/elevation/range/range_rate from a ground location
 - `prediction_iter(interval, step)` → `PredictionIter`
@@ -39,7 +39,7 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 - `StateVector<Ecef>::to_enu(observer)` — geodetic to local East-North-Up
 - `StateVector<Enu>::to_observation()` / `to_elevation()` — final observables
 
-**All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `predict.rs` in the `From<sgp4::Prediction>` impl.
+**All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `sgp4-predict/src/predict.rs` in the `From<sgp4::Prediction>` impl.
 
 **Observer lat/lon must be in radians.**
 
