@@ -1,5 +1,9 @@
 SILENT:
 
+.PHONY: init
+init:
+	prek install
+
 .PHONY: test
 test:
 	cargo test --all-targets --all-features
