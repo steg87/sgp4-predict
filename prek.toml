@@ -2,6 +2,15 @@
 repo = "local"
 
 [[repos.hooks]]
+id = "no-push-to-main"
+name = "prevent push to main"
+language = "system"
+entry = "bash -c 'if [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ]; then echo \"Direct commit to main is not allowed. Use a feature branch and open a PR.\"; exit 1; fi'"
+stages = ["pre-commit"]
+always_run = true
+pass_filenames = false
+
+[[repos.hooks]]
 id = "lint"
 name = "cargo fmt + clippy"
 language = "system"
