@@ -19,24 +19,60 @@ observers:
     altitude_m: 10.0
 
 test_cases:
-  - name: sentinel-2c-glasgow
-    tle: sentinel-2c
-    observer: glasgow
-    tolerances:
-      aos_los_time_s: 2.0
-      azimuth_deg: 0.1
-      tca_elevation_deg: 0.2
-  - name: sentinel-2c-svalbard
-    tle: sentinel-2c
-    observer: svalbard
-    tolerances:
-      aos_los_time_s: 2.0
-      azimuth_deg: 0.1
-      tca_elevation_deg: 0.2
-  - name: sentinel-2c-christchurch
-    tle: sentinel-2c
-    observer: christchurch
-    tolerances:
-      aos_los_time_s: 2.0
-      azimuth_deg: 0.1
-      tca_elevation_deg: 0.2
+  transits:
+    - name: sentinel-2c-glasgow
+      tle: sentinel-2c
+      observer: glasgow
+      min_elevation: 5.0
+      tolerances:
+        aos_los_time_s: 2.0
+        azimuth_deg: 0.1
+        tca_elevation_deg: 0.2
+    - name: sentinel-2c-svalbard
+      tle: sentinel-2c
+      observer: svalbard
+      min_elevation: 10.0
+      tolerances:
+        aos_los_time_s: 2.0
+        azimuth_deg: 0.1
+        tca_elevation_deg: 0.2
+    - name: sentinel-2c-christchurch
+      tle: sentinel-2c
+      observer: christchurch
+      min_elevation: 5.0
+      tolerances:
+        aos_los_time_s: 2.0
+        azimuth_deg: 0.1
+        tca_elevation_deg: 0.2
+
+  observations:
+    - name: sentinel-2c-glasgow-obs
+      tle: sentinel-2c
+      observer: glasgow
+      start: "2025-12-22T16:30:00Z"
+      duration_days: 1
+      step_s: 60
+      tolerances:
+        azimuth_deg: 0.05
+        elevation_deg: 0.01
+        range_km: 0.15
+    - name: sentinel-2c-svalbard-obs
+      tle: sentinel-2c
+      observer: svalbard
+      start: "2025-12-22T16:30:00Z"
+      duration_days: 1
+      step_s: 60
+      tolerances:
+        azimuth_deg: 0.05
+        elevation_deg: 0.01
+        range_km: 0.15
+    - name: sentinel-2c-christchurch-obs
+      tle: sentinel-2c
+      observer: christchurch
+      start: "2025-12-22T16:30:00Z"
+      duration_days: 1
+      step_s: 60
+      tolerances:
+        azimuth_deg: 0.05
+        elevation_deg: 0.01
+        range_km: 0.15
