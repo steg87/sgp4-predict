@@ -502,7 +502,7 @@ fn pypredict_validation() {
             .transits_iter(
                 gs,
                 window_start..window_end,
-                tc.min_elevation.unwrap_or(0.0).to_radians(),
+                tc.min_elevation.unwrap_or(0.0),
             )
             .collect::<Result<Vec<_>, _>>()
             .unwrap_or_else(|e| panic!("transit iter error in '{}': {e}", tc.name));
