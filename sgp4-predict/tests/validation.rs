@@ -14,12 +14,29 @@ struct TestVectors {
     tles: HashMap<String, Tle>,
     observers: HashMap<String, GroundStation>,
     test_cases: TestCases,
+    #[serde(default)]
+    benchmarks: Vec<BenchmarkTestCase>,
 }
 
 #[derive(Deserialize)]
 struct TestCases {
     transits: Vec<TransitTestCase>,
     observations: Vec<ObservationTestCase>,
+}
+
+#[derive(Deserialize)]
+struct BenchmarkTestCase {
+    name: String,
+    transit_case: String,
+    runs: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct PyBenchmarkResult {
+    #[allow(dead_code)]
+    runs: usize,
+    total_s: f64,
+    avg_ms: f64,
 }
 
 #[derive(Deserialize)]
@@ -655,4 +672,105 @@ fn pypredict_validation() {
         "validation failed:\n{}",
         all_errors.join("\n"),
     );
+}
+
+#[test]
+fn montecarlo_benchmark() {
+    let spec_path = Path::new("tests/data/test_vectors.yaml");
+    let results_path = Path::new("tests/data/pypredict/benchmark_results.json");
+    let report_path = Path::new("tests/data/pypredict/benchmark_report.txt");
+
+    // 1. Parse spec
+    let spec_text = std::fs::read_to_string(spec_path).unwrap();
+    let spec: TestVectors = serde_yaml::from_str(&spec_text).unwrap();
+    if spec.benchmarks.is_empty() {
+        return;
+    }
+
+    // 2. Run Python benchmark
+    let py_out = std::process::Command::new("uv")
+        .args(["run", "tests/data/pypredict/validation.py", "--benchmark"])
+        .output()
+        .expect("failed to run uv");
+    assert!(
+        py_out.status.success(),
+        "Python benchmark failed:\n{}",
+        String::from_utf8_lossy(&py_out.stderr)
+    );
+
+    // 3. Read Python results (JSON is valid YAML, so serde_yaml can parse it)
+    let json_text = std::fs::read_to_string(results_path).unwrap();
+    let py_results: HashMap<String, PyBenchmarkResult> = serde_yaml::from_str(&json_text).unwrap();
+
+    // 4. Run Rust benchmarks and build report
+    let mut out = String::new();
+    let width = 68;
+    let bar = "=".repeat(width);
+    writeln!(out, "{bar}").unwrap();
+    writeln!(out, "  Monte Carlo Benchmark: Rust vs pypredict").unwrap();
+    writeln!(out, "{bar}").unwrap();
+
+    for bc in &spec.benchmarks {
+        let runs = bc.runs.unwrap_or(1000);
+        let tc = spec
+            .test_cases
+            .transits
+            .iter()
+            .find(|t| t.name == bc.transit_case)
+            .unwrap_or_else(|| panic!("transit case '{}' not found", bc.transit_case));
+        let tle = spec.tles.get(&tc.tle).unwrap();
+        let gs = spec.observers.get(&tc.observer).unwrap();
+        let p = Predictor::new(tle).unwrap();
+        let (window_start, _, window_end) =
+            resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
+        let min_el = tc.min_elevation.unwrap_or(0.0);
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..runs {
+            p.transits_iter(gs, window_start..window_end, min_el)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+        }
+        let rust_total_s = t0.elapsed().as_secs_f64();
+        let rust_avg_ms = rust_total_s / runs as f64 * 1000.0;
+
+        let py = py_results
+            .get(&bc.name)
+            .unwrap_or_else(|| panic!("no Python result for '{}'", bc.name));
+        let speedup_x = py.avg_ms / rust_avg_ms;
+
+        writeln!(out).unwrap();
+        writeln!(out, "  Benchmark : {}", bc.name).unwrap();
+        writeln!(out, "  Case      : {} ({} runs)", bc.transit_case, runs).unwrap();
+        writeln!(
+            out,
+            "  {:>10}  {:>12}  {:>12}",
+            "Impl", "Total (ms)", "Avg (ms)"
+        )
+        .unwrap();
+        writeln!(out, "  {}", "-".repeat(40)).unwrap();
+        writeln!(
+            out,
+            "  {:>10}  {:>12.1}  {:>12.3}",
+            "Rust",
+            rust_total_s * 1000.0,
+            rust_avg_ms
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "  {:>10}  {:>12.1}  {:>12.3}",
+            "pypredict",
+            py.total_s * 1000.0,
+            py.avg_ms
+        )
+        .unwrap();
+        writeln!(out, "  {}", "-".repeat(40)).unwrap();
+        writeln!(out, "  Rust is {speedup_x:.1}x faster than pypredict").unwrap();
+    }
+
+    writeln!(out).unwrap();
+    writeln!(out, "{bar}").unwrap();
+    std::fs::write(report_path, &out).ok();
+    println!("{out}");
 }

@@ -16,7 +16,10 @@ Transit CSVs are written to tests/data/pypredict/transits/{name}.csv.
 Observation CSVs are written to tests/data/pypredict/observations/{name}.csv.
 """
 
+import argparse
 import csv
+import json
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -149,11 +152,40 @@ def generate_observations(
         t += timedelta(seconds=step_s)
 
 
-def main() -> None:
+def run_benchmarks(spec: dict) -> None:
+    results = {}
+    for bc in spec.get("benchmarks", []):
+        transit_tc = next(
+            tc for tc in spec["test_cases"]["transits"]
+            if tc["name"] == bc["transit_case"]
+        )
+        runs = bc.get("runs", 1000)
+        tle = spec["tles"][transit_tc["tle"]]
+        qth = build_qth(spec["observers"][transit_tc["observer"]])
+        tle_lines = build_sat(tle)
+        start, end = resolve_window(transit_tc, tle)
+        min_el = transit_tc.get("min_elevation", 0.0)
+
+        t0 = time.monotonic()
+        for _ in range(runs):
+            list(generate_transits(tle_lines, qth, start, end, min_el))
+        total_s = time.monotonic() - t0
+
+        results[bc["name"]] = {
+            "runs": runs,
+            "total_s": total_s,
+            "avg_ms": total_s / runs * 1000.0,
+        }
+
+    out_path = HERE / "benchmark_results.json"
+    out_path.write_text(json.dumps(results, indent=2))
+    print(f"Benchmark results written to {out_path}")
+
+
+def main(spec: dict) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OBS_DIR.mkdir(parents=True, exist_ok=True)
 
-    spec = yaml.safe_load(SPEC_FILE.read_text())
     tles = spec["tles"]
     observers = spec["observers"]
     test_cases = spec["test_cases"]
@@ -184,4 +216,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--benchmark", action="store_true")
+    args = parser.parse_args()
+    spec = yaml.safe_load(SPEC_FILE.read_text())
+    if args.benchmark:
+        run_benchmarks(spec)
+    else:
+        main(spec)

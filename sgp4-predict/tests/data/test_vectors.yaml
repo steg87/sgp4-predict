@@ -76,3 +76,8 @@ test_cases:
         azimuth_deg: 0.05
         elevation_deg: 0.01
         range_km: 0.15
+
+benchmarks:
+  - name: sentinel-2c-glasgow-benchmark
+    transit_case: sentinel-2c-glasgow
+    runs: 1000
