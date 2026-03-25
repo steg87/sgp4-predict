@@ -75,6 +75,10 @@ impl Predictor {
     ///
     /// Returns an error if the TLE text is malformed or if SGP4
     /// element initialisation fails.
+    ///
+    /// SGP4 accuracy degrades with TLE age (typically beyond 3–7 days for LEO).
+    /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
+    /// as appropriate for your use case.
     pub fn new(sat: &impl Satellite) -> Result<Self> {
         let elements = Elements::from_tle(
             Some(sat.id().to_owned()),
@@ -87,16 +91,7 @@ impl Predictor {
             constants,
             refinement: Refinement::default(),
         };
-        let age = predictor.tle_age(Utc::now());
         tracing::debug!(satellite = sat.id(), epoch = %predictor.epoch(), "predictor initialized");
-        if age > Duration::days(7) {
-            let age_days = age.num_seconds() as f64 / 86_400.0;
-            tracing::warn!(
-                satellite = sat.id(),
-                age_days,
-                "stale TLE, SGP4 accuracy may be degraded"
-            );
-        }
         Ok(predictor)
     }
 

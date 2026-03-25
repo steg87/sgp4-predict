@@ -124,7 +124,6 @@ impl Brent {
         let mut fb = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
 
         if fa * fb >= 0.0 {
-            tracing::warn!("Brent solver: root is not bracketed");
             return Err(Error::Unbracketed);
         }
 
@@ -217,14 +216,12 @@ impl Brent {
 
             fb = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
         }
-        let err = Error::FailedToConverge {
+        Err(Error::FailedToConverge {
             iterations: self.max_iter,
             tolerance: self.tolerance,
             result: b,
             error: fb.abs(),
-        };
-        tracing::warn!(error = %err, "Brent solver failed to converge");
-        Err(err)
+        })
     }
 }
 
