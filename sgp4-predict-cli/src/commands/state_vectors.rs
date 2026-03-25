@@ -3,9 +3,12 @@ use chrono::{DateTime, Utc};
 use sgp4_predict::Predictor;
 use std::io::BufWriter;
 
-use crate::{cli::ObservationsArgs, observer, output, tle};
+use crate::{
+    cli::{Frame, StateVectorsArgs},
+    output, tle,
+};
 
-pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
+pub fn run(args: StateVectorsArgs) -> anyhow::Result<()> {
     let start: DateTime<Utc> = match &args.common.start {
         Some(s) => {
             let st = humantime::parse_rfc3339_weak(s)
@@ -18,17 +21,11 @@ pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
     let chrono_duration =
         chrono::Duration::from_std(args.common.duration).context("duration out of range")?;
     let interval = start..start + chrono_duration;
-
     let step = chrono::Duration::from_std(args.step).context("step out of range")?;
 
     let sat = match &args.common.tle_file {
         Some(p) => tle::parse_tle_file(p)?,
         None => tle::prompt_tle()?,
-    };
-
-    let observer = match &args.observer {
-        Some(s) => observer::parse_observer(s)?,
-        None => observer::prompt_observer()?,
     };
 
     let predictor = Predictor::new(&sat)?;
@@ -46,8 +43,39 @@ pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
         None => Box::new(BufWriter::new(std::io::stdout())),
     };
 
-    output::write_observations(
-        writer,
-        predictor.observation_iter(&observer, interval, step),
-    )
+    match args.frame {
+        Frame::Teme => output::write_state_vectors(
+            writer,
+            predictor.prediction_iter(interval, step).map(|r| {
+                r.map(|(t, sv)| {
+                    (
+                        t,
+                        sv.position.x,
+                        sv.position.y,
+                        sv.position.z,
+                        sv.velocity.x,
+                        sv.velocity.y,
+                        sv.velocity.z,
+                    )
+                })
+            }),
+        ),
+        Frame::Ecef => output::write_state_vectors(
+            writer,
+            predictor.prediction_iter(interval, step).map(|r| {
+                r.map(|(t, sv)| {
+                    let ecef = sv.to_ecef(t);
+                    (
+                        t,
+                        ecef.position.x,
+                        ecef.position.y,
+                        ecef.position.z,
+                        ecef.velocity.x,
+                        ecef.velocity.y,
+                        ecef.velocity.z,
+                    )
+                })
+            }),
+        ),
+    }
 }

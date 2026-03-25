@@ -17,5 +17,6 @@ fn main() -> anyhow::Result<()> {
     match args.command {
         cli::Command::Observations(obs_args) => commands::observations::run(obs_args),
         cli::Command::Transits(transit_args) => commands::transits::run(transit_args),
+        cli::Command::StateVectors(sv_args) => commands::state_vectors::run(sv_args),
     }
 }

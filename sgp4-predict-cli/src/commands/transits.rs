@@ -24,7 +24,7 @@ pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
         None => tle::prompt_tle()?,
     };
 
-    let observer = match &args.common.observer {
+    let observer = match &args.observer {
         Some(s) => observer::parse_observer(s)?,
         None => observer::prompt_observer()?,
     };

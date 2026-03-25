@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser)]
@@ -14,6 +14,8 @@ pub enum Command {
     Observations(ObservationsArgs),
     /// Find satellite transits visible from an observer
     Transits(TransitsArgs),
+    /// Propagate state vectors over a time interval
+    StateVectors(StateVectorsArgs),
 }
 
 /// Arguments shared by all subcommands.
@@ -26,10 +28,6 @@ pub struct CommonArgs {
     /// Duration, e.g. "3d", "1h30m", "90s" (default: 1d)
     #[arg(long, value_parser = parse_duration, default_value = "1d")]
     pub duration: Duration,
-
-    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
-    #[arg(long)]
-    pub observer: Option<String>,
 
     /// Path to TLE file (optional name line + line1 + line2)
     #[arg(long)]
@@ -45,6 +43,10 @@ pub struct ObservationsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
 
+    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
+    #[arg(long)]
+    pub observer: Option<String>,
+
     /// Observation step (default: 60s)
     #[arg(long, value_parser = parse_duration, default_value = "60s")]
     pub step: Duration,
@@ -55,9 +57,33 @@ pub struct TransitsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
 
+    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
+    #[arg(long)]
+    pub observer: Option<String>,
+
     /// Minimum elevation above horizon in degrees (default: 10)
     #[arg(long, default_value = "10")]
     pub min_elevation: f64,
+}
+
+#[derive(clap::Args)]
+pub struct StateVectorsArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+
+    /// Propagation step (default: 60s)
+    #[arg(long, value_parser = parse_duration, default_value = "60s")]
+    pub step: Duration,
+
+    /// Coordinate frame for output (default: teme)
+    #[arg(long, default_value = "teme")]
+    pub frame: Frame,
+}
+
+#[derive(Clone, ValueEnum)]
+pub enum Frame {
+    Teme,
+    Ecef,
 }
 
 fn parse_duration(s: &str) -> Result<Duration, String> {
