@@ -24,3 +24,7 @@ benchmark:
 coverage:
 	cargo llvm-cov --all-targets --all-features --summary-only
 
+.PHONY: audit
+audit:
+	cargo audit
+
