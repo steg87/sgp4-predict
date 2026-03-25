@@ -885,7 +885,7 @@ fn montecarlo_benchmark() {
         String::from_utf8_lossy(&py_out.stderr)
     );
 
-    // 3. Read Python results (JSON is valid YAML, so serde_yaml can parse it)
+    // 3. Read Python results
     let json_text = std::fs::read_to_string(results_path).unwrap();
     let py_results: HashMap<String, PyBenchmarkResult> = serde_json::from_str(&json_text).unwrap();
 
