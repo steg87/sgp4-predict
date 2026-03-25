@@ -13,6 +13,8 @@ cargo clippy                   # lint
 make lint                      # cargo fmt + clippy (preferred — matches CI and pre-commit hook)
 make test                      # full test suite (preferred — matches CI and pre-push hook)
 make coverage                  # llvm-cov summary
+make validation                # cross-validate against pypredict/skyfield reference data
+make benchmark                 # Rust vs pypredict monte carlo benchmark
 ```
 
 **Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.

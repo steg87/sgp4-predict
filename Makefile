@@ -14,7 +14,11 @@ lint:
 
 .PHONY: validation
 validation:
-	cargo test --test validation -- --ignored --nocapture
+	cargo test --test validation pypredict_validation -- --ignored --nocapture
+
+.PHONY: benchmark
+benchmark:
+	cargo test --test validation montecarlo_benchmark -- --ignored --nocapture
 
 .PHONY: coverage
 coverage:

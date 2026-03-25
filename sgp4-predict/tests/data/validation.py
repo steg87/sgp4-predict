@@ -16,7 +16,7 @@ Usage:
     uv run tests/data/validation.py
 
     # Benchmark performance
-    uv run tests/data/validation.py --benchmarks
+    uv run tests/data/validation.py --benchmark
 
 
 Transit CSVs are written to tests/data/transits/{name}.csv.

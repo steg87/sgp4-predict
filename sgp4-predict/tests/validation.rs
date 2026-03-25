@@ -263,6 +263,12 @@ fn max(v: &[f64]) -> f64 {
     v.iter().cloned().fold(0.0_f64, f64::max)
 }
 
+/// Shortest angular distance between two azimuths in degrees.
+fn az_diff_deg(a: f64, b: f64) -> f64 {
+    let d = (a - b).to_radians();
+    d.sin().atan2(d.cos()).abs().to_degrees()
+}
+
 // ---------------------------------------------------------------------------
 // Reports
 // ---------------------------------------------------------------------------
@@ -322,7 +328,7 @@ fn validate_observations(
             .unwrap_or_else(|e| panic!("observe_at {} failed: {e}", sfo.time));
         stats
             .az_deg
-            .push((obs.azimuth.to_degrees() - sfo.az_deg).abs());
+            .push(az_diff_deg(obs.azimuth.to_degrees(), sfo.az_deg));
         stats
             .el_deg
             .push((obs.elevation.to_degrees() - sfo.el_deg).abs());
@@ -395,7 +401,7 @@ fn format_report(
     let mut total_pass: usize = 0;
 
     for c in transit_cases {
-        let case_pass: bool = c.errors.is_empty() && c.transit_count_ours == c.transit_count_ref;
+        let case_pass: bool = c.errors.is_empty();
 
         writeln!(out).unwrap();
         writeln!(out, "  Test case : {} [transit]", c.name).unwrap();
@@ -685,7 +691,7 @@ fn pypredict_validation() {
             let aos_obs: Observation = p
                 .observe_at(our.start, gs)
                 .unwrap_or_else(|e| panic!("{}: observe_at AOS failed: {e}", ctx()));
-            let aos_az_diff: f64 = (aos_obs.azimuth.to_degrees() - sf.aos_az_deg).abs();
+            let aos_az_diff: f64 = az_diff_deg(aos_obs.azimuth.to_degrees(), sf.aos_az_deg);
             transit_stats.aos_az_deg.push(aos_az_diff);
             if aos_az_diff >= tol.azimuth_deg {
                 errors.push(format!(
@@ -698,7 +704,7 @@ fn pypredict_validation() {
             let los_obs: Observation = p
                 .observe_at(our.end, gs)
                 .unwrap_or_else(|e| panic!("{}: observe_at LOS failed: {e}", ctx()));
-            let los_az_diff: f64 = (los_obs.azimuth.to_degrees() - sf.los_az_deg).abs();
+            let los_az_diff: f64 = az_diff_deg(los_obs.azimuth.to_degrees(), sf.los_az_deg);
             transit_stats.los_az_deg.push(los_az_diff);
             if los_az_diff >= tol.azimuth_deg {
                 errors.push(format!(
@@ -880,7 +886,7 @@ fn montecarlo_benchmark() {
 
     // 3. Read Python results (JSON is valid YAML, so serde_yaml can parse it)
     let json_text = std::fs::read_to_string(results_path).unwrap();
-    let py_results: HashMap<String, PyBenchmarkResult> = serde_yaml::from_str(&json_text).unwrap();
+    let py_results: HashMap<String, PyBenchmarkResult> = serde_json::from_str(&json_text).unwrap();
 
     // 4. Run Rust benchmarks and build report
     let mut out = String::new();

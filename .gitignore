@@ -12,5 +12,3 @@ __pycache__/
 !sgp4-predict-py/python/sgp4_predict/__init__.pyi
 uv.lock
 
-# Skyfield ephemeris data
-**/de421.bsp
