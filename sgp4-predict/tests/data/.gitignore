@@ -9,6 +9,7 @@ uv.lock
 # Skyfield ephemeris data
 **/de421.bsp
 
-# Generated benchmark outputs (machine-specific)
+# Generated outputs
 benchmark_results.json
 benchmark_report.txt
+validation_report.txt
