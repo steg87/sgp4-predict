@@ -16,5 +16,6 @@ fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
     match args.command {
         cli::Command::Observations(obs_args) => commands::observations::run(obs_args),
+        cli::Command::Transits(transit_args) => commands::transits::run(transit_args),
     }
 }

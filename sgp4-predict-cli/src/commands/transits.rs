@@ -3,9 +3,9 @@ use chrono::{DateTime, Utc};
 use sgp4_predict::Predictor;
 use std::io::BufWriter;
 
-use crate::{cli::ObservationsArgs, observer, output, tle};
+use crate::{cli::TransitsArgs, observer, output, tle};
 
-pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
+pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
     let start: DateTime<Utc> = match &args.common.start {
         Some(s) => {
             let st = humantime::parse_rfc3339_weak(s)
@@ -18,8 +18,6 @@ pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
     let chrono_duration =
         chrono::Duration::from_std(args.common.duration).context("duration out of range")?;
     let interval = start..start + chrono_duration;
-
-    let step = chrono::Duration::from_std(args.step).context("step out of range")?;
 
     let sat = match &args.common.tle_file {
         Some(p) => tle::parse_tle_file(p)?,
@@ -46,8 +44,21 @@ pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
         None => Box::new(BufWriter::new(std::io::stdout())),
     };
 
-    output::write_observations(
-        writer,
-        predictor.observation_iter(&observer, interval, step),
-    )
+    let transits = predictor
+        .transits_iter(&observer, interval, args.min_elevation)
+        .map(|result| {
+            let transit = result.context("transit detection error")?;
+            let aos_obs = predictor
+                .observe_at(transit.start, &observer)
+                .context("AoS observation error")?;
+            let los_obs = predictor
+                .observe_at(transit.end, &observer)
+                .context("LoS observation error")?;
+            let (_, tca_obs) = predictor
+                .max_elevation(transit, &observer)
+                .context("TCA error")?;
+            Ok((transit, aos_obs, los_obs, tca_obs))
+        });
+
+    output::write_transits(writer, transits)
 }
