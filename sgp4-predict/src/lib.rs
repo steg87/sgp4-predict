@@ -257,7 +257,9 @@ impl Predictor {
             t_outer += STEP;
         };
 
-        Ok(Some(Transit::new(start, end)))
+        let transit = Transit::new(start, end);
+        tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
+        Ok(Some(transit))
     }
 
     /// Find the peak elevation of the satellite over an observer within a time interval.
@@ -302,7 +304,9 @@ impl Predictor {
                     .map_err(Error::Roots)?;
 
                 let peak_t = time::f64_to_datetime(peak_t_f64);
-                return Ok((peak_t, self.observe_at(peak_t, observer)?));
+                let obs = self.observe_at(peak_t, observer)?;
+                tracing::debug!(time = %peak_t, elevation_deg = obs.elevation.to_degrees(), "peak elevation found");
+                return Ok((peak_t, obs));
             }
 
             prev = Some((t_f64, el_rate));
