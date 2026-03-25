@@ -149,20 +149,29 @@ impl Predictor {
 
     /// Calculate all of the transits visible to the observer.
     ///
+    /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
+    ///
     /// Returns an iterator over transits.
     pub fn transits_iter<'a, O: Observer>(
         &self,
         observer: &'a O,
         interval: impl IntervalRange,
-        min_elevation: f64,
+        min_elevation_deg: f64,
     ) -> TransitIter<'a, O> {
-        TransitIter::new(self.clone(), observer, interval, min_elevation)
-            .with_refinement(self.refinement)
+        TransitIter::new(
+            self.clone(),
+            observer,
+            interval,
+            min_elevation_deg.to_radians(),
+        )
+        .with_refinement(self.refinement)
     }
 
     /// Detect whether a transit is in progress at time `t`.
     ///
-    /// If the satellite is below `min_elevation` at `t`, returns `Ok(None)`.
+    /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
+    ///
+    /// If the satellite is below `min_elevation_deg` at `t`, returns `Ok(None)`.
     /// Otherwise, searches backward and forward in 30-second steps to bracket the
     /// AoS and LoS crossings, then refines each boundary with Newton-Raphson /
     /// Brent's method to millisecond accuracy.
@@ -172,8 +181,9 @@ impl Predictor {
         &self,
         t: DateTime<Utc>,
         observer: &O,
-        min_elevation: f64,
+        min_elevation_deg: f64,
     ) -> Result<Option<Transit>> {
+        let min_elevation = min_elevation_deg.to_radians();
         let calculate = |t: DateTime<Utc>| -> Result<(f64, f64)> {
             let (el, el_rate) = self
                 .propagate(t)?

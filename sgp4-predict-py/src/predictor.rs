@@ -340,11 +340,12 @@ impl Predictor {
         let (start, end) = extract_interval(interval)?;
         let obs_clone = observer.clone();
         let predictor = self.inner.clone();
-        let min_elev_rad = min_elevation_deg.to_radians();
         Ok(TransitIter {
             inner: TransitIterOwnedBuilder {
                 observer: obs_clone,
-                iter_builder: move |obs| predictor.transits_iter(obs, start..end, min_elev_rad),
+                iter_builder: move |obs| {
+                    predictor.transits_iter(obs, start..end, min_elevation_deg)
+                },
             }
             .build(),
         })
@@ -381,7 +382,7 @@ impl Predictor {
         min_elevation_deg: f64,
     ) -> PyResult<Option<Transit>> {
         self.inner
-            .detect_transit(t, observer, min_elevation_deg.to_radians())
+            .detect_transit(t, observer, min_elevation_deg)
             .map(|opt| {
                 opt.map(|t| Transit {
                     start: t.start,

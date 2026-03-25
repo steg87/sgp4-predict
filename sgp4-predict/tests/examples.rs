@@ -16,7 +16,7 @@ fn detect_current_transit() {
 
     // Find the next transit so we have a known "mid-pass" time to hand to detect_transit.
     let transit: Transit = p
-        .transits_iter(&gs, start..end, f64::to_radians(5.0))
+        .transits_iter(&gs, start..end, 5.0)
         .next()
         .expect("no transits during search interval")
         .expect("error calculating transit");
@@ -26,7 +26,7 @@ fn detect_current_transit() {
 
     // Recover the full pass window from a single timestamp.
     let detected = p
-        .detect_transit(now, &gs, f64::to_radians(5.0))
+        .detect_transit(now, &gs, 5.0)
         .expect("propagation error")
         .expect("satellite is not overhead at the given time");
 
@@ -68,7 +68,7 @@ fn next_ground_station_pass_observations() {
 
     // Lazily find the next transit that satisfies the predicate
     let next_transit = p
-        .transits_iter(&gs, start..end, f64::to_radians(15.0))
+        .transits_iter(&gs, start..end, 15.0)
         .find(|transit| {
             match transit {
                 Ok(transit) => {
