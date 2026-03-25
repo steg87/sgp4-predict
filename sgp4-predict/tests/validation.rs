@@ -35,8 +35,6 @@ struct BenchmarkTestCase {
 
 #[derive(Deserialize)]
 struct PyBenchmarkResult {
-    #[allow(dead_code)]
-    runs: usize,
     total_s: f64,
     avg_ms: f64,
 }
