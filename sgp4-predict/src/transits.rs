@@ -127,6 +127,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         let mut t1 = t0 + step;
         let end = loop {
             if (t1 - start) > Duration::hours(1) {
+                tracing::warn!(%start, "transit end not found within 1 hour");
                 return Err(Error::TransitEndNotFound { start }.into());
             }
             let observation = self.predictor.observe_at(t1, self.observer)?;
@@ -144,7 +145,9 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         };
         // Update the state and next time so the next iteration picks up from here
         (self.next_time, *new_state) = (t1, TransitState::Outside(t1));
-        Ok(Some(Transit::new(start, end)))
+        let transit = Transit::new(start, end);
+        tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
+        Ok(Some(transit))
     }
 
     fn calculate_elevation(&self, t: DateTime<Utc>) -> Result<(f64, f64)> {

@@ -269,7 +269,9 @@ impl Refinement {
         match self.newton_raphson.solve(t, &mut f) {
             Ok(root) => return Ok(root),
             Err(e @ Error::CostFn(_)) => return Err(e),
-            Err(_) => {} // convergence failure, fall through to Brent
+            Err(_) => {
+                tracing::debug!("Newton-Raphson failed to converge, falling back to Brent");
+            }
         }
 
         // Fall back to Brent

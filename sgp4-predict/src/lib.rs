@@ -75,6 +75,10 @@ impl Predictor {
     ///
     /// Returns an error if the TLE text is malformed or if SGP4
     /// element initialisation fails.
+    ///
+    /// SGP4 accuracy degrades with TLE age (typically beyond 3–7 days for LEO).
+    /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
+    /// as appropriate for your use case.
     pub fn new(sat: &impl Satellite) -> Result<Self> {
         let elements = Elements::from_tle(
             Some(sat.id().to_owned()),
@@ -82,11 +86,13 @@ impl Predictor {
             sat.line_2().as_bytes(),
         )?;
         let constants = Constants::from_elements(&elements)?;
-        Ok(Self {
+        let predictor = Self {
             elements,
             constants,
             refinement: Refinement::default(),
-        })
+        };
+        tracing::debug!(satellite = sat.id(), epoch = %predictor.epoch(), "predictor initialized");
+        Ok(predictor)
     }
 
     /// Set the root-finder configuration used by [`detect_transit`] and [`max_elevation`].
@@ -209,6 +215,7 @@ impl Predictor {
         let mut t_outer = t - STEP;
         let start = loop {
             if t - t_outer > Duration::hours(1) {
+                tracing::warn!(at = %t, "transit start not found within 1 hour");
                 return Err(transits::Error::TransitStartNotFound { at: t }.into());
             }
             let (el, _) = calculate(t_outer)?;
@@ -229,6 +236,7 @@ impl Predictor {
         let mut t_outer = t + STEP;
         let end = loop {
             if t_outer - t > Duration::hours(1) {
+                tracing::warn!(%start, "transit end not found within 1 hour");
                 return Err(transits::Error::TransitEndNotFound { start }.into());
             }
             let (el, _) = calculate(t_outer)?;
@@ -244,7 +252,9 @@ impl Predictor {
             t_outer += STEP;
         };
 
-        Ok(Some(Transit::new(start, end)))
+        let transit = Transit::new(start, end);
+        tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
+        Ok(Some(transit))
     }
 
     /// Find the peak elevation of the satellite over an observer within a time interval.
@@ -289,7 +299,9 @@ impl Predictor {
                     .map_err(Error::Roots)?;
 
                 let peak_t = time::f64_to_datetime(peak_t_f64);
-                return Ok((peak_t, self.observe_at(peak_t, observer)?));
+                let obs = self.observe_at(peak_t, observer)?;
+                tracing::debug!(time = %peak_t, elevation_deg = obs.elevation.to_degrees(), "peak elevation found");
+                return Ok((peak_t, obs));
             }
 
             prev = Some((t_f64, el_rate));

@@ -135,7 +135,10 @@ impl Iterator for IlluminationIter {
                             shadow_value(&predictor, time::f64_to_datetime(x))
                         }) {
                             Ok(t) => t,
-                            Err(e) => return Some(Err(Error::Roots(e))),
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Brent solver failed to refine shadow boundary");
+                                return Some(Err(Error::Roots(e)));
+                            }
                         };
                         time::f64_to_datetime(crossing_f64)
                     };
@@ -160,6 +163,12 @@ impl Iterator for IlluminationIter {
                     } else {
                         state.opposite()
                     });
+                    tracing::debug!(
+                        state = ?window.state,
+                        start = %window.start,
+                        end = %window.end,
+                        "illumination window"
+                    );
                     self.prev = Some((t_f64, sv));
                     self.next_time += STEP;
                     return Some(Ok(window));
