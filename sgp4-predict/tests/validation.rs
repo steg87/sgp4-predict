@@ -292,6 +292,7 @@ struct ObservationReport {
     observer_id: String,
     window_start: DateTime<Utc>,
     duration_days: f64,
+    sample_count: usize,
     stats: ObsStats,
     tolerances: ObservationTolerances,
     step_s: f64,
@@ -483,6 +484,7 @@ fn format_report(
         )
         .unwrap();
         writeln!(out, "  Step      : {}s", c.step_s).unwrap();
+        writeln!(out, "  Samples   : {}", c.sample_count).unwrap();
         writeln!(out).unwrap();
         writeln!(out, "  {thin}").unwrap();
         writeln!(
@@ -598,7 +600,7 @@ fn resolve_window(
 
 #[test]
 #[ignore = "slow — run with `make validation`"]
-fn pypredict_validation() {
+fn validate() {
     let spec_path: &Path = Path::new("tests/data/test_vectors.yaml");
     let transits_dir: &Path = Path::new("tests/data/transits");
     let obs_dir: &Path = Path::new("tests/data/observations");
@@ -612,7 +614,7 @@ fn pypredict_validation() {
         .expect("failed to run uv — is uv installed?");
     assert!(
         py_output.status.success(),
-        "pypredict: {}\n{}",
+        "validation.py failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&py_output.stdout),
         String::from_utf8_lossy(&py_output.stderr),
     );
@@ -773,6 +775,7 @@ fn pypredict_validation() {
             observer_id: tc.observer.clone(),
             window_start,
             duration_days,
+            sample_count: sf_obs.len(),
             stats,
             tolerances: tc.tolerances.clone(),
             step_s,

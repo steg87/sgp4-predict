@@ -1,7 +1,0 @@
-{
-  "sentinel-2c-glasgow-benchmark": {
-    "runs": 1000,
-    "total_s": 40.08214083099983,
-    "avg_ms": 40.08214083099983
-  }
-}

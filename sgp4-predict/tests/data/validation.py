@@ -52,7 +52,7 @@ def build_sat(tle: dict) -> list[str]:
 def build_qth(observer: dict) -> tuple:
     return (
         observer["latitude_deg"],
-        -observer["longitude_deg"],
+        -observer["longitude_deg"],  # pypredict uses West-positive longitude
         observer["altitude_m"],
     )
 

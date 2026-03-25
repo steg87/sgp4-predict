@@ -13,8 +13,8 @@ lint:
 	cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings
 
 .PHONY: validation
-validation:
-	cargo test --test validation pypredict_validation -- --ignored --nocapture
+validation:  ## downloads de421.bsp (~17 MB) from NASA on first run
+	cargo test --test validation validate -- --ignored --nocapture
 
 .PHONY: benchmark
 benchmark:
