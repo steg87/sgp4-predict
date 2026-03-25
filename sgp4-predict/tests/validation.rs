@@ -591,6 +591,7 @@ fn resolve_window(
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow — run with `make validation`"]
 fn pypredict_validation() {
     let spec_path: &Path = Path::new("tests/data/test_vectors.yaml");
     let transits_dir: &Path = Path::new("tests/data/transits");
@@ -853,6 +854,7 @@ fn pypredict_validation() {
 }
 
 #[test]
+#[ignore = "slow — run with `make validation`"]
 fn montecarlo_benchmark() {
     let spec_path = Path::new("tests/data/test_vectors.yaml");
     let results_path = Path::new("tests/data/benchmark_results.json");

@@ -12,6 +12,10 @@ test:
 lint:
 	cargo fmt --all && cargo clippy --all-targets --all-features -- -D warnings
 
+.PHONY: validation
+validation:
+	cargo test --test validation -- --ignored --nocapture
+
 .PHONY: coverage
 coverage:
 	cargo llvm-cov --all-targets --all-features --summary-only
