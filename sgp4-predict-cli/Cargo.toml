@@ -1,0 +1,17 @@
+[package]
+name = "sgp4-predict-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "sgp4-predict"
+path = "src/main.rs"
+
+[dependencies]
+sgp4-predict       = { path = "../sgp4-predict" }
+clap               = { version = "4", features = ["derive"] }
+anyhow             = "1"
+humantime          = "2.1"
+chrono             = "0.4"
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

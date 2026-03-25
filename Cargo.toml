@@ -1,3 +1,3 @@
 [workspace]
-members = ["sgp4-predict", "sgp4-predict-py"]
+members = ["sgp4-predict", "sgp4-predict-py", "sgp4-predict-cli"]
 resolver = "2"
