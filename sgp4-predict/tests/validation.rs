@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde::Deserialize;
-use sgp4_predict::{HasId, HasTle, Observation, Observer, Predictor, Transit};
+use sgp4_predict::{HasId, HasTle, IlluminationState, Observation, Observer, Predictor, Transit};
 use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,8 @@ struct TestVectors {
 struct TestCases {
     transits: Vec<TransitTestCase>,
     observations: Vec<ObservationTestCase>,
+    #[serde(default)]
+    illumination: Vec<IlluminationTestCase>,
 }
 
 #[derive(Deserialize)]
@@ -116,6 +118,21 @@ struct ObservationTolerances {
     range_km: f64,
 }
 
+#[derive(Deserialize)]
+struct IlluminationTestCase {
+    name: String,
+    tle: String,
+    start: Option<String>,
+    duration_days: Option<f64>,
+    step_s: Option<f64>,
+    tolerances: IlluminationTolerances,
+}
+
+#[derive(Deserialize, Clone)]
+struct IlluminationTolerances {
+    max_mismatch_fraction: f64,
+}
+
 // ---------------------------------------------------------------------------
 // CSV parsing
 // ---------------------------------------------------------------------------
@@ -186,6 +203,35 @@ fn parse_observation_csv(path: &Path) -> Vec<RefObservation> {
         .collect()
 }
 
+struct RefIllumSample {
+    time: DateTime<Utc>,
+    state: IlluminationState,
+}
+
+fn parse_illumination_csv(path: &Path) -> Vec<RefIllumSample> {
+    let content: String = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
+    content
+        .lines()
+        .skip(1)
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            let cols: Vec<&str> = line.splitn(3, ',').collect();
+            assert!(cols.len() >= 2, "unexpected illumination CSV row: {line}");
+            let raw: &str = cols[0].trim().trim_end_matches('Z');
+            let time: DateTime<Utc> = NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S%.f")
+                .unwrap_or_else(|_| panic!("bad datetime: {}", cols[0]))
+                .and_utc();
+            let state: IlluminationState = match cols[1].trim() {
+                "sunlit" => IlluminationState::Sunlit,
+                "eclipse" => IlluminationState::Eclipse,
+                other => panic!("unknown illumination state: {other}"),
+            };
+            RefIllumSample { time, state }
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Stats collection
 // ---------------------------------------------------------------------------
@@ -243,6 +289,18 @@ struct ObservationReport {
     stats: ObsStats,
     tolerances: ObservationTolerances,
     step_s: f64,
+    errors: Vec<String>,
+}
+
+struct IlluminationReport {
+    name: String,
+    tle_id: String,
+    window_start: DateTime<Utc>,
+    duration_days: f64,
+    step_s: f64,
+    total_samples: usize,
+    mismatch_count: usize,
+    tolerances: IlluminationTolerances,
     errors: Vec<String>,
 }
 
@@ -319,7 +377,11 @@ fn write_obs_rows(out: &mut String, stats: &ObsStats, tol: &ObservationTolerance
     }
 }
 
-fn format_report(transit_cases: &[TransitReport], obs_cases: &[ObservationReport]) -> String {
+fn format_report(
+    transit_cases: &[TransitReport],
+    obs_cases: &[ObservationReport],
+    illum_cases: &[IlluminationReport],
+) -> String {
     let mut out: String = String::new();
     let width: usize = 68;
     let bar: String = "=".repeat(width);
@@ -329,7 +391,7 @@ fn format_report(transit_cases: &[TransitReport], obs_cases: &[ObservationReport
     writeln!(out, "  Validation Report").unwrap();
     writeln!(out, "{bar}").unwrap();
 
-    let total: usize = transit_cases.len() + obs_cases.len();
+    let total: usize = transit_cases.len() + obs_cases.len() + illum_cases.len();
     let mut total_pass: usize = 0;
 
     for c in transit_cases {
@@ -438,6 +500,63 @@ fn format_report(transit_cases: &[TransitReport], obs_cases: &[ObservationReport
         }
     }
 
+    for c in illum_cases {
+        let mismatch_frac: f64 = if c.total_samples > 0 {
+            c.mismatch_count as f64 / c.total_samples as f64
+        } else {
+            0.0
+        };
+        let case_pass: bool = c.errors.is_empty();
+
+        writeln!(out).unwrap();
+        writeln!(out, "  Test case : {} [illumination]", c.name).unwrap();
+        writeln!(out, "  TLE       : {}", c.tle_id).unwrap();
+        writeln!(
+            out,
+            "  Window    : {}  +  {} days",
+            c.window_start.format("%Y-%m-%d %H:%M:%S UTC"),
+            c.duration_days
+        )
+        .unwrap();
+        writeln!(out, "  Step      : {}s", c.step_s).unwrap();
+        writeln!(out).unwrap();
+        writeln!(out, "  {thin}").unwrap();
+        writeln!(
+            out,
+            "  {:<18} {:>9}  {:>9}  {:>9}  Result",
+            "Metric", "Value", "", "Tol"
+        )
+        .unwrap();
+        writeln!(out, "  {thin}").unwrap();
+        let status: &str = if mismatch_frac < c.tolerances.max_mismatch_fraction {
+            "PASS"
+        } else {
+            "FAIL"
+        };
+        writeln!(
+            out,
+            "  {:<18} {:>8}/{:<8}  {:>8.5}   {:.5}  {}",
+            "Mismatch",
+            c.mismatch_count,
+            c.total_samples,
+            mismatch_frac,
+            c.tolerances.max_mismatch_fraction,
+            status,
+        )
+        .unwrap();
+        writeln!(out, "  {thin}").unwrap();
+        if !c.errors.is_empty() {
+            writeln!(out, "  Errors:").unwrap();
+            for e in &c.errors {
+                writeln!(out, "    • {e}").unwrap();
+            }
+        }
+        writeln!(out, "  Result: {}", if case_pass { "PASS" } else { "FAIL" }).unwrap();
+        if case_pass {
+            total_pass += 1;
+        }
+    }
+
     writeln!(out).unwrap();
     writeln!(out, "{bar}").unwrap();
     writeln!(out, "  {total_pass}/{total} test case(s) passed").unwrap();
@@ -474,13 +593,14 @@ fn resolve_window(
 #[test]
 fn pypredict_validation() {
     let spec_path: &Path = Path::new("tests/data/test_vectors.yaml");
-    let transits_dir: &Path = Path::new("tests/data/pypredict/transits");
-    let obs_dir: &Path = Path::new("tests/data/pypredict/observations");
-    let report_path: &Path = Path::new("tests/data/pypredict/validation_report.txt");
+    let transits_dir: &Path = Path::new("tests/data/transits");
+    let obs_dir: &Path = Path::new("tests/data/observations");
+    let illum_dir: &Path = Path::new("tests/data/illumination");
+    let report_path: &Path = Path::new("tests/data/validation_report.txt");
 
-    // --- 1. Regenerate pypredict reference CSVs ---
+    // --- 1. Regenerate reference CSVs ---
     let py_output: std::process::Output = std::process::Command::new("uv")
-        .args(["run", "tests/data/pypredict/validation.py"])
+        .args(["run", "tests/data/validation.py"])
         .output()
         .expect("failed to run uv — is uv installed?");
     assert!(
@@ -653,17 +773,75 @@ fn pypredict_validation() {
         });
     }
 
-    // --- 5. Write and print report ---
-    let report: String = format_report(&transit_reports, &obs_reports);
+    // --- 5. Validate illumination test cases ---
+    let mut illum_reports: Vec<IlluminationReport> = Vec::new();
+
+    for tc in &spec.test_cases.illumination {
+        let tle: &Tle = spec
+            .tles
+            .get(&tc.tle)
+            .unwrap_or_else(|| panic!("TLE '{}' not found in spec", tc.tle));
+
+        let p: Predictor = Predictor::new(tle)
+            .unwrap_or_else(|e| panic!("Predictor::new failed for '{}': {e}", tc.name));
+
+        let (window_start, duration_days, _) =
+            resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
+
+        let step_s: f64 = tc.step_s.unwrap_or(60.0);
+        let csv_path: PathBuf = illum_dir.join(format!("{}.csv", tc.name));
+        let ref_samples: Vec<RefIllumSample> = parse_illumination_csv(&csv_path);
+
+        let mut mismatch_count: usize = 0;
+        let mut errors: Vec<String> = Vec::new();
+
+        for sample in &ref_samples {
+            let our_state: IlluminationState = p
+                .illumination_state(sample.time)
+                .unwrap_or_else(|e| panic!("illumination_state failed at {}: {e}", sample.time));
+            if our_state != sample.state {
+                mismatch_count += 1;
+            }
+        }
+
+        let total_samples: usize = ref_samples.len();
+        let mismatch_frac: f64 = if total_samples > 0 {
+            mismatch_count as f64 / total_samples as f64
+        } else {
+            0.0
+        };
+        if mismatch_frac >= tc.tolerances.max_mismatch_fraction {
+            errors.push(format!(
+                "mismatch fraction {mismatch_frac:.5} >= {} ({mismatch_count}/{total_samples} samples)",
+                tc.tolerances.max_mismatch_fraction,
+            ));
+        }
+
+        illum_reports.push(IlluminationReport {
+            name: tc.name.clone(),
+            tle_id: tc.tle.clone(),
+            window_start,
+            duration_days,
+            step_s,
+            total_samples,
+            mismatch_count,
+            tolerances: tc.tolerances.clone(),
+            errors,
+        });
+    }
+
+    // --- 6. Write and print report ---
+    let report: String = format_report(&transit_reports, &obs_reports, &illum_reports);
     std::fs::write(report_path, &report)
         .unwrap_or_else(|e| eprintln!("warning: could not write report: {e}"));
     println!("{report}");
 
-    // --- 6. Fail if any errors ---
+    // --- 7. Fail if any errors ---
     let all_errors: Vec<String> = transit_reports
         .iter()
         .map(|r| (r.name.as_str(), &r.errors))
         .chain(obs_reports.iter().map(|r| (r.name.as_str(), &r.errors)))
+        .chain(illum_reports.iter().map(|r| (r.name.as_str(), &r.errors)))
         .flat_map(|(name, errs)| errs.iter().map(move |e| format!("[{name}] {e}")))
         .collect();
 
@@ -677,8 +855,8 @@ fn pypredict_validation() {
 #[test]
 fn montecarlo_benchmark() {
     let spec_path = Path::new("tests/data/test_vectors.yaml");
-    let results_path = Path::new("tests/data/pypredict/benchmark_results.json");
-    let report_path = Path::new("tests/data/pypredict/benchmark_report.txt");
+    let results_path = Path::new("tests/data/benchmark_results.json");
+    let report_path = Path::new("tests/data/benchmark_report.txt");
 
     // 1. Parse spec
     let spec_text = std::fs::read_to_string(spec_path).unwrap();
@@ -689,7 +867,7 @@ fn montecarlo_benchmark() {
 
     // 2. Run Python benchmark
     let py_out = std::process::Command::new("uv")
-        .args(["run", "tests/data/pypredict/validation.py", "--benchmark"])
+        .args(["run", "tests/data/validation.py", "--benchmark"])
         .output()
         .expect("failed to run uv");
     assert!(

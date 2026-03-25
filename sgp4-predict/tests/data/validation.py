@@ -3,17 +3,25 @@
 # dependencies = [
 #   "pypredict",
 #   "pyyaml",
+#   "skyfield",
 # ]
 # ///
 """
-Generate transit and observation reference CSVs for every test case in
-test_vectors.yaml using pypredict.
+Generate transit, observation, and illumination reference CSVs for every test
+case in test_vectors.yaml using pypredict (transits/observations) and skyfield
+(illumination).
 
 Usage:
-    uv run tests/data/pypredict/validation.py
+    # Output validation test results
+    uv run tests/data/validation.py
 
-Transit CSVs are written to tests/data/pypredict/transits/{name}.csv.
-Observation CSVs are written to tests/data/pypredict/observations/{name}.csv.
+    # Benchmark performance
+    uv run tests/data/validation.py --benchmarks
+
+
+Transit CSVs are written to tests/data/transits/{name}.csv.
+Observation CSVs are written to tests/data/observations/{name}.csv.
+Illumination CSVs are written to tests/data/illumination/{name}.csv.
 """
 
 import argparse
@@ -27,11 +35,13 @@ from pathlib import Path
 
 import predict
 import yaml
+from skyfield.api import EarthSatellite, Loader
 
 HERE = Path(__file__).parent
-SPEC_FILE = HERE.parent / "test_vectors.yaml"
+SPEC_FILE = HERE / "test_vectors.yaml"
 OUTPUT_DIR = HERE / "transits"
 OBS_DIR = HERE / "observations"
+ILLUM_DIR = HERE / "illumination"
 DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
@@ -40,7 +50,11 @@ def build_sat(tle: dict) -> list[str]:
 
 
 def build_qth(observer: dict) -> tuple:
-    return (observer["latitude_deg"], -observer["longitude_deg"], observer["altitude_m"])
+    return (
+        observer["latitude_deg"],
+        -observer["longitude_deg"],
+        observer["altitude_m"],
+    )
 
 
 def parse_tle_epoch(line_1: str) -> datetime:
@@ -78,13 +92,15 @@ class Transit:
     def write(self, writer: csv.writer) -> None:
         start_iso = self.start.strftime(DATETIME_FMT)
         end_iso = self.end.strftime(DATETIME_FMT)
-        writer.writerow([
-            start_iso,
-            end_iso,
-            signed_az(self.azimuth_aos_deg),
-            signed_az(self.azimuth_los_deg),
-            self.elevation_tca_deg,
-        ])
+        writer.writerow(
+            [
+                start_iso,
+                end_iso,
+                signed_az(self.azimuth_aos_deg),
+                signed_az(self.azimuth_los_deg),
+                self.elevation_tca_deg,
+            ]
+        )
 
 
 @dataclass(frozen=True)
@@ -96,12 +112,23 @@ class Observation:
 
     def write(self, writer: csv.writer) -> None:
         time_iso = self.time.strftime(DATETIME_FMT)
-        writer.writerow([
-            time_iso,
-            signed_az(self.azimuth_deg),
-            self.elevation_deg,
-            self.range_km,
-        ])
+        writer.writerow(
+            [
+                time_iso,
+                signed_az(self.azimuth_deg),
+                self.elevation_deg,
+                self.range_km,
+            ]
+        )
+
+
+@dataclass(frozen=True)
+class IllumSample:
+    time: datetime
+    state: str  # "sunlit" | "eclipse"
+
+    def write(self, writer: csv.writer) -> None:
+        writer.writerow([self.time.strftime(DATETIME_FMT), self.state])
 
 
 def generate_transits(
@@ -112,7 +139,8 @@ def generate_transits(
     min_elevation: float = 0.0,
 ) -> Iterator[Transit]:
     for transit in predict.transits(
-        tle_lines, qth,
+        tle_lines,
+        qth,
         ending_after=start.timestamp(),
         ending_before=end.timestamp(),
     ):
@@ -152,11 +180,31 @@ def generate_observations(
         t += timedelta(seconds=step_s)
 
 
+def generate_illumination(
+    tle: dict,
+    start: datetime,
+    end: datetime,
+    step_s: float = 60.0,
+) -> Iterator[IllumSample]:
+
+    sky_load = Loader(str(HERE))
+    ts = sky_load.timescale()
+    eph = sky_load("de421.bsp")
+    sat = EarthSatellite(tle["line_1"], tle["line_2"], tle["name"], ts)
+    t = start
+    while t < end:
+        sky_t = ts.from_datetime(t)
+        state = "sunlit" if sat.at(sky_t).is_sunlit(eph) else "eclipse"
+        yield IllumSample(t, state)
+        t += timedelta(seconds=step_s)
+
+
 def run_benchmarks(spec: dict) -> None:
     results = {}
     for bc in spec.get("benchmarks", []):
         transit_tc = next(
-            tc for tc in spec["test_cases"]["transits"]
+            tc
+            for tc in spec["test_cases"]["transits"]
             if tc["name"] == bc["transit_case"]
         )
         runs = bc.get("runs", 1000)
@@ -182,9 +230,10 @@ def run_benchmarks(spec: dict) -> None:
     print(f"Benchmark results written to {out_path}")
 
 
-def main(spec: dict) -> None:
+def run_validation(spec: dict) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OBS_DIR.mkdir(parents=True, exist_ok=True)
+    ILLUM_DIR.mkdir(parents=True, exist_ok=True)
 
     tles = spec["tles"]
     observers = spec["observers"]
@@ -198,7 +247,15 @@ def main(spec: dict) -> None:
         min_el = tc.get("min_elevation", 0.0)
         with open(OUTPUT_DIR / f"{tc['name']}.csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["start_time", "end_time", "aos_azimuth_deg", "los_azimuth_deg", "tca_elevation_deg"])
+            writer.writerow(
+                [
+                    "start_time",
+                    "end_time",
+                    "aos_azimuth_deg",
+                    "los_azimuth_deg",
+                    "tca_elevation_deg",
+                ]
+            )
             for t in generate_transits(tle_lines, qth, start, end, min_el):
                 t.write(writer)
 
@@ -214,6 +271,16 @@ def main(spec: dict) -> None:
             for obs in generate_observations(tle_lines, qth, start, end, step_s):
                 obs.write(writer)
 
+    for tc in test_cases.get("illumination", []):
+        tle = tles[tc["tle"]]
+        start, end = resolve_window(tc, tle)
+        step_s = tc.get("step_s", 60.0)
+        with open(ILLUM_DIR / f"{tc['name']}.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["time", "state"])
+            for sample in generate_illumination(tle, start, end, step_s):
+                sample.write(writer)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -223,4 +290,4 @@ if __name__ == "__main__":
     if args.benchmark:
         run_benchmarks(spec)
     else:
-        main(spec)
+        run_validation(spec)

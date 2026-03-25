@@ -6,9 +6,9 @@
   Case      : sentinel-2c-glasgow (1000 runs)
         Impl    Total (ms)      Avg (ms)
   ----------------------------------------
-        Rust        2197.2         2.197
-   pypredict       50166.0        50.166
+        Rust        1847.0         1.847
+   pypredict       40082.1        40.082
   ----------------------------------------
-  Rust is 22.8x faster than pypredict
+  Rust is 21.7x faster than pypredict
 
 ====================================================================
