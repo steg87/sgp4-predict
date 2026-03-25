@@ -82,11 +82,22 @@ impl Predictor {
             sat.line_2().as_bytes(),
         )?;
         let constants = Constants::from_elements(&elements)?;
-        Ok(Self {
+        let predictor = Self {
             elements,
             constants,
             refinement: Refinement::default(),
-        })
+        };
+        let age = predictor.tle_age(Utc::now());
+        tracing::debug!(satellite = sat.id(), epoch = %predictor.epoch(), "predictor initialized");
+        if age > Duration::days(7) {
+            let age_days = age.num_seconds() as f64 / 86_400.0;
+            tracing::warn!(
+                satellite = sat.id(),
+                age_days,
+                "stale TLE, SGP4 accuracy may be degraded"
+            );
+        }
+        Ok(predictor)
     }
 
     /// Set the root-finder configuration used by [`detect_transit`] and [`max_elevation`].
@@ -209,6 +220,7 @@ impl Predictor {
         let mut t_outer = t - STEP;
         let start = loop {
             if t - t_outer > Duration::hours(1) {
+                tracing::warn!(at = %t, "transit start not found within 1 hour");
                 return Err(transits::Error::TransitStartNotFound { at: t }.into());
             }
             let (el, _) = calculate(t_outer)?;
@@ -229,6 +241,7 @@ impl Predictor {
         let mut t_outer = t + STEP;
         let end = loop {
             if t_outer - t > Duration::hours(1) {
+                tracing::warn!(%start, "transit end not found within 1 hour");
                 return Err(transits::Error::TransitEndNotFound { start }.into());
             }
             let (el, _) = calculate(t_outer)?;

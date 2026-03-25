@@ -106,13 +106,21 @@ impl Iterator for ApsisIter {
                             ApsisEvent::Perigee // r·v went negative → positive: perigee
                         };
 
-                        return Some(Ok(Apsis {
+                        let apsis = Apsis {
                             time: refined_dt,
                             event,
                             altitude,
-                        }));
+                        };
+                        tracing::debug!(
+                            event = ?apsis.event,
+                            time = %apsis.time,
+                            altitude_km = apsis.altitude / 1_000.0,
+                            "apsis detected"
+                        );
+                        return Some(Ok(apsis));
                     }
                     Err(e) => {
+                        tracing::warn!(error = %e, "Brent solver failed to refine apsis crossing");
                         self.prev = Some((t_f64, rv));
                         self.next_time += STEP;
                         return Some(Err(Error::Roots(e)));

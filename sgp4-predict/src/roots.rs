@@ -124,6 +124,7 @@ impl Brent {
         let mut fb = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
 
         if fa * fb >= 0.0 {
+            tracing::warn!("Brent solver: root is not bracketed");
             return Err(Error::Unbracketed);
         }
 
@@ -216,12 +217,14 @@ impl Brent {
 
             fb = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
         }
-        Err(Error::FailedToConverge {
+        let err = Error::FailedToConverge {
             iterations: self.max_iter,
             tolerance: self.tolerance,
             result: b,
             error: fb.abs(),
-        })
+        };
+        tracing::warn!(error = %err, "Brent solver failed to converge");
+        Err(err)
     }
 }
 
@@ -269,7 +272,9 @@ impl Refinement {
         match self.newton_raphson.solve(t, &mut f) {
             Ok(root) => return Ok(root),
             Err(e @ Error::CostFn(_)) => return Err(e),
-            Err(_) => {} // convergence failure, fall through to Brent
+            Err(_) => {
+                tracing::debug!("Newton-Raphson failed to converge, falling back to Brent");
+            }
         }
 
         // Fall back to Brent
