@@ -33,6 +33,7 @@ The `sgp4-predict-py/` crate contains Python bindings built with [maturin](https
 ```bash
 cd sgp4-predict-py/
 uv sync --extra dev   # create .venv and install dev dependencies
+make dev              # compile the Rust extension in-place (maturin develop)
 make test             # compile the Rust extension + run pytest
 make stubs            # regenerate _sgp4_predict/__init__.pyi after Rust changes
 make lint             # ruff check + format

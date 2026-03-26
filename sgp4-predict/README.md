@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict)](https://crates.io/crates/sgp4-predict)
 [![docs.rs](https://img.shields.io/docsrs/sgp4-predict)](https://docs.rs/sgp4-predict)
-[![License: MIT](https://img.shields.io/crates/l/sgp4-predict)](../LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)](../LICENSE-MIT)
 
 A Rust library wrapping the [`sgp4`](https://crates.io/crates/sgp4) crate to provide higher-level satellite prediction. Given a TLE, it can propagate state vectors, compute ground observations, iterate over passes, detect apsides, and query illumination.
 
@@ -38,6 +38,28 @@ impl HasTle for MyTle {
 }
 
 let predictor = Predictor::new(&my_tle)?;
+```
+
+### Implementing `Observer`
+
+Pass any type that implements `Observer` as the ground location:
+
+```rust
+use sgp4_predict::Observer;
+
+struct GroundStation {
+    lat_deg: f64,
+    lon_deg: f64,
+    alt_m: f64,
+}
+
+impl Observer for GroundStation {
+    fn latitude_deg(&self) -> f64  { self.lat_deg }
+    fn longitude_deg(&self) -> f64 { self.lon_deg }
+    fn altitude(&self) -> f64      { self.alt_m }
+}
+
+let glasgow = GroundStation { lat_deg: 55.86, lon_deg: -4.25, alt_m: 40.0 };
 ```
 
 ### Predicting passes
@@ -111,22 +133,22 @@ for apsis in predictor.apsis_iter(start..end) {
 
 ## Units
 
-All units in the public API are SI. This means all angles are in **radians**!
+All quantities are SI. Angles follow a consistent convention: **inputs are in degrees, outputs are in radians**, with `_deg` convenience methods provided.
 
-| Quantity             | Unit                      |
-|----------------------|---------------------------|
-| Position             | metres                    |
-| Velocity             | m/s                       |
-| Observer lat/lon     | degrees                   |
-| Observer altitude    | metres                    |
-| Azimuth / elevation  | radians                   |
-| Range                | metres                    |
-| Range rate           | m/s (positive = receding) |
+| Quantity                         | Unit                      |
+|----------------------------------|---------------------------|
+| Position                         | metres                    |
+| Velocity                         | m/s                       |
+| Observer lat/lon (input)         | degrees                   |
+| Observer altitude                | metres                    |
+| `min_elevation_deg` (input)      | degrees                   |
+| Azimuth / elevation (output)     | radians                   |
+| Range                            | metres                    |
+| Range rate                       | m/s (positive = receding) |
 
-Degree convenience methods are available where angles appear in the public API:
+Degree equivalents for output angles:
 
 - `Observation::azimuth_deg()`, `Observation::elevation_deg()`
-- `Observer::latitude_deg()`, `Observer::longitude_deg()` (required by the trait — implement these, radians are derived internally)
 
 ## Examples
 

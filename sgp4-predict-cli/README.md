@@ -1,7 +1,7 @@
 # sgp4-predict-cli
 
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict-cli)](https://crates.io/crates/sgp4-predict-cli)
-[![License: MIT](https://img.shields.io/crates/l/sgp4-predict-cli)](../LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict-cli)](../LICENSE-MIT)
 
 A command-line tool for SGP4 satellite pass prediction. Provides tabular output for transits, observations, state vectors, apsides, and illumination windows.
 
@@ -14,6 +14,8 @@ cargo install sgp4-predict-cli
 ## TLE input
 
 All subcommands accept a TLE via `--tle-file`. If omitted, the tool prompts interactively on stdin.
+
+Fresh TLEs can be obtained from [CelesTrak](https://celestrak.org). SGP4 accuracy degrades with TLE age — for LEO satellites, treat TLEs older than 3–7 days with caution. The tool will warn if the TLE epoch is stale.
 
 **File** (2-line or 3-line format):
 

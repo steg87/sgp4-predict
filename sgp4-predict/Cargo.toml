@@ -3,6 +3,11 @@ name = "sgp4-predict"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "Higher-level satellite pass prediction built on the sgp4 crate — transits, observations, apsides, and illumination"
+repository = "https://github.com/steg87/sgp4-predict"
+readme = "README.md"
+keywords = ["sgp4", "satellite", "tle", "orbital-mechanics", "prediction"]
+categories = ["science", "simulation"]
 
 [features]
 default = []

@@ -1,5 +1,8 @@
 # sgp4-predict — Python bindings
 
+[![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
+[![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](../LICENSE-MIT)
+
 Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library, providing typed satellite pass prediction from Two-Line Element (TLE) data.
 
 ## Installation
