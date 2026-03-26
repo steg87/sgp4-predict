@@ -2,6 +2,7 @@
 name = "sgp4-predict-cli"
 version = "0.1.0"
 edition = "2024"
+description = "Command-line interface for SGP4 satellite pass prediction"
 
 [[bin]]
 name = "sgp4-predict"
