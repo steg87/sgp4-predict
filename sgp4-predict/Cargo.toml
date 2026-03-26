@@ -7,7 +7,7 @@ description = "Higher-level satellite pass prediction built on the sgp4 crate â€
 repository = "https://github.com/steg87/sgp4-predict"
 readme = "README.md"
 keywords = ["sgp4", "satellite", "tle", "orbital-mechanics", "prediction"]
-categories = ["science", "simulation"]
+categories = ["aerospace", "science", "simulation"]
 
 [features]
 default = []
