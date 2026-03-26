@@ -41,7 +41,7 @@ pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<TleSat> {
         [line1, line2] => {
             let norad_id = line1.get(2..7).unwrap_or("").trim();
             let name = if norad_id.is_empty() {
-                String::new()
+                "Unknown".to_string()
             } else {
                 format!("NORAD-{norad_id}")
             };

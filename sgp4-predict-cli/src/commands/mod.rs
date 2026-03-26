@@ -34,9 +34,10 @@ pub fn load_sat(common: &CommonArgs) -> anyhow::Result<tle::TleSat> {
 
 /// Log the TLE age and warn to stderr if it exceeds 7 days.
 pub fn warn_stale_tle(predictor: &Predictor, start: DateTime<Utc>) {
-    let age_days = predictor.tle_age(start).num_days();
+    let age = predictor.tle_age(start);
+    let age_days = age.num_days();
     tracing::info!(tle_age_days = age_days, "predictor ready");
-    if age_days > 7 {
+    if age.num_hours() > 7 * 24 {
         eprintln!("warning: TLE is {age_days} days old; SGP4 accuracy may be degraded");
     }
 }
@@ -50,6 +51,17 @@ pub fn open_writer(out: &Option<PathBuf>) -> anyhow::Result<Box<dyn Write>> {
         ))),
         None => Ok(Box::new(BufWriter::new(std::io::stdout()))),
     }
+}
+
+/// Format observer as a "lat,lon,alt" string for --output-args headers.
+/// Uses the original CLI string if provided, otherwise formats from the parsed observer.
+pub fn format_observer_str(
+    observer_arg: Option<&str>,
+    obs: &crate::observer::GroundObserver,
+) -> String {
+    observer_arg
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{},{},{}", obs.lat_deg, obs.lon_deg, obs.alt_m))
 }
 
 /// Write CLI argument pairs as `# key: value` comment lines.

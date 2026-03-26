@@ -3,7 +3,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser)]
-#[command(name = "sgp4-predict", about = "SGP4 satellite prediction CLI")]
+#[command(
+    name = "sgp4-predict",
+    about = "SGP4 satellite prediction CLI",
+    version
+)]
 pub struct Args {
     #[command(subcommand)]
     pub command: Command,
@@ -26,7 +30,7 @@ pub enum Command {
 /// Arguments shared by all subcommands.
 #[derive(clap::Args)]
 pub struct CommonArgs {
-    /// Start time, e.g. "2026-03-25 10:00:00" or "2026-03-25T10:00:00Z" (default: now)
+    /// Start time, e.g. "2026-03-25 10:00:00" or "2026-03-25T10:00:00Z" (default: now; always interpreted as UTC)
     #[arg(long, value_parser = parse_start_time)]
     pub start: Option<DateTime<Utc>>,
 
