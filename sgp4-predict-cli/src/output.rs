@@ -1,7 +1,61 @@
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
-use sgp4_predict::{Observation, Result as PredictResult, Transit};
+use sgp4_predict::{Apsis, Illumination, Observation, Result as PredictResult, Transit};
 use std::io::Write;
+
+pub fn write_apsides<W, I>(mut w: W, iter: I) -> anyhow::Result<()>
+where
+    W: Write,
+    I: Iterator<Item = PredictResult<Apsis>>,
+{
+    // row width: 24 + (1+10) + (1+14) = 50
+    writeln!(w, "{:<24} {:>10} {:>14}", "time", "event", "altitude [km]")?;
+    writeln!(w, "{}", "-".repeat(50))?;
+
+    for item in iter {
+        let apsis = item.context("apsis detection error")?;
+        writeln!(
+            w,
+            "{:<24} {:>10} {:>14.3}",
+            apsis.time.format("%Y-%m-%dT%H:%M:%SZ"),
+            format!("{:?}", apsis.event),
+            apsis.altitude / 1_000.0,
+        )?;
+    }
+
+    Ok(())
+}
+
+pub fn write_illumination<W, I>(mut w: W, iter: I) -> anyhow::Result<()>
+where
+    W: Write,
+    I: Iterator<Item = PredictResult<Illumination>>,
+{
+    // row width: 24 + (1+24) + (1+10) + (1+10) = 71
+    writeln!(
+        w,
+        "{:<24} {:<24} {:>10} {:>10}",
+        "start", "end", "state", "duration"
+    )?;
+    writeln!(w, "{}", "-".repeat(71))?;
+
+    for item in iter {
+        let window = item.context("illumination detection error")?;
+        let duration_secs = (window.end - window.start).num_seconds().max(0) as u64;
+        let duration_str =
+            humantime::format_duration(std::time::Duration::from_secs(duration_secs)).to_string();
+        writeln!(
+            w,
+            "{:<24} {:<24} {:>10} {:>10}",
+            window.start.format("%Y-%m-%dT%H:%M:%SZ"),
+            window.end.format("%Y-%m-%dT%H:%M:%SZ"),
+            format!("{:?}", window.state),
+            duration_str,
+        )?;
+    }
+
+    Ok(())
+}
 
 pub fn write_state_vectors<W, I>(mut w: W, iter: I) -> anyhow::Result<()>
 where

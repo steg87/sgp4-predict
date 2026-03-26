@@ -16,6 +16,10 @@ pub enum Command {
     Transits(TransitsArgs),
     /// Propagate state vectors over a time interval
     StateVectors(StateVectorsArgs),
+    /// Find apogee and perigee events over a time interval
+    Apsides(ApsidesArgs),
+    /// Find illumination windows (sunlit/eclipse) over a time interval
+    Illumination(IlluminationArgs),
 }
 
 /// Arguments shared by all subcommands.
@@ -84,6 +88,18 @@ pub struct StateVectorsArgs {
 pub enum Frame {
     Teme,
     Ecef,
+}
+
+#[derive(clap::Args)]
+pub struct ApsidesArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+}
+
+#[derive(clap::Args)]
+pub struct IlluminationArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
 }
 
 fn parse_duration(s: &str) -> Result<Duration, String> {

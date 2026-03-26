@@ -18,5 +18,7 @@ fn main() -> anyhow::Result<()> {
         cli::Command::Observations(obs_args) => commands::observations::run(obs_args),
         cli::Command::Transits(transit_args) => commands::transits::run(transit_args),
         cli::Command::StateVectors(sv_args) => commands::state_vectors::run(sv_args),
+        cli::Command::Apsides(args) => commands::apsides::run(args),
+        cli::Command::Illumination(args) => commands::illumination::run(args),
     }
 }
