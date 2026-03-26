@@ -119,11 +119,11 @@ impl FromStr for Tle {
 #[derive(Debug, Clone)]
 pub struct GroundObserver {
     /// Geodetic latitude in degrees (positive north).
-    pub latitude_deg: f64,
+    latitude_deg: f64,
     /// Geodetic longitude in degrees (positive east).
-    pub longitude_deg: f64,
+    longitude_deg: f64,
     /// Height above the WGS-84 ellipsoid in metres.
-    pub altitude: f64,
+    altitude: f64,
 }
 
 impl GroundObserver {
@@ -132,7 +132,7 @@ impl GroundObserver {
     /// - `latitude_deg` — geodetic latitude in degrees (positive north)
     /// - `longitude_deg` — geodetic longitude in degrees (positive east)
     /// - `altitude` — height above the WGS-84 ellipsoid in metres
-    pub fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
+    pub const fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
         Self {
             latitude_deg,
             longitude_deg,

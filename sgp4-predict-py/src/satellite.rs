@@ -57,50 +57,50 @@ impl HasTle for Satellite {
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Clone)]
 pub struct GroundObserver {
-    lat_deg: f64,
-    lon_deg: f64,
-    alt: f64,
+    latitude_deg: f64,
+    longitude_deg: f64,
+    altitude: f64,
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
 impl GroundObserver {
     #[new]
-    pub fn new(lat_deg: f64, lon_deg: f64, altitude: f64) -> Self {
+    pub fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
         Self {
-            lat_deg,
-            lon_deg,
-            alt: altitude,
+            latitude_deg,
+            longitude_deg,
+            altitude,
         }
     }
 
     /// Geodetic latitude in degrees (positive north).
     #[getter]
-    fn lat_deg(&self) -> f64 {
-        self.lat_deg
+    fn latitude_deg(&self) -> f64 {
+        self.latitude_deg
     }
 
     /// Geodetic longitude in degrees (positive east).
     #[getter]
-    fn lon_deg(&self) -> f64 {
-        self.lon_deg
+    fn longitude_deg(&self) -> f64 {
+        self.longitude_deg
     }
 
     /// Height above the WGS-84 ellipsoid in metres.
     #[getter]
     fn altitude(&self) -> f64 {
-        self.alt
+        self.altitude
     }
 }
 
 impl Observer for GroundObserver {
     fn latitude_deg(&self) -> f64 {
-        self.lat_deg
+        self.latitude_deg
     }
     fn longitude_deg(&self) -> f64 {
-        self.lon_deg
+        self.longitude_deg
     }
     fn altitude(&self) -> f64 {
-        self.alt
+        self.altitude
     }
 }

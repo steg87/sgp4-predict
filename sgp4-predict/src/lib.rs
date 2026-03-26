@@ -77,8 +77,8 @@ pub use crate::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, GroundObserver, HasId, HasTle, IlluminationState, Observation, Observer,
-        Predictor, Satellite, Tle, Transit,
+        ApsisEvent, Error, GroundObserver, HasId, HasTle, IlluminationState, Observation, Observer,
+        Predictor, Result, Satellite, Tle, Transit,
     };
 }
 

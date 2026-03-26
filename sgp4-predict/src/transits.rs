@@ -222,11 +222,7 @@ mod tests {
     // --- step_size ---
 
     fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, GroundObserver> {
-        static OBS: GroundObserver = GroundObserver {
-            latitude_deg: 0.0,
-            longitude_deg: 0.0,
-            altitude: 0.0,
-        };
+        static OBS: GroundObserver = GroundObserver::new(0.0, 0.0, 0.0);
         let sat = Tle::new(
             "SENTINEL-2C",
             "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",

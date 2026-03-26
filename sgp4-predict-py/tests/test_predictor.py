@@ -40,8 +40,8 @@ def make_predictor() -> Predictor:
 
 def test_ground_station_round_trip():
     gs = GroundObserver(51.5, -0.1, 10.0)
-    assert abs(gs.lat_deg - 51.5) < 1e-10
-    assert abs(gs.lon_deg - -0.1) < 1e-10
+    assert abs(gs.latitude_deg - 51.5) < 1e-10
+    assert abs(gs.longitude_deg - -0.1) < 1e-10
     assert gs.altitude == 10.0
 
 

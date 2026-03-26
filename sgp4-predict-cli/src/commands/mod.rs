@@ -14,7 +14,7 @@ use std::{
 };
 
 use crate::{cli::CommonArgs, tle};
-use sgp4_predict::{GroundObserver, Tle};
+use sgp4_predict::{GroundObserver, Observer as _, Tle};
 
 /// Resolve the start time and interval from common args.
 pub fn resolve_interval(
@@ -60,7 +60,9 @@ pub fn format_observer_str(observer_arg: Option<&str>, obs: &GroundObserver) -> 
     observer_arg.map(str::to_owned).unwrap_or_else(|| {
         format!(
             "{},{},{}",
-            obs.latitude_deg, obs.longitude_deg, obs.altitude
+            obs.latitude_deg(),
+            obs.longitude_deg(),
+            obs.altitude()
         )
     })
 }
