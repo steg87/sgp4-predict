@@ -1,30 +1,8 @@
 use anyhow::Context as _;
-use sgp4_predict::{HasId, HasTle};
+use sgp4_predict::Tle;
 use std::io::{BufRead as _, Write as _};
 
-pub struct TleSat {
-    pub name: String,
-    pub line1: String,
-    pub line2: String,
-}
-
-impl HasId for TleSat {
-    fn id(&self) -> &str {
-        &self.name
-    }
-}
-
-impl HasTle for TleSat {
-    fn line_1(&self) -> &str {
-        &self.line1
-    }
-
-    fn line_2(&self) -> &str {
-        &self.line2
-    }
-}
-
-pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<TleSat> {
+pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<Tle> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read TLE file {}", path.display()))?;
     let lines: Vec<&str> = content
@@ -33,11 +11,7 @@ pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<TleSat> {
         .filter(|l| !l.is_empty())
         .collect();
     match lines.as_slice() {
-        [name, line1, line2] => Ok(TleSat {
-            name: name.to_string(),
-            line1: line1.to_string(),
-            line2: line2.to_string(),
-        }),
+        [name, line1, line2] => Ok(Tle::new(*name, *line1, *line2)),
         [line1, line2] => {
             let norad_id = line1.get(2..7).unwrap_or("").trim();
             let name = if norad_id.is_empty() {
@@ -45,11 +19,7 @@ pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<TleSat> {
             } else {
                 format!("NORAD-{norad_id}")
             };
-            Ok(TleSat {
-                name,
-                line1: line1.to_string(),
-                line2: line2.to_string(),
-            })
+            Ok(Tle::new(name, *line1, *line2))
         }
         _ => anyhow::bail!(
             "TLE file must contain 2 or 3 non-empty lines, found {}",
@@ -58,7 +28,7 @@ pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<TleSat> {
     }
 }
 
-pub fn prompt_tle() -> anyhow::Result<TleSat> {
+pub fn prompt_tle() -> anyhow::Result<Tle> {
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
 
@@ -77,7 +47,7 @@ pub fn prompt_tle() -> anyhow::Result<TleSat> {
         name_input
     };
 
-    Ok(TleSat { name, line1, line2 })
+    Ok(Tle::new(name, line1, line2))
 }
 
 fn prompt_line(

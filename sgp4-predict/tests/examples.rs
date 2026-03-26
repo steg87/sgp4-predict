@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{IlluminationState, Predictor, Transit};
+use sgp4_predict::{GroundObserver, IlluminationState, Predictor, Transit};
 
 /// Check if a transit is in progress at a given time, and determine that start and end bounds if
 /// so.
@@ -9,7 +9,7 @@ use sgp4_predict::{IlluminationState, Predictor, Transit};
 fn detect_current_transit() {
     let tle = common::create_tle();
     let p = Predictor::new(&tle).unwrap();
-    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(1);
@@ -61,7 +61,7 @@ fn detect_current_transit() {
 fn next_ground_station_pass_observations() {
     let tle = common::create_tle();
     let p = Predictor::new(&tle).unwrap();
-    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(1);

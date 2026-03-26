@@ -1,13 +1,13 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::Predictor;
+use sgp4_predict::{GroundObserver, Predictor};
 
 #[test]
 fn test_transits() {
     let tle = common::create_tle();
     let p = Predictor::new(&tle).unwrap();
-    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
     let transits = p
         .transits_iter(
             &gs,
@@ -36,7 +36,7 @@ fn test_transit_start_inside_interval() {
     // excluded. Only transits whose AOS falls within the window are returned.
     let tle = common::create_tle();
     let p = Predictor::new(&tle).unwrap();
-    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     // Find the first two transits over a wide window.
     let wide_start = common::datetime("2025-12-20T12:00:00Z");
@@ -88,7 +88,7 @@ fn test_transit_start_inside_interval() {
 fn test_detect_transit() {
     let tle = common::create_tle();
     let p = Predictor::new(&tle).unwrap();
-    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     // Find the first transit via the iterator (ground truth).
     let transits = p
@@ -145,9 +145,9 @@ fn test_transits_to_csv() {
     use std::io::Write;
 
     let tle = common::create_tle();
-    let sat_id = tle.satellite.clone();
+    let sat_id = tle.satellite_name.clone();
     let p = Predictor::new(&tle).unwrap();
-    let gs = common::GroundStation::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(3);

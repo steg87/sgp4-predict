@@ -14,6 +14,7 @@ use std::{
 };
 
 use crate::{cli::CommonArgs, tle};
+use sgp4_predict::{GroundObserver, Observer as _, Tle};
 
 /// Resolve the start time and interval from common args.
 pub fn resolve_interval(
@@ -25,7 +26,7 @@ pub fn resolve_interval(
 }
 
 /// Load a TLE from file or prompt interactively.
-pub fn load_sat(common: &CommonArgs) -> anyhow::Result<tle::TleSat> {
+pub fn load_tle(common: &CommonArgs) -> anyhow::Result<Tle> {
     match &common.tle_file {
         Some(p) => tle::parse_tle_file(p),
         None => tle::prompt_tle(),
@@ -55,13 +56,15 @@ pub fn open_writer(out: &Option<PathBuf>) -> anyhow::Result<Box<dyn Write>> {
 
 /// Format observer as a "lat,lon,alt" string for --output-args headers.
 /// Uses the original CLI string if provided, otherwise formats from the parsed observer.
-pub fn format_observer_str(
-    observer_arg: Option<&str>,
-    obs: &crate::observer::GroundObserver,
-) -> String {
-    observer_arg
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("{},{},{}", obs.lat_deg, obs.lon_deg, obs.alt_m))
+pub fn format_observer_str(observer_arg: Option<&str>, obs: &GroundObserver) -> String {
+    observer_arg.map(str::to_owned).unwrap_or_else(|| {
+        format!(
+            "{},{},{}",
+            obs.latitude_deg(),
+            obs.longitude_deg(),
+            obs.altitude()
+        )
+    })
 }
 
 /// Write CLI argument pairs as `# key: value` comment lines.

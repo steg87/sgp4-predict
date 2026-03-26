@@ -1,5 +1,8 @@
 # sgp4-predict — Python bindings
 
+[![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
+[![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](../LICENSE-MIT)
+
 Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library, providing typed satellite pass prediction from Two-Line Element (TLE) data.
 
 ## Installation
@@ -14,7 +17,7 @@ Requires Python 3.10+.
 
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import Satellite, GroundStation, Predictor, Interval
+from sgp4_predict import Satellite, GroundObserver, Predictor, Interval
 
 # Sentinel-2C TLE
 sat = Satellite(
@@ -26,7 +29,7 @@ sat = Satellite(
 predictor = Predictor(sat)
 
 # Ground station: Glasgow
-glasgow = GroundStation(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
+glasgow = GroundObserver(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
 
 # Find passes over the next 24 hours
 window = Interval(
@@ -53,16 +56,16 @@ TLEs are the standard input format for SGP4 propagation. Fresh TLEs can be obtai
 
 All values are in SI units unless noted otherwise:
 
-| Quantity | Unit |
-|---|---|
-| Position | metres |
-| Velocity | m/s |
-| Range | metres |
-| Range rate | m/s (positive = receding) |
-| Azimuth / elevation | radians (use `_deg` properties for degrees) |
-| Altitude (apsis) | metres above WGS-84 equatorial radius |
-| `GroundStation` lat/lon input | degrees |
-| `GroundStation` altitude input | metres |
+| Quantity                       | Unit                                        |
+|--------------------------------|---------------------------------------------|
+| Position                       | metres                                      |
+| Velocity                       | m/s                                         |
+| Range                          | metres                                      |
+| Range rate                     | m/s (positive = receding)                   |
+| Azimuth / elevation            | radians (use `_deg` properties for degrees) |
+| Altitude (apsis)               | metres above WGS-84 equatorial radius       |
+| `GroundObserver` lat/lon input  | degrees                                     |
+| `GroundObserver` altitude input | metres                                      |
 
 ## API reference
 
@@ -87,19 +90,19 @@ assert isinstance(transit, IntervalRange)  # True — Transit satisfies the prot
 Holds the raw TLE strings. No parsing happens here.
 
 ```python
-sat = Satellite(id="ISS", line1="1 25544U ...", line2="2 25544 ...")
+sat = Satellite(id="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
 
 sat.id      # str
-sat.line1   # str
-sat.line2   # str
+sat.line_1  # str
+sat.line_2  # str
 ```
 
-### `GroundStation`
+### `GroundObserver`
 
 A fixed point on Earth's surface. Lat/lon are accepted in degrees.
 
 ```python
-gs = GroundStation(lat_deg=51.5, lon_deg=-0.1, altitude=10.0)
+gs = GroundObserver(lat_deg=51.5, lon_deg=-0.1, altitude=10.0)
 
 gs.lat_deg   # float — geodetic latitude (degrees, positive north)
 gs.lon_deg   # float — geodetic longitude (degrees, positive east)
@@ -205,13 +208,10 @@ transit.duration_seconds  # float
 Point observation from a ground station.
 
 ```python
-obs.azimuth       # float — radians, 0 = North, clockwise
-obs.elevation     # float — radians above horizon
+obs.azimuth_deg   # float — degrees, 0 = North, clockwise
+obs.elevation_deg # float — degrees above horizon
 obs.range         # float — metres
 obs.range_rate    # float — m/s, positive = receding
-
-obs.azimuth_deg   # float — degrees
-obs.elevation_deg # float — degrees
 ```
 
 #### `Apsis` and `ApsisEvent`
@@ -243,8 +243,8 @@ window.duration_seconds  # float
 
 ```python
 sv_teme = p.propagate(t)          # StateVectorTeme
-sv_ecef = sv_teme.to_ecef(t)     # StateVectorEcef  (GMST rotation)
-sv_enu  = sv_ecef.to_enu(gs)     # StateVectorEnu   (geodetic to local ENU)
+sv_ecef = sv_teme.to_ecef(t)      # StateVectorEcef  (GMST rotation)
+sv_enu  = sv_ecef.to_enu(gs)      # StateVectorEnu   (geodetic to local ENU)
 obs     = sv_enu.to_observation() # Observation
 
 # Equivalent shorthand:

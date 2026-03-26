@@ -7,16 +7,16 @@ use sgp4_predict::{HasId, HasTle, Observer};
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
 pub struct Satellite {
     id: String,
-    line1: String,
-    line2: String,
+    line_1: String,
+    line_2: String,
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
 impl Satellite {
     #[new]
-    pub fn new(id: String, line1: String, line2: String) -> Self {
-        Self { id, line1, line2 }
+    pub fn new(id: String, line_1: String, line_2: String) -> Self {
+        Self { id, line_1, line_2 }
     }
 
     #[getter]
@@ -25,13 +25,13 @@ impl Satellite {
     }
 
     #[getter]
-    fn line1(&self) -> &str {
-        &self.line1
+    fn line_1(&self) -> &str {
+        &self.line_1
     }
 
     #[getter]
-    fn line2(&self) -> &str {
-        &self.line2
+    fn line_2(&self) -> &str {
+        &self.line_2
     }
 }
 
@@ -43,10 +43,10 @@ impl HasId for Satellite {
 
 impl HasTle for Satellite {
     fn line_1(&self) -> &str {
-        &self.line1
+        &self.line_1
     }
     fn line_2(&self) -> &str {
-        &self.line2
+        &self.line_2
     }
 }
 
@@ -56,51 +56,51 @@ impl HasTle for Satellite {
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Clone)]
-pub struct GroundStation {
-    lat_deg: f64,
-    lon_deg: f64,
-    alt: f64,
+pub struct GroundObserver {
+    latitude_deg: f64,
+    longitude_deg: f64,
+    altitude: f64,
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
-impl GroundStation {
+impl GroundObserver {
     #[new]
-    pub fn new(lat_deg: f64, lon_deg: f64, altitude: f64) -> Self {
+    pub fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
         Self {
-            lat_deg,
-            lon_deg,
-            alt: altitude,
+            latitude_deg,
+            longitude_deg,
+            altitude,
         }
     }
 
     /// Geodetic latitude in degrees (positive north).
     #[getter]
-    fn lat_deg(&self) -> f64 {
-        self.lat_deg
+    fn latitude_deg(&self) -> f64 {
+        self.latitude_deg
     }
 
     /// Geodetic longitude in degrees (positive east).
     #[getter]
-    fn lon_deg(&self) -> f64 {
-        self.lon_deg
+    fn longitude_deg(&self) -> f64 {
+        self.longitude_deg
     }
 
     /// Height above the WGS-84 ellipsoid in metres.
     #[getter]
     fn altitude(&self) -> f64 {
-        self.alt
+        self.altitude
     }
 }
 
-impl Observer for GroundStation {
+impl Observer for GroundObserver {
     fn latitude_deg(&self) -> f64 {
-        self.lat_deg
+        self.latitude_deg
     }
     fn longitude_deg(&self) -> f64 {
-        self.lon_deg
+        self.longitude_deg
     }
     fn altitude(&self) -> f64 {
-        self.alt
+        self.altitude
     }
 }

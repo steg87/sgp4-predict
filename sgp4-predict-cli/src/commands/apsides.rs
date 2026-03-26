@@ -1,12 +1,12 @@
 use sgp4_predict::Predictor;
 
-use super::{load_sat, open_writer, resolve_interval, warn_stale_tle, write_args_header};
+use super::{load_tle, open_writer, resolve_interval, warn_stale_tle, write_args_header};
 use crate::{cli::ApsidesArgs, output};
 
 pub fn run(args: ApsidesArgs) -> anyhow::Result<()> {
     let (start, interval) = resolve_interval(&args.common)?;
-    let sat = load_sat(&args.common)?;
-    let predictor = Predictor::new(&sat)?;
+    let tle = load_tle(&args.common)?;
+    let predictor = Predictor::new(&tle)?;
     warn_stale_tle(&predictor, start);
     let mut writer = open_writer(&args.common.out)?;
 
@@ -17,9 +17,9 @@ pub fn run(args: ApsidesArgs) -> anyhow::Result<()> {
             &mut *writer,
             &[
                 ("command", "apsides"),
-                ("satellite", &sat.name),
-                ("tle-line1", &sat.line1),
-                ("tle-line2", &sat.line2),
+                ("satellite", &tle.satellite_name),
+                ("tle-line1", &tle.line_1),
+                ("tle-line2", &tle.line_2),
                 ("start", &start_str),
                 ("duration", &duration_str),
             ],

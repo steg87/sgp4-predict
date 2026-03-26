@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sgp4_predict import (
     ApsisEvent,
-    GroundStation,
+    GroundObserver,
     IlluminationState,
     Interval,
     IntervalRange,
@@ -24,7 +24,7 @@ TLE_L1 = "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
 TLE_L2 = "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
 
 # Glasgow (matches tests/common/mod.rs ground station)
-GLASGOW = GroundStation(55.86, -4.25, 40.0)
+GLASGOW = GroundObserver(55.86, -4.25, 40.0)
 
 START = datetime(2025, 12, 22, tzinfo=timezone.utc)
 END = START + timedelta(days=1)
@@ -35,13 +35,13 @@ def make_predictor() -> Predictor:
     return Predictor(Satellite(TLE_ID, TLE_L1, TLE_L2))
 
 
-# ── GroundStation ──────────────────────────────────────────────────────────────
+# ── GroundObserver ──────────────────────────────────────────────────────────────
 
 
 def test_ground_station_round_trip():
-    gs = GroundStation(51.5, -0.1, 10.0)
-    assert abs(gs.lat_deg - 51.5) < 1e-10
-    assert abs(gs.lon_deg - -0.1) < 1e-10
+    gs = GroundObserver(51.5, -0.1, 10.0)
+    assert abs(gs.latitude_deg - 51.5) < 1e-10
+    assert abs(gs.longitude_deg - -0.1) < 1e-10
     assert gs.altitude == 10.0
 
 
@@ -83,8 +83,8 @@ def test_observe_at_fields_are_finite():
     # Pick a time when we know there's a transit (from transits test)
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
     obs = p.observe_at(t, GLASGOW)
-    assert math.isfinite(obs.azimuth)
-    assert math.isfinite(obs.elevation)
+    assert math.isfinite(obs.azimuth_deg)
+    assert math.isfinite(obs.elevation_deg)
     assert math.isfinite(obs.range)
     assert math.isfinite(obs.range_rate)
     assert obs.range > 0
@@ -94,8 +94,8 @@ def test_observe_at_degrees_properties():
     p = make_predictor()
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
     obs = p.observe_at(t, GLASGOW)
-    assert abs(obs.azimuth_deg - math.degrees(obs.azimuth)) < 1e-10
-    assert abs(obs.elevation_deg - math.degrees(obs.elevation)) < 1e-10
+    assert 0.0 <= obs.azimuth_deg < 360.0
+    assert -90.0 <= obs.elevation_deg <= 90.0
 
 
 # ── transits_iter ─────────────────────────────────────────────────────────────
@@ -240,8 +240,8 @@ def test_coordinate_chain():
     obs_chain = p.propagate(t).to_ecef(t).to_enu(GLASGOW).to_observation()
     obs_direct = p.observe_at(t, GLASGOW)
 
-    assert abs(obs_chain.azimuth - obs_direct.azimuth) < 1e-10
-    assert abs(obs_chain.elevation - obs_direct.elevation) < 1e-10
+    assert abs(obs_chain.azimuth_deg - obs_direct.azimuth_deg) < 1e-8
+    assert abs(obs_chain.elevation_deg - obs_direct.elevation_deg) < 1e-8
     assert abs(obs_chain.range - obs_direct.range) < 1e-3
 
 

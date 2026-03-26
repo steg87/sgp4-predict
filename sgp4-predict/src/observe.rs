@@ -143,34 +143,13 @@ impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct TestObserver {
-        lat_deg: f64,
-        lon_deg: f64,
-        alt: f64,
-    }
-
-    impl Observer for TestObserver {
-        fn latitude_deg(&self) -> f64 {
-            self.lat_deg
-        }
-        fn longitude_deg(&self) -> f64 {
-            self.lon_deg
-        }
-        fn altitude(&self) -> f64 {
-            self.alt
-        }
-    }
+    use crate::types::GroundObserver;
 
     #[test]
     fn test_to_ecef_equator_prime_meridian() {
         // At lat=0°, lon=0°, alt=0 the ECEF position is exactly [a, 0, 0]
         // where a = 6 378 137 m (WGS-84 semi-major axis).
-        let obs = TestObserver {
-            lat_deg: 0.0,
-            lon_deg: 0.0,
-            alt: 0.0,
-        };
+        let obs = GroundObserver::new(0.0, 0.0, 0.0);
         let ecef = obs.to_ecef();
         assert!((ecef.position.x - 6_378_137.0).abs() < 1.0);
         assert!(ecef.position.y.abs() < 1e-6);
@@ -181,11 +160,7 @@ mod tests {
     fn test_to_ecef_north_pole() {
         // At the geographic north pole the ECEF position is [0, 0, b]
         // where b ≈ 6 356 752.314 m (WGS-84 semi-minor axis).
-        let obs = TestObserver {
-            lat_deg: 90.0,
-            lon_deg: 0.0,
-            alt: 0.0,
-        };
+        let obs = GroundObserver::new(90.0, 0.0, 0.0);
         let ecef = obs.to_ecef();
         assert!(ecef.position.x.abs() < 1.0);
         assert!(ecef.position.y.abs() < 1e-6);
@@ -199,11 +174,7 @@ mod tests {
     #[test]
     fn test_to_ecef_velocity_is_zero() {
         // A stationary ground observer has no velocity in ECEF.
-        let obs = TestObserver {
-            lat_deg: 28.6,
-            lon_deg: 77.2,
-            alt: 100.0,
-        };
+        let obs = GroundObserver::new(28.6, 77.2, 100.0);
         let ecef = obs.to_ecef();
         assert_eq!(ecef.velocity.x, 0.0);
         assert_eq!(ecef.velocity.y, 0.0);
