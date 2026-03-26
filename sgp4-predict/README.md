@@ -113,15 +113,15 @@ for apsis in predictor.apsis_iter(start..end) {
 
 All units in the public API are SI. This means all angles are in **radians**!
 
-| Quantity | Unit |
-|---|---|
-| Position | metres |
-| Velocity | m/s |
-| Observer lat/lon | degrees |
-| Observer altitude | metres |
-| Azimuth / elevation | radians |
-| Range | metres |
-| Range rate | m/s (positive = receding) |
+| Quantity             | Unit                      |
+|----------------------|---------------------------|
+| Position             | metres                    |
+| Velocity             | m/s                       |
+| Observer lat/lon     | degrees                   |
+| Observer altitude    | metres                    |
+| Azimuth / elevation  | radians                   |
+| Range                | metres                    |
+| Range rate           | m/s (positive = receding) |
 
 Degree convenience methods are available where angles appear in the public API:
 

@@ -2,6 +2,7 @@
 name = "sgp4-predict-cli"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 description = "Command-line interface for SGP4 satellite pass prediction"
 
 [[bin]]
