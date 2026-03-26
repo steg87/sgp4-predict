@@ -62,23 +62,17 @@ pub fn prompt_tle() -> anyhow::Result<TleSat> {
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
 
+    let name_input = prompt_line(&mut lines, "Satellite name (leave blank to skip): ")?;
     let line1 = prompt_line(&mut lines, "TLE line 1: ")?;
     let line2 = prompt_line(&mut lines, "TLE line 2: ")?;
 
-    let norad_id = line1.get(2..7).unwrap_or("").trim().to_string();
-    let fallback = if norad_id.is_empty() {
-        String::new()
-    } else {
-        format!("NORAD-{norad_id}")
-    };
-    let name_prompt = if fallback.is_empty() {
-        "Satellite name (optional, press Enter to skip): ".to_string()
-    } else {
-        format!("Satellite name (press Enter to use {fallback}): ")
-    };
-    let name_input = prompt_line(&mut lines, &name_prompt)?;
     let name = if name_input.is_empty() {
-        fallback
+        let norad_id = line1.get(2..7).unwrap_or("").trim().to_string();
+        if norad_id.is_empty() {
+            "Unknown".to_string()
+        } else {
+            format!("NORAD-{norad_id}")
+        }
     } else {
         name_input
     };
