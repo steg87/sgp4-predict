@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use sgp4_predict::GroundStation;
+use sgp4_predict::GroundObserver;
 use std::io::{BufRead as _, Write as _};
 
 fn validate_observer(lat_deg: f64, lon_deg: f64) -> anyhow::Result<()> {
@@ -14,7 +14,7 @@ fn validate_observer(lat_deg: f64, lon_deg: f64) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn parse_observer(s: &str) -> anyhow::Result<GroundStation> {
+pub fn parse_observer(s: &str) -> anyhow::Result<GroundObserver> {
     let parts: Vec<&str> = s.split(',').collect();
     match parts.as_slice() {
         [lat, lon, alt] => {
@@ -31,13 +31,13 @@ pub fn parse_observer(s: &str) -> anyhow::Result<GroundStation> {
                 .parse::<f64>()
                 .map_err(|_| anyhow::anyhow!("invalid altitude: {alt}"))?;
             validate_observer(lat_deg, lon_deg)?;
-            Ok(GroundStation::new(lat_deg, lon_deg, alt_m))
+            Ok(GroundObserver::new(lat_deg, lon_deg, alt_m))
         }
         _ => anyhow::bail!("observer must be 'lat,lon,alt' — got: {s}"),
     }
 }
 
-pub fn prompt_observer() -> anyhow::Result<GroundStation> {
+pub fn prompt_observer() -> anyhow::Result<GroundObserver> {
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
 
@@ -46,7 +46,7 @@ pub fn prompt_observer() -> anyhow::Result<GroundStation> {
     let alt_m = prompt_f64(&mut lines, "Observer altitude (metres): ")?;
 
     validate_observer(lat_deg, lon_deg)?;
-    Ok(GroundStation::new(lat_deg, lon_deg, alt_m))
+    Ok(GroundObserver::new(lat_deg, lon_deg, alt_m))
 }
 
 fn prompt_f64(

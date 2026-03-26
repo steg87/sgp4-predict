@@ -111,13 +111,13 @@ impl FromStr for Tle {
 /// # Example
 ///
 /// ```
-/// use sgp4_predict::GroundStation;
+/// use sgp4_predict::GroundObserver;
 ///
 /// // London, ~20 m ASL
-/// let london = GroundStation::new(51.5074, -0.1278, 20.0);
+/// let london = GroundObserver::new(51.5074, -0.1278, 20.0);
 /// ```
 #[derive(Debug, Clone)]
-pub struct GroundStation {
+pub struct GroundObserver {
     /// Geodetic latitude in degrees (positive north).
     pub latitude_deg: f64,
     /// Geodetic longitude in degrees (positive east).
@@ -126,8 +126,8 @@ pub struct GroundStation {
     pub altitude: f64,
 }
 
-impl GroundStation {
-    /// Construct a [`GroundStation`].
+impl GroundObserver {
+    /// Construct a [`GroundObserver`].
     ///
     /// - `latitude_deg` — geodetic latitude in degrees (positive north)
     /// - `longitude_deg` — geodetic longitude in degrees (positive east)
@@ -141,7 +141,7 @@ impl GroundStation {
     }
 }
 
-impl Observer for GroundStation {
+impl Observer for GroundObserver {
     fn latitude_deg(&self) -> f64 {
         self.latitude_deg
     }

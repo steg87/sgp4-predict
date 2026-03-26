@@ -5,7 +5,7 @@ use pyo3_stub_gen::derive::*;
 
 use crate::{
     errors::to_py_err,
-    satellite::{GroundStation, Satellite},
+    satellite::{GroundObserver, Satellite},
     types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
     vectors::StateVectorTeme,
 };
@@ -163,13 +163,13 @@ impl IlluminationIter {
 
 // ── TransitIter ────────────────────────────────────────────────────────────────
 
-// Self-referential struct: owns the GroundStation and the TransitIter that borrows it.
+// Self-referential struct: owns the GroundObserver and the TransitIter that borrows it.
 #[self_referencing]
 struct TransitIterOwned {
-    observer: GroundStation,
+    observer: GroundObserver,
     #[borrows(observer)]
     #[covariant]
-    iter: sgp4_predict::TransitIter<'this, GroundStation>,
+    iter: sgp4_predict::TransitIter<'this, GroundObserver>,
 }
 
 /// Lazy iterator yielding satellite passes visible to an observer.
@@ -200,13 +200,13 @@ impl TransitIter {
 
 // ── ObservationIter ────────────────────────────────────────────────────────────
 
-// Self-referential struct: owns the GroundStation and the ObservationIter that borrows it.
+// Self-referential struct: owns the GroundObserver and the ObservationIter that borrows it.
 #[self_referencing]
 struct ObservationIterOwned {
-    observer: GroundStation,
+    observer: GroundObserver,
     #[borrows(observer)]
     #[covariant]
-    iter: sgp4_predict::ObservationIter<'this, GroundStation>,
+    iter: sgp4_predict::ObservationIter<'this, GroundObserver>,
 }
 
 /// Lazy iterator yielding time-stamped observations at regular intervals.
@@ -283,7 +283,7 @@ impl Predictor {
     }
 
     /// Calculate the observation from an observer at the given UTC time.
-    fn observe_at(&self, t: DateTime<Utc>, observer: &GroundStation) -> PyResult<Observation> {
+    fn observe_at(&self, t: DateTime<Utc>, observer: &GroundObserver) -> PyResult<Observation> {
         self.inner
             .observe_at(t, observer)
             .map(Observation::from_inner)
@@ -311,7 +311,7 @@ impl Predictor {
     /// Pass an `Interval`, `Transit`, or `Illumination` object.
     fn observation_iter(
         &self,
-        observer: &GroundStation,
+        observer: &GroundObserver,
         interval: &Bound<'_, PyAny>,
         step: Duration,
     ) -> PyResult<ObservationIter> {
@@ -333,7 +333,7 @@ impl Predictor {
     /// `min_elevation_deg`: minimum elevation above the horizon in degrees.
     fn transits_iter(
         &self,
-        observer: &GroundStation,
+        observer: &GroundObserver,
         interval: &Bound<'_, PyAny>,
         min_elevation_deg: f64,
     ) -> PyResult<TransitIter> {
@@ -378,7 +378,7 @@ impl Predictor {
     fn detect_transit(
         &self,
         t: DateTime<Utc>,
-        observer: &GroundStation,
+        observer: &GroundObserver,
         min_elevation_deg: f64,
     ) -> PyResult<Option<Transit>> {
         self.inner
@@ -399,7 +399,7 @@ impl Predictor {
     /// Raises `RuntimeError` if no peak is found in the interval.
     fn max_elevation(
         &self,
-        observer: &GroundStation,
+        observer: &GroundObserver,
         interval: &Bound<'_, PyAny>,
     ) -> PyResult<(DateTime<Utc>, Observation)> {
         let (start, end) = extract_interval(interval)?;

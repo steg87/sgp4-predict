@@ -8,7 +8,7 @@
 //! # Quick start
 //!
 //! ```no_run
-//! use sgp4_predict::{GroundStation, Predictor, Tle};
+//! use sgp4_predict::{GroundObserver, Predictor, Tle};
 //! use chrono::{Duration, Utc};
 //!
 //! let tle: Tle = "\
@@ -19,7 +19,7 @@
 //!     .unwrap();
 //!
 //! let predictor = Predictor::new(&tle).unwrap();
-//! let glasgow = GroundStation::new(55.86, -4.25, 40.0);
+//! let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
 //!
 //! let start = Utc::now();
 //! let end = start + Duration::days(1);
@@ -35,7 +35,7 @@
 //! If your application already has types that hold TLE data or coordinates,
 //! implement [`HasId`] + [`HasTle`] (which together satisfy [`Satellite`]
 //! automatically) and [`Observer`] instead of converting to [`Tle`] /
-//! [`GroundStation`]. See the trait docs for details.
+//! [`GroundObserver`]. See the trait docs for details.
 //!
 //! # Units
 //!
@@ -66,7 +66,7 @@ pub use crate::{
     roots::{Brent, NewtonRaphson, Refinement},
     time::{DateTimeIter, IntervalRange},
     transits::{Transit, TransitIter},
-    types::{GroundStation, Tle, TleParseError},
+    types::{GroundObserver, Tle, TleParseError},
     vectors::{Position, StateVector, Velocity},
 };
 
@@ -77,7 +77,7 @@ pub use crate::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, GroundStation, HasId, HasTle, IlluminationState, Observation, Observer,
+        ApsisEvent, GroundObserver, HasId, HasTle, IlluminationState, Observation, Observer,
         Predictor, Satellite, Tle, Transit,
     };
 }

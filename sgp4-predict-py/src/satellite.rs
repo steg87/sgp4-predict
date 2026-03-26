@@ -56,7 +56,7 @@ impl HasTle for Satellite {
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Clone)]
-pub struct GroundStation {
+pub struct GroundObserver {
     lat_deg: f64,
     lon_deg: f64,
     alt: f64,
@@ -64,7 +64,7 @@ pub struct GroundStation {
 
 #[gen_stub_pymethods]
 #[pymethods]
-impl GroundStation {
+impl GroundObserver {
     #[new]
     pub fn new(lat_deg: f64, lon_deg: f64, altitude: f64) -> Self {
         Self {
@@ -93,7 +93,7 @@ impl GroundStation {
     }
 }
 
-impl Observer for GroundStation {
+impl Observer for GroundObserver {
     fn latitude_deg(&self) -> f64 {
         self.lat_deg
     }

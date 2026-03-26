@@ -216,13 +216,13 @@ enum TransitState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Predictor, types::GroundStation, types::Tle};
+    use crate::{Predictor, types::GroundObserver, types::Tle};
     use chrono::{TimeZone, Utc};
 
     // --- step_size ---
 
-    fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, GroundStation> {
-        static OBS: GroundStation = GroundStation {
+    fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, GroundObserver> {
+        static OBS: GroundObserver = GroundObserver {
             latitude_deg: 0.0,
             longitude_deg: 0.0,
             altitude: 0.0,

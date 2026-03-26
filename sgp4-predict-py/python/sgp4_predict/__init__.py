@@ -3,7 +3,7 @@ from typing import Protocol, runtime_checkable
 
 from sgp4_predict._sgp4_predict import (
     Satellite,
-    GroundStation,
+    GroundObserver,
     Vec3,
     StateVectorTeme,
     StateVectorEcef,
@@ -54,7 +54,7 @@ class Interval:
 
 __all__ = [
     "Satellite",
-    "GroundStation",
+    "GroundObserver",
     "Vec3",
     "StateVectorTeme",
     "StateVectorEcef",

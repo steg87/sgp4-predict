@@ -15,10 +15,10 @@ Add to your `Cargo.toml`:
 sgp4-predict = "0.1"
 ```
 
-The built-in [`Tle`] and [`GroundStation`] types get you up and running immediately:
+The built-in [`Tle`] and [`GroundObserver`] types get you up and running immediately:
 
 ```rust
-use sgp4_predict::{GroundStation, Predictor, Tle};
+use sgp4_predict::{GroundObserver, Predictor, Tle};
 use chrono::{Duration, Utc};
 
 // Parse a 3-line element set (name + two TLE lines)
@@ -34,7 +34,7 @@ let tle = Tle::new("SENTINEL-2C", line_1, line_2);
 let predictor = Predictor::new(&tle)?;
 
 // Glasgow ground station: lat/lon in degrees, altitude in metres
-let glasgow = GroundStation::new(55.86, -4.25, 40.0);
+let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
 
 let start = Utc::now();
 let end = start + Duration::days(1);
@@ -100,7 +100,7 @@ for apsis in predictor.apsis_iter(start..end) {
 
 ## Custom satellite and observer types
 
-If your application already has types that hold TLE data or ground station coordinates, you can implement the traits directly rather than converting to `Tle` / `GroundStation`:
+If your application already has types that hold TLE data or ground station coordinates, you can implement the traits directly rather than converting to `Tle` / `GroundObserver`:
 
 ```rust
 use sgp4_predict::{HasId, HasTle, Observer, Predictor};

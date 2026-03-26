@@ -17,7 +17,7 @@ Requires Python 3.10+.
 
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import Satellite, GroundStation, Predictor, Interval
+from sgp4_predict import Satellite, GroundObserver, Predictor, Interval
 
 # Sentinel-2C TLE
 sat = Satellite(
@@ -29,7 +29,7 @@ sat = Satellite(
 predictor = Predictor(sat)
 
 # Ground station: Glasgow
-glasgow = GroundStation(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
+glasgow = GroundObserver(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
 
 # Find passes over the next 24 hours
 window = Interval(
@@ -64,8 +64,8 @@ All values are in SI units unless noted otherwise:
 | Range rate                     | m/s (positive = receding)                   |
 | Azimuth / elevation            | radians (use `_deg` properties for degrees) |
 | Altitude (apsis)               | metres above WGS-84 equatorial radius       |
-| `GroundStation` lat/lon input  | degrees                                     |
-| `GroundStation` altitude input | metres                                      |
+| `GroundObserver` lat/lon input  | degrees                                     |
+| `GroundObserver` altitude input | metres                                      |
 
 ## API reference
 
@@ -97,12 +97,12 @@ sat.line_1  # str
 sat.line_2  # str
 ```
 
-### `GroundStation`
+### `GroundObserver`
 
 A fixed point on Earth's surface. Lat/lon are accepted in degrees.
 
 ```python
-gs = GroundStation(lat_deg=51.5, lon_deg=-0.1, altitude=10.0)
+gs = GroundObserver(lat_deg=51.5, lon_deg=-0.1, altitude=10.0)
 
 gs.lat_deg   # float — geodetic latitude (degrees, positive north)
 gs.lon_deg   # float — geodetic longitude (degrees, positive east)

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sgp4_predict import (
     ApsisEvent,
-    GroundStation,
+    GroundObserver,
     IlluminationState,
     Interval,
     IntervalRange,
@@ -24,7 +24,7 @@ TLE_L1 = "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
 TLE_L2 = "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
 
 # Glasgow (matches tests/common/mod.rs ground station)
-GLASGOW = GroundStation(55.86, -4.25, 40.0)
+GLASGOW = GroundObserver(55.86, -4.25, 40.0)
 
 START = datetime(2025, 12, 22, tzinfo=timezone.utc)
 END = START + timedelta(days=1)
@@ -35,11 +35,11 @@ def make_predictor() -> Predictor:
     return Predictor(Satellite(TLE_ID, TLE_L1, TLE_L2))
 
 
-# ── GroundStation ──────────────────────────────────────────────────────────────
+# ── GroundObserver ──────────────────────────────────────────────────────────────
 
 
 def test_ground_station_round_trip():
-    gs = GroundStation(51.5, -0.1, 10.0)
+    gs = GroundObserver(51.5, -0.1, 10.0)
     assert abs(gs.lat_deg - 51.5) < 1e-10
     assert abs(gs.lon_deg - -0.1) < 1e-10
     assert gs.altitude == 10.0

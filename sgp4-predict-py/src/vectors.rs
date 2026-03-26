@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::{EcefState, EnuState, TemeState};
 
-use crate::satellite::GroundStation;
+use crate::satellite::GroundObserver;
 use crate::types::Observation;
 
 /// A 3-component vector (x, y, z).  Used for position (metres) and velocity (m/s).
@@ -108,7 +108,7 @@ impl StateVectorEcef {
     }
 
     /// Convert to the East-North-Up (ENU) frame relative to the given observer.
-    fn to_enu(&self, observer: &GroundStation) -> StateVectorEnu {
+    fn to_enu(&self, observer: &GroundObserver) -> StateVectorEnu {
         StateVectorEnu {
             inner: self.inner.to_enu(observer),
         }
