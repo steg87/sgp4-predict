@@ -1,26 +1,6 @@
 use anyhow::Context as _;
-use sgp4_predict::Observer;
+use sgp4_predict::GroundStation;
 use std::io::{BufRead as _, Write as _};
-
-pub struct GroundObserver {
-    pub lat_deg: f64,
-    pub lon_deg: f64,
-    pub alt_m: f64,
-}
-
-impl Observer for GroundObserver {
-    fn latitude_deg(&self) -> f64 {
-        self.lat_deg
-    }
-
-    fn longitude_deg(&self) -> f64 {
-        self.lon_deg
-    }
-
-    fn altitude(&self) -> f64 {
-        self.alt_m
-    }
-}
 
 fn validate_observer(lat_deg: f64, lon_deg: f64) -> anyhow::Result<()> {
     anyhow::ensure!(
@@ -34,7 +14,7 @@ fn validate_observer(lat_deg: f64, lon_deg: f64) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn parse_observer(s: &str) -> anyhow::Result<GroundObserver> {
+pub fn parse_observer(s: &str) -> anyhow::Result<GroundStation> {
     let parts: Vec<&str> = s.split(',').collect();
     match parts.as_slice() {
         [lat, lon, alt] => {
@@ -51,17 +31,13 @@ pub fn parse_observer(s: &str) -> anyhow::Result<GroundObserver> {
                 .parse::<f64>()
                 .map_err(|_| anyhow::anyhow!("invalid altitude: {alt}"))?;
             validate_observer(lat_deg, lon_deg)?;
-            Ok(GroundObserver {
-                lat_deg,
-                lon_deg,
-                alt_m,
-            })
+            Ok(GroundStation::new(lat_deg, lon_deg, alt_m))
         }
         _ => anyhow::bail!("observer must be 'lat,lon,alt' — got: {s}"),
     }
 }
 
-pub fn prompt_observer() -> anyhow::Result<GroundObserver> {
+pub fn prompt_observer() -> anyhow::Result<GroundStation> {
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
 
@@ -70,11 +46,7 @@ pub fn prompt_observer() -> anyhow::Result<GroundObserver> {
     let alt_m = prompt_f64(&mut lines, "Observer altitude (metres): ")?;
 
     validate_observer(lat_deg, lon_deg)?;
-    Ok(GroundObserver {
-        lat_deg,
-        lon_deg,
-        alt_m,
-    })
+    Ok(GroundStation::new(lat_deg, lon_deg, alt_m))
 }
 
 fn prompt_f64(
