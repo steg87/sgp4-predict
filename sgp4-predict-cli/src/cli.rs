@@ -81,8 +81,8 @@ pub struct TransitsArgs {
     pub observer: ObserverArgs,
 
     /// Minimum elevation above horizon in degrees (default: 10)
-    #[arg(long, default_value = "10")]
-    pub min_elevation: f64,
+    #[arg(long = "min-elevation", default_value = "10")]
+    pub min_elevation_deg: f64,
 }
 
 #[derive(clap::Args)]

@@ -21,7 +21,7 @@ pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
         let start_str = start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
         let duration_str = humantime::format_duration(args.common.duration).to_string();
         let observer_str = format_observer_str(args.observer.observer.as_deref(), &observer);
-        let min_el_str = args.min_elevation.to_string();
+        let min_el_str = args.min_elevation_deg.to_string();
         write_args_header(
             &mut *writer,
             &[
@@ -38,7 +38,7 @@ pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
     }
 
     let transits = predictor
-        .transits_iter(&observer, interval, args.min_elevation)
+        .transits_iter(&observer, interval, args.min_elevation_deg)
         .map(|result| {
             let transit = result.context("transit detection error")?;
             let aos_obs = predictor

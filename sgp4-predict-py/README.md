@@ -53,16 +53,16 @@ TLEs are the standard input format for SGP4 propagation. Fresh TLEs can be obtai
 
 All values are in SI units unless noted otherwise:
 
-| Quantity | Unit |
-|---|---|
-| Position | metres |
-| Velocity | m/s |
-| Range | metres |
-| Range rate | m/s (positive = receding) |
-| Azimuth / elevation | radians (use `_deg` properties for degrees) |
-| Altitude (apsis) | metres above WGS-84 equatorial radius |
-| `GroundStation` lat/lon input | degrees |
-| `GroundStation` altitude input | metres |
+| Quantity                       | Unit                                        |
+|--------------------------------|---------------------------------------------|
+| Position                       | metres                                      |
+| Velocity                       | m/s                                         |
+| Range                          | metres                                      |
+| Range rate                     | m/s (positive = receding)                   |
+| Azimuth / elevation            | radians (use `_deg` properties for degrees) |
+| Altitude (apsis)               | metres above WGS-84 equatorial radius       |
+| `GroundStation` lat/lon input  | degrees                                     |
+| `GroundStation` altitude input | metres                                      |
 
 ## API reference
 
@@ -243,8 +243,8 @@ window.duration_seconds  # float
 
 ```python
 sv_teme = p.propagate(t)          # StateVectorTeme
-sv_ecef = sv_teme.to_ecef(t)     # StateVectorEcef  (GMST rotation)
-sv_enu  = sv_ecef.to_enu(gs)     # StateVectorEnu   (geodetic to local ENU)
+sv_ecef = sv_teme.to_ecef(t)      # StateVectorEcef  (GMST rotation)
+sv_enu  = sv_ecef.to_enu(gs)      # StateVectorEnu   (geodetic to local ENU)
 obs     = sv_enu.to_observation() # Observation
 
 # Equivalent shorthand:
