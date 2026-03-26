@@ -216,42 +216,23 @@ enum TransitState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HasId, HasTle, Predictor};
+    use crate::{Predictor, types::GroundStation, types::Tle};
     use chrono::{TimeZone, Utc};
 
     // --- step_size ---
 
-    struct TestSat;
-    impl HasId for TestSat {
-        fn id(&self) -> &str {
-            "SENTINEL-2C"
-        }
-    }
-    impl HasTle for TestSat {
-        fn line_1(&self) -> &str {
-            "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
-        }
-        fn line_2(&self) -> &str {
-            "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
-        }
-    }
-
-    struct TestObs;
-    impl Observer for TestObs {
-        fn latitude_deg(&self) -> f64 {
-            0.0
-        }
-        fn longitude_deg(&self) -> f64 {
-            0.0
-        }
-        fn altitude(&self) -> f64 {
-            0.0
-        }
-    }
-
-    fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, TestObs> {
-        static OBS: TestObs = TestObs;
-        let predictor = Predictor::new(&TestSat).unwrap();
+    fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, GroundStation> {
+        static OBS: GroundStation = GroundStation {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            altitude: 0.0,
+        };
+        let sat = Tle::new(
+            "SENTINEL-2C",
+            "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",
+            "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740",
+        );
+        let predictor = Predictor::new(&sat).unwrap();
         let t = Utc.with_ymd_and_hms(2025, 12, 22, 0, 0, 0).unwrap();
         TransitIter::new(
             predictor,

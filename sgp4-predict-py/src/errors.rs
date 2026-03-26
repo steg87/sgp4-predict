@@ -4,7 +4,7 @@ use sgp4_predict::Error;
 
 pub fn to_py_err(e: Error) -> PyErr {
     match e {
-        Error::Tle(_) | Error::Elements(_) | Error::Interval(_) => {
+        Error::TleFormat(_) | Error::Tle(_) | Error::Elements(_) | Error::Interval(_) => {
             PyValueError::new_err(e.to_string())
         }
         Error::Sgp4(_) | Error::Roots(_) | Error::Transit(_) => {

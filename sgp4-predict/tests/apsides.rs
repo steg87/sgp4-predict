@@ -100,7 +100,7 @@ fn test_apsides_to_csv() {
     use std::io::Write;
 
     let tle = common::create_tle();
-    let sat_id = tle.satellite.clone();
+    let sat_id = tle.satellite_name.clone();
     let p = Predictor::new(&tle).unwrap();
 
     let start = p.epoch();

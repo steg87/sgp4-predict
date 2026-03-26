@@ -1,9 +1,41 @@
 //! Higher-level satellite prediction built on the [`sgp4`] crate.
 //!
-//! [`Predictor`] is the main entry point. Construct it from any type that
-//! implements [`Satellite`] (i.e. [`HasId`] + [`HasTle`]), then use its
-//! methods to propagate state vectors, compute ground observations, detect
-//! passes, find apsides, and query illumination.
+//! [`Predictor`] is the main entry point. Construct it from a [`Tle`] (or any
+//! type that implements [`Satellite`]), then use its methods to propagate state
+//! vectors, compute ground observations, detect passes, find apsides, and query
+//! illumination.
+//!
+//! # Quick start
+//!
+//! ```no_run
+//! use sgp4_predict::{GroundStation, Predictor, Tle};
+//! use chrono::{Duration, Utc};
+//!
+//! let tle: Tle = "\
+//!     SENTINEL-2C\n\
+//!     1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990\n\
+//!     2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+//!     .parse()
+//!     .unwrap();
+//!
+//! let predictor = Predictor::new(&tle).unwrap();
+//! let glasgow = GroundStation::new(55.86, -4.25, 40.0);
+//!
+//! let start = Utc::now();
+//! let end = start + Duration::days(1);
+//!
+//! for transit in predictor.transits_iter(&glasgow, start..end, 5.0) {
+//!     let transit = transit.unwrap();
+//!     println!("AoS: {}  LoS: {}", transit.start, transit.end);
+//! }
+//! ```
+//!
+//! # Custom types
+//!
+//! If your application already has types that hold TLE data or coordinates,
+//! implement [`HasId`] + [`HasTle`] (which together satisfy [`Satellite`]
+//! automatically) and [`Observer`] instead of converting to [`Tle`] /
+//! [`GroundStation`]. See the trait docs for details.
 //!
 //! # Units
 //!
@@ -18,6 +50,7 @@ mod predict;
 mod roots;
 mod time;
 mod transits;
+mod types;
 mod vectors;
 
 use chrono::{DateTime, Duration, Utc};
@@ -33,8 +66,21 @@ pub use crate::{
     roots::{Brent, NewtonRaphson, Refinement},
     time::{DateTimeIter, IntervalRange},
     transits::{Transit, TransitIter},
+    types::{GroundStation, Tle, TleParseError},
     vectors::{Position, StateVector, Velocity},
 };
+
+/// Commonly used types for quick onboarding.
+///
+/// ```
+/// use sgp4_predict::prelude::*;
+/// ```
+pub mod prelude {
+    pub use crate::{
+        ApsisEvent, GroundStation, HasId, HasTle, IlluminationState, Observation, Observer,
+        Predictor, Satellite, Tle, Transit,
+    };
+}
 
 /// Crate-wide result type, parameterised over [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
@@ -350,6 +396,8 @@ impl Predictor {
 /// Errors returned by this crate.
 #[derive(Debug, ThisError)]
 pub enum Error {
+    #[error("TLE format error: {0}")]
+    TleFormat(#[from] TleParseError),
     #[error("TLE parse error: {0}")]
     Tle(#[from] sgp4::TleError),
     #[error("SGP4 elements error: {0}")]
