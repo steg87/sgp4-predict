@@ -41,6 +41,10 @@ pub struct CommonArgs {
     /// Output file path (default: stdout)
     #[arg(short = 'o', long)]
     pub out: Option<PathBuf>,
+
+    /// Prepend all CLI arguments as # comment lines to the output
+    #[arg(long)]
+    pub output_args: bool,
 }
 
 /// Observer location arguments, shared by observations and transits.

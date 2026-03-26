@@ -51,3 +51,11 @@ pub fn open_writer(out: &Option<PathBuf>) -> anyhow::Result<Box<dyn Write>> {
         None => Ok(Box::new(BufWriter::new(std::io::stdout()))),
     }
 }
+
+/// Write CLI argument pairs as `# key: value` comment lines.
+pub fn write_args_header(w: &mut dyn Write, pairs: &[(&str, &str)]) -> anyhow::Result<()> {
+    for (key, value) in pairs {
+        writeln!(w, "# {key}: {value}")?;
+    }
+    Ok(())
+}

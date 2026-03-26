@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use chrono::Duration;
 use sgp4_predict::Predictor;
 
-use super::{load_sat, open_writer, resolve_interval, warn_stale_tle};
+use super::{load_sat, open_writer, resolve_interval, warn_stale_tle, write_args_header};
 use crate::{
     cli::{Frame, StateVectorsArgs},
     output,
@@ -14,7 +14,30 @@ pub fn run(args: StateVectorsArgs) -> anyhow::Result<()> {
     let sat = load_sat(&args.common)?;
     let predictor = Predictor::new(&sat)?;
     warn_stale_tle(&predictor, start);
-    let writer = open_writer(&args.common.out)?;
+    let mut writer = open_writer(&args.common.out)?;
+
+    if args.common.output_args {
+        let start_str = start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let duration_str = humantime::format_duration(args.common.duration).to_string();
+        let step_str = humantime::format_duration(args.step).to_string();
+        let frame_str = match args.frame {
+            Frame::Teme => "teme",
+            Frame::Ecef => "ecef",
+        };
+        write_args_header(
+            &mut *writer,
+            &[
+                ("command", "state-vectors"),
+                ("satellite", &sat.name),
+                ("tle-line1", &sat.line1),
+                ("tle-line2", &sat.line2),
+                ("start", &start_str),
+                ("duration", &duration_str),
+                ("step", &step_str),
+                ("frame", frame_str),
+            ],
+        )?;
+    }
 
     match args.frame {
         Frame::Teme => output::write_state_vectors(
