@@ -7,16 +7,16 @@ use sgp4_predict::{HasId, HasTle, Observer};
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
 pub struct Satellite {
     id: String,
-    line1: String,
-    line2: String,
+    line_1: String,
+    line_2: String,
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
 impl Satellite {
     #[new]
-    pub fn new(id: String, line1: String, line2: String) -> Self {
-        Self { id, line1, line2 }
+    pub fn new(id: String, line_1: String, line_2: String) -> Self {
+        Self { id, line_1, line_2 }
     }
 
     #[getter]
@@ -25,13 +25,13 @@ impl Satellite {
     }
 
     #[getter]
-    fn line1(&self) -> &str {
-        &self.line1
+    fn line_1(&self) -> &str {
+        &self.line_1
     }
 
     #[getter]
-    fn line2(&self) -> &str {
-        &self.line2
+    fn line_2(&self) -> &str {
+        &self.line_2
     }
 }
 
@@ -43,10 +43,10 @@ impl HasId for Satellite {
 
 impl HasTle for Satellite {
     fn line_1(&self) -> &str {
-        &self.line1
+        &self.line_1
     }
     fn line_2(&self) -> &str {
-        &self.line2
+        &self.line_2
     }
 }
 

@@ -87,11 +87,11 @@ assert isinstance(transit, IntervalRange)  # True — Transit satisfies the prot
 Holds the raw TLE strings. No parsing happens here.
 
 ```python
-sat = Satellite(id="ISS", line1="1 25544U ...", line2="2 25544 ...")
+sat = Satellite(id="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
 
 sat.id      # str
-sat.line1   # str
-sat.line2   # str
+sat.line_1  # str
+sat.line_2  # str
 ```
 
 ### `GroundStation`
