@@ -205,13 +205,10 @@ transit.duration_seconds  # float
 Point observation from a ground station.
 
 ```python
-obs.azimuth       # float — radians, 0 = North, clockwise
-obs.elevation     # float — radians above horizon
+obs.azimuth_deg   # float — degrees, 0 = North, clockwise
+obs.elevation_deg # float — degrees above horizon
 obs.range         # float — metres
 obs.range_rate    # float — m/s, positive = receding
-
-obs.azimuth_deg   # float — degrees
-obs.elevation_deg # float — degrees
 ```
 
 #### `Apsis` and `ApsisEvent`

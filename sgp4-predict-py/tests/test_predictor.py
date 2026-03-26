@@ -83,8 +83,8 @@ def test_observe_at_fields_are_finite():
     # Pick a time when we know there's a transit (from transits test)
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
     obs = p.observe_at(t, GLASGOW)
-    assert math.isfinite(obs.azimuth)
-    assert math.isfinite(obs.elevation)
+    assert math.isfinite(obs.azimuth_deg)
+    assert math.isfinite(obs.elevation_deg)
     assert math.isfinite(obs.range)
     assert math.isfinite(obs.range_rate)
     assert obs.range > 0
@@ -94,8 +94,8 @@ def test_observe_at_degrees_properties():
     p = make_predictor()
     t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
     obs = p.observe_at(t, GLASGOW)
-    assert abs(obs.azimuth_deg - math.degrees(obs.azimuth)) < 1e-10
-    assert abs(obs.elevation_deg - math.degrees(obs.elevation)) < 1e-10
+    assert 0.0 <= obs.azimuth_deg < 360.0
+    assert -90.0 <= obs.elevation_deg <= 90.0
 
 
 # ── transits_iter ─────────────────────────────────────────────────────────────
@@ -240,8 +240,8 @@ def test_coordinate_chain():
     obs_chain = p.propagate(t).to_ecef(t).to_enu(GLASGOW).to_observation()
     obs_direct = p.observe_at(t, GLASGOW)
 
-    assert abs(obs_chain.azimuth - obs_direct.azimuth) < 1e-10
-    assert abs(obs_chain.elevation - obs_direct.elevation) < 1e-10
+    assert abs(obs_chain.azimuth_deg - obs_direct.azimuth_deg) < 1e-8
+    assert abs(obs_chain.elevation_deg - obs_direct.elevation_deg) < 1e-8
     assert abs(obs_chain.range - obs_direct.range) < 1e-3
 
 

@@ -3,14 +3,12 @@ use pyo3_stub_gen::derive::*;
 
 /// A point observation of a satellite from a ground location.
 ///
-/// Angular values are in radians; use the `_deg` properties for degrees.
+/// Use `azimuth_deg` and `elevation_deg` for angular values.
 /// Range is in metres, range rate in m/s (positive = receding).
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
 pub struct Observation {
-    #[pyo3(get)]
     pub azimuth: f64,
-    #[pyo3(get)]
     pub elevation: f64,
     #[pyo3(get)]
     pub range: f64,
