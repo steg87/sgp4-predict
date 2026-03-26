@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::{path::PathBuf, time::Duration};
 
@@ -26,8 +27,8 @@ pub enum Command {
 #[derive(clap::Args)]
 pub struct CommonArgs {
     /// Start time, e.g. "2026-03-25 10:00:00" or "2026-03-25T10:00:00Z" (default: now)
-    #[arg(long)]
-    pub start: Option<String>,
+    #[arg(long, value_parser = parse_start_time)]
+    pub start: Option<DateTime<Utc>>,
 
     /// Duration, e.g. "3d", "1h30m", "90s" (default: 1d)
     #[arg(long, value_parser = parse_duration, default_value = "1d")]
@@ -42,14 +43,21 @@ pub struct CommonArgs {
     pub out: Option<PathBuf>,
 }
 
+/// Observer location arguments, shared by observations and transits.
+#[derive(clap::Args)]
+pub struct ObserverArgs {
+    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
+    #[arg(long)]
+    pub observer: Option<String>,
+}
+
 #[derive(clap::Args)]
 pub struct ObservationsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
 
-    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
-    #[arg(long)]
-    pub observer: Option<String>,
+    #[command(flatten)]
+    pub observer: ObserverArgs,
 
     /// Observation step (default: 60s)
     #[arg(long, value_parser = parse_duration, default_value = "60s")]
@@ -61,9 +69,8 @@ pub struct TransitsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
 
-    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
-    #[arg(long)]
-    pub observer: Option<String>,
+    #[command(flatten)]
+    pub observer: ObserverArgs,
 
     /// Minimum elevation above horizon in degrees (default: 10)
     #[arg(long, default_value = "10")]
@@ -100,6 +107,12 @@ pub struct ApsidesArgs {
 pub struct IlluminationArgs {
     #[command(flatten)]
     pub common: CommonArgs,
+}
+
+fn parse_start_time(s: &str) -> Result<DateTime<Utc>, String> {
+    humantime::parse_rfc3339_weak(s)
+        .map(DateTime::<Utc>::from)
+        .map_err(|e| e.to_string())
 }
 
 fn parse_duration(s: &str) -> Result<Duration, String> {

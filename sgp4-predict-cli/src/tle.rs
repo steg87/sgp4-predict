@@ -38,11 +38,19 @@ pub fn parse_tle_file(path: &std::path::Path) -> anyhow::Result<TleSat> {
             line1: line1.to_string(),
             line2: line2.to_string(),
         }),
-        [line1, line2] => Ok(TleSat {
-            name: line1.get(2..7).unwrap_or("").trim().to_string(),
-            line1: line1.to_string(),
-            line2: line2.to_string(),
-        }),
+        [line1, line2] => {
+            let norad_id = line1.get(2..7).unwrap_or("").trim();
+            let name = if norad_id.is_empty() {
+                String::new()
+            } else {
+                format!("NORAD-{norad_id}")
+            };
+            Ok(TleSat {
+                name,
+                line1: line1.to_string(),
+                line2: line2.to_string(),
+            })
+        }
         _ => anyhow::bail!(
             "TLE file must contain 2 or 3 non-empty lines, found {}",
             lines.len()

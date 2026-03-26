@@ -1,6 +1,9 @@
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
-use sgp4_predict::{Apsis, Illumination, Observation, Result as PredictResult, Transit};
+use sgp4_predict::{
+    Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Result as PredictResult,
+    Transit,
+};
 use std::io::Write;
 
 pub fn write_apsides<W, I>(mut w: W, iter: I) -> anyhow::Result<()>
@@ -14,11 +17,15 @@ where
 
     for item in iter {
         let apsis = item.context("apsis detection error")?;
+        let event = match apsis.event {
+            ApsisEvent::Apogee => "Apogee",
+            ApsisEvent::Perigee => "Perigee",
+        };
         writeln!(
             w,
             "{:<24} {:>10} {:>14.3}",
             apsis.time.format("%Y-%m-%dT%H:%M:%SZ"),
-            format!("{:?}", apsis.event),
+            event,
             apsis.altitude / 1_000.0,
         )?;
     }
@@ -41,6 +48,10 @@ where
 
     for item in iter {
         let window = item.context("illumination detection error")?;
+        let state = match window.state {
+            IlluminationState::Sunlit => "Sunlit",
+            IlluminationState::Eclipse => "Eclipse",
+        };
         let duration_secs = (window.end - window.start).num_seconds().max(0) as u64;
         let duration_str =
             humantime::format_duration(std::time::Duration::from_secs(duration_secs)).to_string();
@@ -49,7 +60,7 @@ where
             "{:<24} {:<24} {:>10} {:>10}",
             window.start.format("%Y-%m-%dT%H:%M:%SZ"),
             window.end.format("%Y-%m-%dT%H:%M:%SZ"),
-            format!("{:?}", window.state),
+            state,
             duration_str,
         )?;
     }
@@ -62,13 +73,13 @@ where
     W: Write,
     I: Iterator<Item = PredictResult<(DateTime<Utc>, f64, f64, f64, f64, f64, f64)>>,
 {
-    // row width: 24 + (1+14)*3 + (1+12)*3 = 24+45+39 = 108
+    // row width: 24 + (1+12)*6 = 24+78 = 102
     writeln!(
         w,
         "{:<24} {:>12} {:>12} {:>12} {:>12} {:>12} {:>12}",
         "datetime", "x [km]", "y [km]", "z [km]", "vx [km/s]", "vy [km/s]", "vz [km/s]"
     )?;
-    writeln!(w, "{}", "-".repeat(100))?;
+    writeln!(w, "{}", "-".repeat(102))?;
 
     for item in iter {
         let (t, x, y, z, vx, vy, vz) = item.context("propagation error")?;
@@ -120,28 +131,37 @@ where
 pub fn write_transits<W, I>(mut w: W, iter: I) -> anyhow::Result<()>
 where
     W: Write,
-    I: Iterator<Item = anyhow::Result<(Transit, Observation, Observation, Observation)>>,
+    I: Iterator<
+        Item = anyhow::Result<(
+            Transit,
+            Observation,
+            Observation,
+            DateTime<Utc>,
+            Observation,
+        )>,
+    >,
 {
-    // row width: 24 + (1+24) + (1+12)*3 + (1+10) = 24+25+39+11 = 99
+    // row width: 24 + (1+24) + (1+12)*2 + (1+24) + (1+12) + (1+10) = 24+25+26+25+13+11 = 124
     writeln!(
         w,
-        "{:<24} {:<24} {:>12} {:>12} {:>12} {:>10}",
-        "aos", "los", "aos_az [deg]", "los_az [deg]", "tca_el [deg]", "duration"
+        "{:<24} {:<24} {:>12} {:>12} {:<24} {:>12} {:>10}",
+        "aos", "los", "aos_az [deg]", "los_az [deg]", "tca_time", "tca_el [deg]", "duration"
     )?;
-    writeln!(w, "{}", "-".repeat(99))?;
+    writeln!(w, "{}", "-".repeat(124))?;
 
     for item in iter {
-        let (transit, aos_obs, los_obs, tca_obs) = item?;
+        let (transit, aos_obs, los_obs, tca_time, tca_obs) = item?;
         let duration_secs = (transit.end - transit.start).num_seconds().max(0) as u64;
         let duration_str =
             humantime::format_duration(std::time::Duration::from_secs(duration_secs)).to_string();
         writeln!(
             w,
-            "{:<24} {:<24} {:>12.2} {:>12.2} {:>12.2} {:>10}",
+            "{:<24} {:<24} {:>12.2} {:>12.2} {:<24} {:>12.2} {:>10}",
             transit.start.format("%Y-%m-%dT%H:%M:%SZ"),
             transit.end.format("%Y-%m-%dT%H:%M:%SZ"),
             aos_obs.azimuth_deg(),
             los_obs.azimuth_deg(),
+            tca_time.format("%Y-%m-%dT%H:%M:%SZ"),
             tca_obs.elevation_deg(),
             duration_str,
         )?;
