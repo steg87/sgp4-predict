@@ -99,6 +99,75 @@ impl IlluminationIter {
         self.brent = b;
         self
     }
+
+    fn detect_window(&mut self, t: DateTime<Utc>) -> Result<Option<Illumination>> {
+        let t_f64 = time::datetime_to_f64(t);
+        let sv = shadow_value(&self.predictor, t)?;
+
+        let window = if let Some((prev_t, prev_sv)) = self.prev {
+            if (prev_sv > 0.0) != (sv > 0.0) {
+                // Sign change detected — find the shadow-boundary crossing.
+                // If either scan point is exactly on the boundary (value == 0.0),
+                // Brent's bracket would be degenerate; the scan point itself is
+                // the crossing and no root-finding is needed.
+                let crossing_f64 = if sv == 0.0 {
+                    t_f64
+                } else if prev_sv == 0.0 {
+                    prev_t
+                } else {
+                    // Refine crossing with Brent's method.
+                    let predictor = self.predictor.clone();
+                    self.brent.solve(prev_t, t_f64, |x| {
+                        shadow_value(&predictor, time::f64_to_datetime(x))
+                    }).inspect_err(|e| tracing::warn!(error = %e, "Brent solver failed to refine shadow boundary"))
+                    .map_err(Error::Roots)?
+                };
+                let state = self.current.expect("current initialized with prev");
+                let crossing = time::f64_to_datetime(crossing_f64);
+                let window = Illumination {
+                    start: self.window_start,
+                    end: crossing,
+                    state,
+                };
+                self.window_start = crossing;
+                // Derive the new state directly from sv rather than
+                // using state.opposite(), so the state is always
+                // grounded in the actual shadow-function value and
+                // cannot accumulate error across multiple crossings.
+                // When sv is exactly 0.0 the scan point is itself the
+                // crossing, so sv provides no directional information
+                // and opposite() is the only option.
+                self.current = Some(if sv > 0.0 {
+                    IlluminationState::Eclipse
+                } else if sv < 0.0 {
+                    IlluminationState::Sunlit
+                } else {
+                    state.opposite()
+                });
+                tracing::debug!(
+                    state = ?window.state,
+                    start = %window.start,
+                    end = %window.end,
+                    "illumination window"
+                );
+                Some(window)
+            } else {
+                None
+            }
+        } else {
+            // First sample: determine initial illumination state.
+            self.current = Some(if sv > 0.0 {
+                IlluminationState::Eclipse
+            } else {
+                IlluminationState::Sunlit
+            });
+            self.window_start = self.interval.start;
+            None
+        };
+
+        self.prev = Some((t_f64, sv));
+        Ok(window)
+    }
 }
 
 impl Iterator for IlluminationIter {
@@ -111,90 +180,34 @@ impl Iterator for IlluminationIter {
 
         while self.interval.contains(&self.next_time) {
             let t = self.next_time;
-            let t_f64 = time::datetime_to_f64(t);
-
-            let sv = match shadow_value(&self.predictor, t) {
-                Ok(v) => v,
+            match self.detect_window(t) {
+                Ok(Some(window)) => return Some(Ok(window)),
+                Ok(None) => {} // Continue advancing through time
                 Err(e) => return Some(Err(e)),
-            };
-
-            if let Some((prev_t, prev_sv)) = self.prev {
-                if (prev_sv > 0.0) != (sv > 0.0) {
-                    // Sign change detected — find the shadow-boundary crossing.
-                    // If either scan point is exactly on the boundary (value == 0.0),
-                    // Brent's bracket would be degenerate; the scan point itself is
-                    // the crossing and no root-finding is needed.
-                    let crossing = if sv == 0.0 {
-                        t
-                    } else if prev_sv == 0.0 {
-                        time::f64_to_datetime(prev_t)
-                    } else {
-                        // Refine crossing with Brent's method.
-                        let predictor = self.predictor.clone();
-                        let crossing_f64 = match self.brent.solve(prev_t, t_f64, |x| {
-                            shadow_value(&predictor, time::f64_to_datetime(x))
-                        }) {
-                            Ok(t) => t,
-                            Err(e) => {
-                                tracing::warn!(error = %e, "Brent solver failed to refine shadow boundary");
-                                return Some(Err(Error::Roots(e)));
-                            }
-                        };
-                        time::f64_to_datetime(crossing_f64)
-                    };
-                    let state = self.current.expect("current initialized with prev");
-                    let window = Illumination {
-                        start: self.window_start,
-                        end: crossing,
-                        state,
-                    };
-                    self.window_start = crossing;
-                    // Derive the new state directly from sv rather than
-                    // using state.opposite(), so the state is always
-                    // grounded in the actual shadow-function value and
-                    // cannot accumulate error across multiple crossings.
-                    // When sv is exactly 0.0 the scan point is itself the
-                    // crossing, so sv provides no directional information
-                    // and opposite() is the only option.
-                    self.current = Some(if sv > 0.0 {
-                        IlluminationState::Eclipse
-                    } else if sv < 0.0 {
-                        IlluminationState::Sunlit
-                    } else {
-                        state.opposite()
-                    });
-                    tracing::debug!(
-                        state = ?window.state,
-                        start = %window.start,
-                        end = %window.end,
-                        "illumination window"
-                    );
-                    self.prev = Some((t_f64, sv));
-                    self.next_time += STEP;
-                    return Some(Ok(window));
-                }
-            } else {
-                // First sample: determine initial illumination state.
-                self.current = Some(if sv > 0.0 {
-                    IlluminationState::Eclipse
-                } else {
-                    IlluminationState::Sunlit
-                });
-                self.window_start = self.interval.start;
             }
-
-            self.prev = Some((t_f64, sv));
             self.next_time += STEP;
         }
 
-        // End of interval — yield the final (possibly partial) window.
+        // End of interval
+        // Check if any state transitions occured between t_prev and window end
         if let Some(state) = self.current {
-            self.finished = true;
-            return Some(Ok(Illumination {
-                start: self.window_start,
-                end: self.interval.end,
-                state,
-            }));
+            match self.detect_window(self.interval.end) {
+                Ok(Some(window)) => {
+                    // There was a final state transition between t_prev and end of window
+                    return Some(Ok(window));
+                }
+                Ok(None) => {
+                    // No more state transitions between t_prev and end of window, yield the final
+                    // (probably partial) window
+                    self.finished = true;
+                    return Some(Ok(Illumination {
+                        start: self.window_start,
+                        end: self.interval.end,
+                        state,
+                    }));
+                }
+                Err(e) => return Some(Err(e)),
+            }
         }
 
         // Interval was empty — nothing to yield.
