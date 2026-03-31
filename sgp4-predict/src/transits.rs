@@ -17,7 +17,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 use thiserror::Error as ThisError;
 
-use crate::{Predictor, Result, observe::Observer, roots::Refinement, time};
+use crate::{Predictor, Result, observe::Observer, roots::Refinement, time, time::IntervalRange};
 
 const MAX_STEP: Duration = Duration::minutes(10);
 const MIN_STEP: Duration = Duration::seconds(10);
@@ -38,6 +38,36 @@ pub struct Transit {
 impl Transit {
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
+    }
+
+    /// Returns a copy of this transit clamped to `interval`, or `None` if the
+    /// transit lies entirely outside the interval.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{TimeZone, Utc};
+    /// use sgp4_predict::Transit;
+    ///
+    /// let transit = Transit::new(
+    ///     Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+    ///     Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).unwrap(),
+    /// );
+    /// let window = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
+    ///
+    /// let clamped = transit.clamp(&window).unwrap();
+    /// assert_eq!(clamped.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
+    /// assert_eq!(clamped.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
+    ///
+    /// // Fully outside returns None.
+    /// let disjoint = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
+    /// assert!(transit.clamp(&disjoint).is_none());
+    /// ```
+    pub fn clamp(&self, interval: &impl time::IntervalRange) -> Option<Transit> {
+        self.intersection(interval)
+            .map(|r| Transit::new(r.start, r.end))
     }
 }
 

@@ -16,6 +16,34 @@ pub trait IntervalRange {
     fn start(&self) -> DateTime<Utc>;
     /// Exclusive end of the interval.
     fn end(&self) -> DateTime<Utc>;
+
+    /// Returns the overlap of this interval with `other` as a half-open range,
+    /// or `None` if the two intervals do not overlap.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{TimeZone, Utc};
+    /// use sgp4_predict::IntervalRange;
+    ///
+    /// let a = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).unwrap();
+    /// let b = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
+    /// let overlap = a.intersection(&b).unwrap();
+    /// assert_eq!(overlap.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
+    /// assert_eq!(overlap.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
+    ///
+    /// // Disjoint intervals return None.
+    /// let c = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
+    /// assert!(a.intersection(&c).is_none());
+    /// ```
+    fn intersection(&self, other: &impl IntervalRange) -> Option<Range<DateTime<Utc>>> {
+        let start = self.start().max(other.start());
+        let end = self.end().min(other.end());
+        if start < end { Some(start..end) } else { None }
+    }
 }
 
 impl IntervalRange for Range<DateTime<Utc>> {
