@@ -13,7 +13,7 @@ sgp4-predict = { path = "../sgp4-predict" }
 pyo3 = { version = "0.28", features = ["chrono"] }
 chrono = "0.4"
 ouroboros = "0.18"
-pyo3-stub-gen = "0.20"
+pyo3-stub-gen = "0.22"
 
 [[bin]]
 name = "stub_gen"
