@@ -180,12 +180,16 @@ impl Iterator for IlluminationIter {
 
         while self.interval.contains(&self.next_time) {
             let t = self.next_time;
+            self.next_time += STEP;
             match self.detect_window(t) {
                 Ok(Some(window)) => return Some(Ok(window)),
                 Ok(None) => {} // Continue advancing through time
-                Err(e) => return Some(Err(e)),
+                Err(e) => {
+                    tracing::warn!("error calculating illumination window: {}", e.to_string());
+                    println!("error");
+                    return Some(Err(e));
+                }
             }
-            self.next_time += STEP;
         }
 
         // End of interval
@@ -206,7 +210,10 @@ impl Iterator for IlluminationIter {
                         state,
                     }));
                 }
-                Err(e) => return Some(Err(e)),
+                Err(e) => {
+                    tracing::warn!("error calculating illumination window: {}", e.to_string());
+                    return Some(Err(e));
+                }
             }
         }
 

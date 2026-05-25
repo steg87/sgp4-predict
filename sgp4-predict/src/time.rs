@@ -17,6 +17,22 @@ pub trait IntervalRange {
     /// Exclusive end of the interval.
     fn end(&self) -> DateTime<Utc>;
 
+    /// Returns the duration of the interval.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{Duration, TimeZone, Utc};
+    /// use sgp4_predict::IntervalRange;
+    ///
+    /// let a = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
+    /// assert_eq!(a.duration(), Duration::minutes(90));
+    /// ```
+    fn duration(&self) -> Duration {
+        self.end() - self.start()
+    }
+
     /// Returns the overlap of this interval with `other` as a half-open range,
     /// or `None` if the two intervals do not overlap.
     ///
