@@ -40,15 +40,23 @@
 //!
 //! # OMM support
 //!
-//! The underlying [`sgp4`] crate uses the same [`sgp4::Elements`] type for
-//! both TLE and OMM (Orbit Mean-Elements Message) data. Parse an OMM JSON
-//! object with `serde_json` and pass the result directly to [`Predictor::new`]:
+//! [`sgp4::Elements`] (re-exported as [`Elements`]) represents orbital data
+//! from either a TLE or an OMM (Orbit Mean-Elements Message). Because it
+//! derives `serde::Deserialize`, you can parse an OMM JSON object directly
+//! with `serde_json` and hand the result to [`Predictor::new`]:
 //!
 //! ```no_run
+//! use sgp4_predict::{Elements, Predictor};
+//!
 //! # let omm_json = "{}";
-//! let elements: sgp4::Elements = serde_json::from_str(omm_json).unwrap();
-//! let predictor = sgp4_predict::Predictor::new(elements).unwrap();
+//! let elements: Elements = serde_json::from_str(omm_json).unwrap();
+//! let predictor = Predictor::new(elements).unwrap();
 //! ```
+//!
+//! The JSON field names follow the CCSDS OMM standard
+//! (`NORAD_CAT_ID`, `EPOCH`, `MEAN_MOTION`, `ECCENTRICITY`, etc.).
+//! Both Celestrak and Space-Track JSON responses parse directly into
+//! `Elements` with no extra mapping required.
 //!
 //! # Units
 //!
@@ -67,8 +75,10 @@ mod types;
 mod vectors;
 
 use chrono::{DateTime, Duration, Utc};
-use sgp4::{Constants, Elements, MinutesSinceEpoch};
+use sgp4::{Constants, MinutesSinceEpoch};
 use thiserror::Error as ThisError;
+
+pub use sgp4::{Classification, Elements};
 
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
@@ -90,8 +100,8 @@ pub use crate::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, Error, GroundObserver, HasId, HasTle, IlluminationState, Observation, Observer,
-        Predictor, Result, Satellite, Tle, Transit,
+        ApsisEvent, Classification, Elements, Error, GroundObserver, HasId, HasTle,
+        IlluminationState, Observation, Observer, Predictor, Result, Satellite, Tle, Transit,
     };
 }
 
