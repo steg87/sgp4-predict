@@ -1,6 +1,9 @@
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::TleRecord;
+
+use crate::elements::Elements;
 
 /// A satellite TLE (Two-Line Element set) identified by a name and two TLE lines.
 #[gen_stub_pyclass]
@@ -36,6 +39,19 @@ impl Tle {
     #[getter]
     fn line_2(&self) -> &str {
         &self.line_2
+    }
+
+    /// Parse this TLE into orbital elements.
+    ///
+    /// Raises `ValueError` if the TLE is malformed.
+    fn to_elements(&self) -> PyResult<Elements> {
+        sgp4_predict::Elements::from_tle(
+            Some(self.satellite_name.clone()),
+            self.line_1.as_bytes(),
+            self.line_2.as_bytes(),
+        )
+        .map(|inner| Elements { inner })
+        .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 

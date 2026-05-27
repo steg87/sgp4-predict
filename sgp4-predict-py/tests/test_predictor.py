@@ -11,7 +11,7 @@ from sgp4_predict import (
     ApsisEvent,
     Classification,
     Elements,
-    Observer,
+    GroundObserver,
     IlluminationState,
     Interval,
     IntervalRange,
@@ -26,7 +26,7 @@ TLE_L1 = "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
 TLE_L2 = "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
 
 # Glasgow (matches tests/common/mod.rs ground station)
-GLASGOW = Observer(55.86, -4.25, 40.0)
+GLASGOW = GroundObserver(55.86, -4.25, 40.0)
 
 START = datetime(2025, 12, 22, tzinfo=timezone.utc)
 END = START + timedelta(days=1)
@@ -37,11 +37,11 @@ def make_predictor() -> Predictor:
     return Predictor.from_tle(Tle(TLE_ID, TLE_L1, TLE_L2))
 
 
-# ── GroundObserver ──────────────────────────────────────────────────────────────
+# ── GroundGroundObserver ──────────────────────────────────────────────────────────────
 
 
 def test_ground_station_round_trip():
-    gs = Observer(51.5, -0.1, 10.0)
+    gs = GroundObserver(51.5, -0.1, 10.0)
     assert abs(gs.latitude_deg - 51.5) < 1e-10
     assert abs(gs.longitude_deg - -0.1) < 1e-10
     assert gs.altitude == 10.0
@@ -382,3 +382,30 @@ def test_elements_repr():
     r = repr(el)
     assert "25544" in r
     assert "ISS (ZARYA)" in r
+
+
+def test_elements_from_dict():
+    import json as _json
+
+    data = _json.loads(ISS_OMM_JSON)
+    el = Elements.from_dict(data)
+    assert el.norad_id == 25544
+    assert el.object_name == "ISS (ZARYA)"
+
+
+def test_elements_repr_unnamed():
+    import json as _json
+
+    data = _json.loads(ISS_OMM_JSON)
+    del data["OBJECT_NAME"]
+    el = Elements.from_dict(data)
+    r = repr(el)
+    assert "object_name=None" in r
+
+
+def test_tle_to_elements():
+    tle = Tle(TLE_ID, TLE_L1, TLE_L2)
+    el = tle.to_elements()
+    assert el.object_name == TLE_ID
+    p = Predictor(el)
+    assert p.epoch.year == 2025

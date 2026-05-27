@@ -19,14 +19,35 @@ make benchmark                 # Rust vs pypredict monte carlo benchmark
 
 **Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.
 
+### Python bindings (`sgp4-predict-py/`)
+
+Run these from within `sgp4-predict-py/`:
+
+```bash
+make dev    # compile the Rust extension in-place (maturin develop)
+make test   # compile + run pytest
+make lint   # ruff check + ruff format --check
+```
+
+To regenerate stubs after Rust API changes (run from repo root):
+
+```bash
+PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
+  cargo run --manifest-path sgp4-predict-py/Cargo.toml --bin stub_gen
+```
+
+Note: `make stubs` inside `sgp4-predict-py/` fails when `VIRTUAL_ENV` points elsewhere — use the explicit command above instead.
+
+**Known stub-gen limitation**: pyo3-stub-gen silently drops static methods whose parameters are `&Bound<'_, PyAny>` (e.g. `Elements.from_dict`). Such methods work at runtime but will not appear in `_sgp4_predict/__init__.pyi`. If this becomes a problem, the method signature can be overridden in the hand-maintained `sgp4_predict/__init__.pyi`.
+
 ## Architecture
 
 This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has two crates: `sgp4-predict/` (the Rust library) and `sgp4-predict-py/` (the Python bindings).
 
 ### Entry point: `Predictor`
 
-`sgp4-predict/src/lib.rs` defines `Predictor` as the main struct. It is constructed from any type implementing `Satellite` (a supertrait of `HasId + HasTle`). It exposes:
-- `propagate(t)` → `StateVector<Teme>` — raw SGP4 propagation at a moment in time
+`sgp4-predict/src/lib.rs` defines `Predictor` as the main struct. It is constructed from any type implementing `TleRecord` (via `Predictor::from_tle`) or from `Elements` (OMM, via `Predictor::new`). It exposes:
+- `propagate(t)` → `TemeState` — raw SGP4 propagation at a moment in time
 - `observe_at(t, observer)` → `Observation` — azimuth/elevation/range/range_rate from a ground location
 - `prediction_iter(interval, step)` → `PredictionIter`
 - `observation_iter(observer, interval, step)` → `ObservationIter`
@@ -43,7 +64,9 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 
 **All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `sgp4-predict/src/predict.rs` in the `From<sgp4::Prediction>` impl.
 
-**Observer lat/lon must be in radians.**
+**Observer lat/lon are in degrees** (both `GroundObserver` and the `Observer` trait return degrees from `latitude_deg()` / `longitude_deg()`; internal conversions to radians happen inside frame math).
+
+**Python vs Rust naming**: in Rust, `Observer` is the *trait*; the concrete type is `GroundObserver`. In the Python bindings, the class is also named `GroundObserver`.
 
 ### Apsis detection (`apsides.rs`)
 

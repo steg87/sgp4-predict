@@ -8,7 +8,7 @@ use sgp4_predict::Observer;
 #[gen_stub_pyclass]
 #[pyclass(
     frozen,
-    name = "Observer",
+    name = "GroundObserver",
     from_py_object,
     module = "sgp4_predict._sgp4_predict"
 )]

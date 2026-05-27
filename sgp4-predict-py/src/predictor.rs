@@ -260,7 +260,7 @@ impl Predictor {
     /// Initialise SGP4 constants from pre-parsed orbital elements.
     ///
     /// Pass an `Elements` object — constructed manually, from `Elements.from_json`,
-    /// or obtained from `Tle.to_elements` (not yet implemented).
+    /// or obtained from `Tle.to_elements`.
     ///
     /// Raises `ValueError` if element initialisation fails.
     #[new]

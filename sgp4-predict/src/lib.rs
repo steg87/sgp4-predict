@@ -154,12 +154,15 @@ impl Predictor {
     ///
     /// Returns an error if SGP4 element initialisation fails.
     ///
-    /// SGP4 accuracy degrades with TLE age (typically beyond 3–7 days for LEO).
+    /// SGP4 accuracy degrades with element-set age (typically beyond 3–7 days for LEO).
     /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
     /// as appropriate for your use case.
     pub fn new(elements: Elements) -> Result<Self> {
         let constants = Constants::from_elements(&elements)?;
-        let name = elements.object_name.clone().unwrap_or_default();
+        let name = elements
+            .object_name
+            .clone()
+            .unwrap_or_else(|| format!("NORAD {}", elements.norad_id));
         let predictor = Self {
             elements,
             constants,

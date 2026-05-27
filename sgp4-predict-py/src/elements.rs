@@ -52,14 +52,14 @@ impl From<sgp4_predict::Classification> for Classification {
 /// Holds the data needed to initialise an SGP4 propagator.  Can be constructed
 /// field-by-field or parsed directly from an OMM JSON string.
 ///
-/// Example — parsing from JSON (Celestrak / Space-Track format):
+/// Example — parsing from a Space-Track / Celestrak API response:
 ///
 /// ```python
-/// import json, requests
+/// import requests
 /// from sgp4_predict import Elements, Predictor
 ///
 /// data = requests.get("https://celestrak.org/SOCRATES/...").json()
-/// elements = Elements.from_json(json.dumps(data[0]))
+/// elements = Elements.from_dict(data[0])
 /// predictor = Predictor(elements)
 /// ```
 ///
@@ -164,7 +164,7 @@ impl Elements {
         }
     }
 
-    /// Parse an OMM JSON object into orbital elements.
+    /// Parse an OMM JSON string into orbital elements.
     ///
     /// The JSON must use CCSDS OMM field names (`NORAD_CAT_ID`, `EPOCH`,
     /// `MEAN_MOTION`, `ECCENTRICITY`, etc.).  Both Celestrak and Space-Track
@@ -175,6 +175,23 @@ impl Elements {
     fn from_json(json: &str) -> PyResult<Self> {
         let inner: sgp4_predict::Elements =
             serde_json::from_str(json).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// Parse an OMM dict into orbital elements.
+    ///
+    /// The dict must use CCSDS OMM field names (`NORAD_CAT_ID`, `EPOCH`,
+    /// `MEAN_MOTION`, `ECCENTRICITY`, etc.).  Both Celestrak and Space-Track
+    /// JSON responses are supported — pass the dict directly without serialising
+    /// to a string first.
+    ///
+    /// Raises `ValueError` if the dict is missing required fields or has invalid values.
+    #[staticmethod]
+    fn from_dict(data: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let json_module = data.py().import("json")?;
+        let json_str: String = json_module.call_method1("dumps", (data,))?.extract()?;
+        let inner: sgp4_predict::Elements =
+            serde_json::from_str(&json_str).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self { inner })
     }
 
@@ -281,11 +298,14 @@ impl Elements {
     }
 
     fn __repr__(&self) -> String {
-        let name = self.inner.object_name.as_deref().unwrap_or("<unnamed>");
+        let name_repr = match &self.inner.object_name {
+            Some(name) => format!("{name:?}"),
+            None => "None".to_string(),
+        };
         format!(
-            "Elements(norad_id={}, object_name={:?}, epoch={})",
+            "Elements(norad_id={}, object_name={}, epoch={})",
             self.inner.norad_id,
-            name,
+            name_repr,
             DateTime::<Utc>::from_naive_utc_and_offset(self.inner.datetime, Utc),
         )
     }
