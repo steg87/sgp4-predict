@@ -20,13 +20,13 @@ from datetime import datetime, timedelta, timezone
 from sgp4_predict import Tle, Observer, Predictor, Interval
 
 # Sentinel-2C TLE
-sat = Tle(
+tle = Tle(
     "SENTINEL-2C",
     "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",
     "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740",
 )
 
-predictor = Predictor.from_tle(sat)
+predictor = Predictor.from_tle(tle)
 
 # Ground station: Glasgow
 glasgow = Observer(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
@@ -56,14 +56,14 @@ TLEs are the standard input format for SGP4 propagation. Fresh TLEs can be obtai
 
 All values are in SI units unless noted otherwise:
 
-| Quantity                       | Unit                                        |
-|--------------------------------|---------------------------------------------|
-| Position                       | metres                                      |
-| Velocity                       | m/s                                         |
-| Range                          | metres                                      |
-| Range rate                     | m/s (positive = receding)                   |
-| Azimuth / elevation            | radians (use `_deg` properties for degrees) |
-| Altitude (apsis)               | metres above WGS-84 equatorial radius       |
+| Quantity                  | Unit                                        |
+| ------------------------- | ------------------------------------------- |
+| Position                  | metres                                      |
+| Velocity                  | m/s                                         |
+| Range                     | metres                                      |
+| Range rate                | m/s (positive = receding)                   |
+| Azimuth / elevation       | radians (use `_deg` properties for degrees) |
+| Altitude (apsis)          | metres above WGS-84 equatorial radius       |
 | `Observer` lat/lon input  | degrees                                     |
 | `Observer` altitude input | metres                                      |
 
@@ -90,11 +90,11 @@ assert isinstance(transit, IntervalRange)  # True — Transit satisfies the prot
 Holds the raw TLE strings. No parsing happens here.
 
 ```python
-sat = Tle(id="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
+tle = Tle(satellite_name="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
 
-sat.id      # str
-sat.line_1  # str
-sat.line_2  # str
+tle.satellite_name  # str
+tle.line_1  # str
+tle.line_2  # str
 ```
 
 ### `Observer`
@@ -114,7 +114,7 @@ gs.altitude  # float — metres above WGS-84 ellipsoid
 The main entry point. Pre-computes SGP4 constants.
 
 ```python
-p = Predictor.from_tle(sat)  # from a Tle object — raises ValueError on malformed TLE
+p = Predictor.from_tle(tle)  # from a Tle object — raises ValueError on malformed TLE
 p = Predictor(elements)      # from a pre-parsed Elements (OMM JSON) object
 p.epoch                      # datetime (UTC) — element epoch
 p.tle_age_seconds(now)       # float — seconds since epoch (positive = past)
@@ -294,9 +294,9 @@ No venv activation needed — `make` targets use `uv run` and resolve the local 
 
 Type stubs live in two files with different ownership:
 
-| File | Ownership |
-|---|---|
-| `python/sgp4_predict/_sgp4_predict/__init__.pyi` | Auto-generated — run `make stubs` to update after Rust changes |
-| `python/sgp4_predict/__init__.pyi` | Hand-maintained — owns `IntervalRange`, `Interval`, and the typed `Predictor` overrides |
+| File                                             | Ownership                                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `python/sgp4_predict/_sgp4_predict/__init__.pyi` | Auto-generated — run `make stubs` to update after Rust changes                          |
+| `python/sgp4_predict/__init__.pyi`               | Hand-maintained — owns `IntervalRange`, `Interval`, and the typed `Predictor` overrides |
 
 The hand-maintained stub is committed to the repository. The auto-generated one is also committed so that type checkers work without a build step.

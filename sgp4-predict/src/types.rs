@@ -1,4 +1,4 @@
-//! Standard implementations of [`Satellite`] and [`Observer`].
+//! Standard implementations of [`TleRecord`] and [`Observer`].
 //!
 //! These concrete types let you get started quickly without defining your own
 //! structs. They are also available via [`crate::prelude`].
@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use thiserror::Error as ThisError;
 
-use crate::{HasId, HasTle, observe::Observer};
+use crate::{TleRecord, observe::Observer};
 
 /// Error returned when a [`Tle`] cannot be parsed from a string.
 #[derive(Debug, ThisError)]
@@ -17,8 +17,8 @@ pub struct TleParseError(pub(crate) String);
 
 /// A TLE (Two-Line Element set) with an associated satellite identifier.
 ///
-/// Implements [`HasId`] and [`HasTle`] (and therefore [`Satellite`][crate::Satellite])
-/// so it can be passed directly to [`Predictor::from_tle`][crate::Predictor::from_tle].
+/// Implements [`TleRecord`] so it can be passed directly to
+/// [`Predictor::from_tle`][crate::Predictor::from_tle].
 ///
 /// # Construction
 ///
@@ -60,13 +60,11 @@ impl Tle {
     }
 }
 
-impl HasId for Tle {
-    fn id(&self) -> &str {
+impl TleRecord for Tle {
+    fn satellite_name(&self) -> &str {
         &self.satellite_name
     }
-}
 
-impl HasTle for Tle {
     fn line_1(&self) -> &str {
         &self.line_1
     }

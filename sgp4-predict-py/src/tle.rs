@@ -1,12 +1,12 @@
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
-use sgp4_predict::{HasId, HasTle};
+use sgp4_predict::TleRecord;
 
 /// A satellite TLE (Two-Line Element set) identified by a name and two TLE lines.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
 pub struct Tle {
-    id: String,
+    satellite_name: String,
     line_1: String,
     line_2: String,
 }
@@ -15,13 +15,17 @@ pub struct Tle {
 #[pymethods]
 impl Tle {
     #[new]
-    pub fn new(id: String, line_1: String, line_2: String) -> Self {
-        Self { id, line_1, line_2 }
+    pub fn new(satellite_name: String, line_1: String, line_2: String) -> Self {
+        Self {
+            satellite_name,
+            line_1,
+            line_2,
+        }
     }
 
     #[getter]
-    fn id(&self) -> &str {
-        &self.id
+    fn satellite_name(&self) -> &str {
+        &self.satellite_name
     }
 
     #[getter]
@@ -35,16 +39,15 @@ impl Tle {
     }
 }
 
-impl HasId for Tle {
-    fn id(&self) -> &str {
-        &self.id
+impl TleRecord for Tle {
+    fn satellite_name(&self) -> &str {
+        &self.satellite_name
     }
-}
 
-impl HasTle for Tle {
     fn line_1(&self) -> &str {
         &self.line_1
     }
+
     fn line_2(&self) -> &str {
         &self.line_2
     }

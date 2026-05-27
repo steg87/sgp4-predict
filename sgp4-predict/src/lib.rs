@@ -1,7 +1,7 @@
 //! Higher-level satellite prediction built on the [`sgp4`] crate.
 //!
 //! [`Predictor`] is the main entry point. Construct it from a [`Tle`] (or any
-//! type that implements [`Satellite`]), then use its methods to propagate state
+//! type that implements [`TleRecord`]), then use its methods to propagate state
 //! vectors, compute ground observations, detect passes, find apsides, and query
 //! illumination.
 //!
@@ -33,8 +33,7 @@
 //! # Custom types
 //!
 //! If your application already has types that hold TLE data or coordinates,
-//! implement [`HasId`] + [`HasTle`] (which together satisfy [`Satellite`]
-//! automatically) and [`Observer`] instead of converting to [`Tle`] /
+//! implement [`TleRecord`] and [`Observer`] instead of converting to [`Tle`] /
 //! [`GroundObserver`]. Pass your type to [`Predictor::from_tle`]. See the
 //! trait docs for details.
 //!
@@ -100,46 +99,34 @@ pub use crate::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, Classification, Elements, Error, GroundObserver, HasId, HasTle,
-        IlluminationState, Observation, Observer, Predictor, Result, Satellite, Tle, Transit,
+        ApsisEvent, Classification, Elements, Error, GroundObserver, IlluminationState,
+        Observation, Observer, Predictor, Result, Tle, TleRecord, Transit,
     };
 }
 
 /// Crate-wide result type, parameterised over [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Marker supertrait for a satellite that has both an identifier and TLE lines.
+/// A type that holds a satellite name and two TLE lines.
 ///
-/// Any type implementing both [`HasId`] and [`HasTle`] automatically
-/// implements `Satellite`.
-pub trait Satellite: HasId + HasTle {}
-impl<T> Satellite for T where T: HasId + HasTle {}
-
-/// A type that provides a satellite identifier.
-pub trait HasId {
+/// Implement this on your own struct to pass it directly to
+/// [`Predictor::from_tle`] without converting to [`Tle`] first.
+pub trait TleRecord {
     /// Returns the satellite name or NORAD catalog number string.
-    fn id(&self) -> &str;
-}
-
-impl<T: HasId> HasId for &T {
-    fn id(&self) -> &str {
-        (*self).id()
-    }
-}
-
-/// A type that provides the two lines of a TLE.
-pub trait HasTle {
+    fn satellite_name(&self) -> &str;
     /// Returns TLE line 1.
     fn line_1(&self) -> &str;
     /// Returns TLE line 2.
     fn line_2(&self) -> &str;
 }
 
-impl<T: HasTle> HasTle for &T {
+impl<T: TleRecord> TleRecord for &T {
+    fn satellite_name(&self) -> &str {
+        (*self).satellite_name()
+    }
     fn line_1(&self) -> &str {
         (*self).line_1()
     }
-
     fn line_2(&self) -> &str {
         (*self).line_2()
     }
@@ -184,13 +171,13 @@ impl Predictor {
 
     /// Parse TLE string lines and initialise SGP4 constants.
     ///
-    /// Accepts any type implementing [`Satellite`] (i.e. [`HasId`] + [`HasTle`]),
-    /// including [`Tle`], `&`[`Tle`], or your own custom struct.
+    /// Accepts any type implementing [`TleRecord`], including [`Tle`], `&`[`Tle`],
+    /// or your own custom struct.
     ///
     /// Returns an error if the TLE text is malformed or if SGP4
     /// element initialisation fails.
-    pub fn from_tle(sat: impl Satellite) -> Result<Self> {
-        let id = sat.id().to_string();
+    pub fn from_tle(sat: impl TleRecord) -> Result<Self> {
+        let id = sat.satellite_name().to_string();
         let elements = Elements::from_tle(
             Some(id.clone()),
             sat.line_1().as_bytes(),

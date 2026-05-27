@@ -274,8 +274,8 @@ impl Predictor {
     ///
     /// Raises `ValueError` if the TLE is malformed.
     #[staticmethod]
-    fn from_tle(sat: &Tle) -> PyResult<Self> {
-        sgp4_predict::Predictor::from_tle(sat)
+    fn from_tle(tle: &Tle) -> PyResult<Self> {
+        sgp4_predict::Predictor::from_tle(tle)
             .map(|p| Self { inner: p })
             .map_err(to_py_err)
     }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde::Deserialize;
-use sgp4_predict::{HasId, HasTle, IlluminationState, Observation, Observer, Predictor, Transit};
+use sgp4_predict::{IlluminationState, Observation, Observer, Predictor, TleRecord, Transit};
 use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
 use std::path::{Path, PathBuf};
@@ -46,16 +46,15 @@ struct Tle {
     line_2: String,
 }
 
-impl HasId for Tle {
-    fn id(&self) -> &str {
+impl TleRecord for Tle {
+    fn satellite_name(&self) -> &str {
         &self.name
     }
-}
 
-impl HasTle for Tle {
     fn line_1(&self) -> &str {
         &self.line_1
     }
+
     fn line_2(&self) -> &str {
         &self.line_2
     }
