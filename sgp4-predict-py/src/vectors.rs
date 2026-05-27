@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::{EcefState, EnuState, TemeState};
 
-use crate::satellite::GroundObserver;
+use crate::observer::GroundObserver;
 use crate::types::Observation;
 
 /// A 3-component vector (x, y, z).  Used for position (metres) and velocity (m/s).

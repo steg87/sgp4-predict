@@ -31,7 +31,7 @@ let tle: Tle = "\
 // Or construct directly
 let tle = Tle::new("SENTINEL-2C", line_1, line_2);
 
-let predictor = Predictor::new(&tle)?;
+let predictor = Predictor::from_tle(&tle)?;
 
 // Glasgow ground station: lat/lon in degrees, altitude in metres
 let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
@@ -134,7 +134,7 @@ impl Observer for Site {
     fn altitude(&self) -> f64      { self.elevation_m }
 }
 
-let predictor = Predictor::new(&my_record)?;
+let predictor = Predictor::from_tle(&my_record)?;
 ```
 
 The `Satellite` supertrait is a blanket impl — any type implementing both `HasId` and `HasTle` satisfies it automatically.

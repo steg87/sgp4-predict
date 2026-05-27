@@ -8,6 +8,8 @@ from sgp4_predict._sgp4_predict import (
     Apsis,
     ApsisEvent,
     ApsisIter,
+    Classification,
+    Elements,
     GroundObserver,
     Illumination,
     IlluminationIter,
@@ -16,7 +18,7 @@ from sgp4_predict._sgp4_predict import (
     ObservationIter,
     PredictionIter,
     Refinement,
-    Satellite,
+    Tle,
     StateVectorEcef,
     StateVectorEnu,
     StateVectorTeme,
@@ -41,10 +43,19 @@ class Interval:
     def end(self) -> datetime: ...
     def __repr__(self) -> str: ...
 
+class Elements:
+    # from_dict is not emitted by pyo3-stub-gen (PyAny limitation); defined here manually.
+    @staticmethod
+    def from_dict(data: dict) -> Elements:
+        """Parse an OMM dict into orbital elements (Celestrak / Space-Track format)."""
+        ...
+
 class Predictor:
     @property
     def epoch(self) -> datetime: ...
-    def __new__(cls, sat: Satellite) -> Predictor: ...
+    def __new__(cls, elements: Elements) -> Predictor: ...
+    @staticmethod
+    def from_tle(tle: Tle) -> Predictor: ...
     def with_refinement(self, refinement: Refinement) -> Predictor: ...
     def propagate(self, t: datetime) -> StateVectorTeme: ...
     def observe_at(self, t: datetime, observer: GroundObserver) -> Observation: ...
@@ -62,6 +73,8 @@ __all__ = [
     "Apsis",
     "ApsisEvent",
     "ApsisIter",
+    "Classification",
+    "Elements",
     "GroundObserver",
     "Illumination",
     "IlluminationIter",
@@ -73,7 +86,7 @@ __all__ = [
     "PredictionIter",
     "Predictor",
     "Refinement",
-    "Satellite",
+    "Tle",
     "StateVectorEcef",
     "StateVectorEnu",
     "StateVectorTeme",

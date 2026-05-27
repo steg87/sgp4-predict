@@ -6,7 +6,7 @@ use crate::{cli::IlluminationArgs, output};
 pub fn run(args: IlluminationArgs) -> anyhow::Result<()> {
     let (start, interval) = resolve_interval(&args.common)?;
     let tle = load_tle(&args.common)?;
-    let predictor = Predictor::new(&tle)?;
+    let predictor = Predictor::from_tle(&tle)?;
     warn_stale_tle(&predictor, start);
     let mut writer = open_writer(&args.common.out)?;
 

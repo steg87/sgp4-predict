@@ -1,7 +1,7 @@
 //! Higher-level satellite prediction built on the [`sgp4`] crate.
 //!
 //! [`Predictor`] is the main entry point. Construct it from a [`Tle`] (or any
-//! type that implements [`Satellite`]), then use its methods to propagate state
+//! type that implements [`TleRecord`]), then use its methods to propagate state
 //! vectors, compute ground observations, detect passes, find apsides, and query
 //! illumination.
 //!
@@ -18,7 +18,7 @@
 //!     .parse()
 //!     .unwrap();
 //!
-//! let predictor = Predictor::new(&tle).unwrap();
+//! let predictor = Predictor::from_tle(&tle).unwrap();
 //! let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
 //!
 //! let start = Utc::now();
@@ -33,9 +33,29 @@
 //! # Custom types
 //!
 //! If your application already has types that hold TLE data or coordinates,
-//! implement [`HasId`] + [`HasTle`] (which together satisfy [`Satellite`]
-//! automatically) and [`Observer`] instead of converting to [`Tle`] /
-//! [`GroundObserver`]. See the trait docs for details.
+//! implement [`TleRecord`] and [`Observer`] instead of converting to [`Tle`] /
+//! [`GroundObserver`]. Pass your type to [`Predictor::from_tle`]. See the
+//! trait docs for details.
+//!
+//! # OMM support
+//!
+//! [`sgp4::Elements`] (re-exported as [`Elements`]) represents orbital data
+//! from either a TLE or an OMM (Orbit Mean-Elements Message). Because it
+//! derives `serde::Deserialize`, you can parse an OMM JSON object directly
+//! with `serde_json` and hand the result to [`Predictor::new`]:
+//!
+//! ```no_run
+//! use sgp4_predict::{Elements, Predictor};
+//!
+//! # let omm_json = "{}";
+//! let elements: Elements = serde_json::from_str(omm_json).unwrap();
+//! let predictor = Predictor::new(elements).unwrap();
+//! ```
+//!
+//! The JSON field names follow the CCSDS OMM standard
+//! (`NORAD_CAT_ID`, `EPOCH`, `MEAN_MOTION`, `ECCENTRICITY`, etc.).
+//! Both Celestrak and Space-Track JSON responses parse directly into
+//! `Elements` with no extra mapping required.
 //!
 //! # Units
 //!
@@ -54,8 +74,10 @@ mod types;
 mod vectors;
 
 use chrono::{DateTime, Duration, Utc};
-use sgp4::{Constants, Elements, MinutesSinceEpoch};
+use sgp4::{Constants, MinutesSinceEpoch};
 use thiserror::Error as ThisError;
+
+pub use sgp4::{Classification, Elements};
 
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
@@ -77,38 +99,44 @@ pub use crate::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, Error, GroundObserver, HasId, HasTle, IlluminationState, Observation, Observer,
-        Predictor, Result, Satellite, Tle, Transit,
+        ApsisEvent, Classification, Elements, Error, GroundObserver, IlluminationState,
+        Observation, Observer, Predictor, Result, Tle, TleRecord, Transit,
     };
 }
 
 /// Crate-wide result type, parameterised over [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Marker supertrait for a satellite that has both an identifier and TLE lines.
+/// A type that holds a satellite name and two TLE lines.
 ///
-/// Any type implementing both [`HasId`] and [`HasTle`] automatically
-/// implements `Satellite`.
-pub trait Satellite: HasId + HasTle {}
-impl<T> Satellite for T where T: HasId + HasTle {}
-
-/// A type that provides a satellite identifier.
-pub trait HasId {
+/// Implement this on your own struct to pass it directly to
+/// [`Predictor::from_tle`] without converting to [`Tle`] first.
+pub trait TleRecord {
     /// Returns the satellite name or NORAD catalog number string.
-    fn id(&self) -> &str;
-}
-
-/// A type that provides the two lines of a TLE.
-pub trait HasTle {
+    fn satellite_name(&self) -> &str;
     /// Returns TLE line 1.
     fn line_1(&self) -> &str;
     /// Returns TLE line 2.
     fn line_2(&self) -> &str;
 }
 
-/// Parsed TLE with pre-computed SGP4 constants, ready for propagation.
+impl<T: TleRecord> TleRecord for &T {
+    fn satellite_name(&self) -> &str {
+        (*self).satellite_name()
+    }
+    fn line_1(&self) -> &str {
+        (*self).line_1()
+    }
+    fn line_2(&self) -> &str {
+        (*self).line_2()
+    }
+}
+
+/// Pre-computed SGP4 constants ready for propagation.
 ///
-/// Construct with [`Predictor::new`] from any [`Satellite`].
+/// Build from TLE string lines via [`Predictor::from_tle`], or from a
+/// pre-parsed [`sgp4::Elements`] (e.g. from an OMM JSON object) via
+/// [`Predictor::new`].
 #[derive(Debug, Clone)]
 pub struct Predictor {
     elements: Elements,
@@ -117,19 +145,47 @@ pub struct Predictor {
 }
 
 impl Predictor {
-    /// Parse a TLE and initialise SGP4 constants.
+    /// Initialise SGP4 constants from pre-parsed orbital elements.
+    ///
+    /// Use this when you already have a [`sgp4::Elements`] value — for
+    /// example, one deserialised from an OMM JSON object with `serde_json`.
+    /// For the common case of building from TLE string lines, prefer
+    /// [`from_tle`](Predictor::from_tle).
+    ///
+    /// Returns an error if SGP4 element initialisation fails.
+    ///
+    /// SGP4 accuracy degrades with element-set age (typically beyond 3–7 days for LEO).
+    /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
+    /// as appropriate for your use case.
+    pub fn new(elements: Elements) -> Result<Self> {
+        let constants = Constants::from_elements(&elements)?;
+        let predictor = Self {
+            elements,
+            constants,
+            refinement: Refinement::default(),
+        };
+        tracing::debug!(
+            satellite = %predictor.elements.object_name.as_deref().unwrap_or(
+                &format!("NORAD {}", &predictor.elements.norad_id)),
+            epoch = %predictor.epoch(),
+            "predictor initialized from OMM elements"
+        );
+        Ok(predictor)
+    }
+
+    /// Parse TLE string lines and initialise SGP4 constants.
+    ///
+    /// Accepts any type implementing [`TleRecord`], including [`Tle`], `&`[`Tle`],
+    /// or your own custom struct.
     ///
     /// Returns an error if the TLE text is malformed or if SGP4
     /// element initialisation fails.
-    ///
-    /// SGP4 accuracy degrades with TLE age (typically beyond 3–7 days for LEO).
-    /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
-    /// as appropriate for your use case.
-    pub fn new(sat: &impl Satellite) -> Result<Self> {
+    pub fn from_tle(tle: impl TleRecord) -> Result<Self> {
+        let id = tle.satellite_name().to_string();
         let elements = Elements::from_tle(
-            Some(sat.id().to_owned()),
-            sat.line_1().as_bytes(),
-            sat.line_2().as_bytes(),
+            Some(id.clone()),
+            tle.line_1().as_bytes(),
+            tle.line_2().as_bytes(),
         )?;
         let constants = Constants::from_elements(&elements)?;
         let predictor = Self {
@@ -137,7 +193,7 @@ impl Predictor {
             constants,
             refinement: Refinement::default(),
         };
-        tracing::debug!(satellite = sat.id(), epoch = %predictor.epoch(), "predictor initialized");
+        tracing::debug!(satellite = %id, epoch = %predictor.epoch(), "predictor initialized from TLE");
         Ok(predictor)
     }
 

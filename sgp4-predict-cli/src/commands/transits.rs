@@ -13,7 +13,7 @@ pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
         Some(s) => observer::parse_observer(s)?,
         None => observer::prompt_observer()?,
     };
-    let predictor = Predictor::new(&tle)?;
+    let predictor = Predictor::from_tle(&tle)?;
     warn_stale_tle(&predictor, start);
     let mut writer = open_writer(&args.common.out)?;
 

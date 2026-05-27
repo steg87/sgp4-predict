@@ -6,7 +6,7 @@ use sgp4_predict::{GroundObserver, Predictor};
 #[test]
 fn test_transits() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
     let transits = p
         .transits_iter(
@@ -35,7 +35,7 @@ fn test_transit_start_inside_interval() {
     // Design decision: a transit already in progress when the search window opens is
     // excluded. Only transits whose AOS falls within the window are returned.
     let tle = common::create_tle();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     // Find the first two transits over a wide window.
@@ -87,7 +87,7 @@ fn test_transit_start_inside_interval() {
 #[test]
 fn test_detect_transit() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     // Find the first transit via the iterator (ground truth).
@@ -146,7 +146,7 @@ fn test_transits_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     let start = p.epoch();

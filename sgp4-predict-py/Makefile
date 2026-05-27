@@ -1,5 +1,10 @@
 SILENT:
 
+# Creates / refreshes the .venv so the root Makefile can locate the interpreter.
+.PHONY: init
+init:
+	uv sync
+
 .PHONY: dev
 dev:
 	uv run maturin develop

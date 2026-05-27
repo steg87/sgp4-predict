@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from sgp4_predict._sgp4_predict import (
-    Satellite,
+    Classification,
+    Elements,
+    Tle,
     GroundObserver,
     Vec3,
     StateVectorTeme,
@@ -53,7 +55,9 @@ class Interval:
 
 
 __all__ = [
-    "Satellite",
+    "Classification",
+    "Elements",
+    "Tle",
     "GroundObserver",
     "Vec3",
     "StateVectorTeme",

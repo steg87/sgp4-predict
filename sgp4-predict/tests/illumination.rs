@@ -14,7 +14,7 @@ const MIN_ECLIPSE_SECS: i64 = 900; //  15 min
 const MAX_ECLIPSE_SECS: i64 = 2700; //  45 min
 
 fn predictor() -> Predictor {
-    Predictor::new(&common::create_tle()).unwrap()
+    Predictor::from_tle(common::create_tle()).unwrap()
 }
 
 fn interval() -> (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) {
@@ -171,7 +171,7 @@ fn test_illumination_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
 
     let start = p.epoch();
     let end = start + Duration::days(3);

@@ -6,7 +6,7 @@ use sgp4_predict::{GroundObserver, Predictor};
 #[test]
 fn test_observe() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
     let observations = p
         .observation_iter(
@@ -32,7 +32,7 @@ fn test_observe() {
 #[test]
 fn test_observe_cross_validate_skyfield() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     let t = common::datetime("2025-12-20T12:35:00Z");
@@ -74,7 +74,7 @@ fn test_next_transit_observations_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     let start = p.epoch();
