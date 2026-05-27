@@ -159,16 +159,17 @@ impl Predictor {
     /// as appropriate for your use case.
     pub fn new(elements: Elements) -> Result<Self> {
         let constants = Constants::from_elements(&elements)?;
-        let name = elements
-            .object_name
-            .clone()
-            .unwrap_or_else(|| format!("NORAD {}", elements.norad_id));
         let predictor = Self {
             elements,
             constants,
             refinement: Refinement::default(),
         };
-        tracing::debug!(satellite = %name, epoch = %predictor.epoch(), "predictor initialized from OMM elements");
+        tracing::debug!(
+            satellite = %predictor.elements.object_name.as_deref().unwrap_or(
+                &format!("NORAD {}", &predictor.elements.norad_id)),
+            epoch = %predictor.epoch(),
+            "predictor initialized from OMM elements"
+        );
         Ok(predictor)
     }
 
@@ -179,12 +180,12 @@ impl Predictor {
     ///
     /// Returns an error if the TLE text is malformed or if SGP4
     /// element initialisation fails.
-    pub fn from_tle(sat: impl TleRecord) -> Result<Self> {
-        let id = sat.satellite_name().to_string();
+    pub fn from_tle(tle: impl TleRecord) -> Result<Self> {
+        let id = tle.satellite_name().to_string();
         let elements = Elements::from_tle(
             Some(id.clone()),
-            sat.line_1().as_bytes(),
-            sat.line_2().as_bytes(),
+            tle.line_1().as_bytes(),
+            tle.line_2().as_bytes(),
         )?;
         let constants = Constants::from_elements(&elements)?;
         let predictor = Self {

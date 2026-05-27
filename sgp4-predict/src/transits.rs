@@ -253,12 +253,12 @@ mod tests {
 
     fn make_iter(min_elevation_deg: f64) -> TransitIter<'static, GroundObserver> {
         static OBS: GroundObserver = GroundObserver::new(0.0, 0.0, 0.0);
-        let sat = Tle::new(
+        let tle = Tle::new(
             "SENTINEL-2C",
             "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",
             "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740",
         );
-        let predictor = Predictor::from_tle(&sat).unwrap();
+        let predictor = Predictor::from_tle(&tle).unwrap();
         let t = Utc.with_ymd_and_hms(2025, 12, 22, 0, 0, 0).unwrap();
         TransitIter::new(
             predictor,

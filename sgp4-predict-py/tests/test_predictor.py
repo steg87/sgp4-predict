@@ -37,7 +37,7 @@ def make_predictor() -> Predictor:
     return Predictor.from_tle(Tle(TLE_ID, TLE_L1, TLE_L2))
 
 
-# ── GroundGroundObserver ──────────────────────────────────────────────────────────────
+# ── GroundObserver ──────────────────────────────────────────────────────────────
 
 
 def test_ground_station_round_trip():

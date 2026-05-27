@@ -299,4 +299,4 @@ Type stubs live in two files with different ownership:
 | `python/sgp4_predict/_sgp4_predict/__init__.pyi` | Auto-generated — run `make stubs` to update after Rust changes                          |
 | `python/sgp4_predict/__init__.pyi`               | Hand-maintained — owns `IntervalRange`, `Interval`, and the typed `Predictor` overrides |
 
-The hand-maintained stub is committed to the repository. The auto-generated one is also committed so that type checkers work without a build step.
+The hand-maintained stub is committed to the repository. The auto-generated one is not committed and must be built with `make stubs`.
