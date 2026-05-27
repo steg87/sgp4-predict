@@ -3,17 +3,19 @@ use pyo3_stub_gen::define_stub_info_gatherer;
 
 mod elements;
 mod errors;
+mod observer;
 mod predictor;
-mod satellite;
+mod tle;
 mod types;
 mod vectors;
 
 use elements::{Classification, Elements};
+use observer::GroundObserver;
 use predictor::{
     ApsisIter, IlluminationIter, ObservationIter, PredictionIter, Predictor, Refinement,
     TransitIter,
 };
-use satellite::{GroundObserver, Tle};
+use tle::Tle;
 use types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit};
 use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorTeme};
 

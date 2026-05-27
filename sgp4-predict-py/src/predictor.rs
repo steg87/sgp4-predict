@@ -6,7 +6,8 @@ use pyo3_stub_gen::derive::*;
 use crate::{
     elements::Elements,
     errors::to_py_err,
-    satellite::{GroundObserver, Tle},
+    observer::GroundObserver,
+    tle::Tle,
     types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
     vectors::StateVectorTeme,
 };
