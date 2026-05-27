@@ -43,6 +43,13 @@ class Interval:
     def end(self) -> datetime: ...
     def __repr__(self) -> str: ...
 
+class Elements:
+    # from_dict is not emitted by pyo3-stub-gen (PyAny limitation); defined here manually.
+    @staticmethod
+    def from_dict(data: dict) -> Elements:
+        """Parse an OMM dict into orbital elements (Celestrak / Space-Track format)."""
+        ...
+
 class Predictor:
     @property
     def epoch(self) -> datetime: ...
