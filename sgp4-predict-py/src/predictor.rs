@@ -6,7 +6,7 @@ use pyo3_stub_gen::derive::*;
 use crate::{
     elements::Elements,
     errors::to_py_err,
-    satellite::{GroundObserver, Satellite},
+    satellite::{GroundObserver, Tle},
     types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
     vectors::StateVectorTeme,
 };
@@ -245,7 +245,7 @@ fn extract_interval(interval: &Bound<'_, PyAny>) -> PyResult<(DateTime<Utc>, Dat
 
 /// Parsed TLE with pre-computed SGP4 constants, ready for propagation.
 ///
-/// Construct from a `Satellite`; then use its methods to propagate state vectors,
+/// Construct from a `Tle` or `Elements`; then use its methods to propagate state vectors,
 /// compute ground observations, detect passes, find apsides, and query illumination.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
@@ -259,7 +259,7 @@ impl Predictor {
     /// Initialise SGP4 constants from pre-parsed orbital elements.
     ///
     /// Pass an `Elements` object — constructed manually, from `Elements.from_json`,
-    /// or obtained from `Satellite.to_elements` (not yet implemented).
+    /// or obtained from `Tle.to_elements` (not yet implemented).
     ///
     /// Raises `ValueError` if element initialisation fails.
     #[new]
@@ -273,7 +273,7 @@ impl Predictor {
     ///
     /// Raises `ValueError` if the TLE is malformed.
     #[staticmethod]
-    fn from_tle(sat: &Satellite) -> PyResult<Self> {
+    fn from_tle(sat: &Tle) -> PyResult<Self> {
         sgp4_predict::Predictor::from_tle(sat)
             .map(|p| Self { inner: p })
             .map_err(to_py_err)

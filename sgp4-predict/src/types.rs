@@ -76,16 +76,27 @@ impl HasTle for Tle {
     }
 }
 
-impl TryInto<Elements> for Tle {
+impl TryFrom<Tle> for Elements {
     type Error = TleError;
 
-    fn try_into(self) -> Result<Elements, TleError> {
-        let elements = Elements::from_tle(
-            Some(self.satellite_name),
-            self.line_1.as_bytes(),
-            self.line_2.as_bytes(),
-        )?;
-        Ok(elements)
+    fn try_from(tle: Tle) -> Result<Self, TleError> {
+        Elements::from_tle(
+            Some(tle.satellite_name),
+            tle.line_1.as_bytes(),
+            tle.line_2.as_bytes(),
+        )
+    }
+}
+
+impl TryFrom<&Tle> for Elements {
+    type Error = TleError;
+
+    fn try_from(tle: &Tle) -> Result<Self, TleError> {
+        Elements::from_tle(
+            Some(tle.satellite_name.clone()),
+            tle.line_1.as_bytes(),
+            tle.line_2.as_bytes(),
+        )
     }
 }
 

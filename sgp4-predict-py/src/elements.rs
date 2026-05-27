@@ -60,7 +60,7 @@ impl From<sgp4_predict::Classification> for Classification {
 ///
 /// data = requests.get("https://celestrak.org/SOCRATES/...").json()
 /// elements = Elements.from_json(json.dumps(data[0]))
-/// predictor = Predictor.from_elements(elements)
+/// predictor = Predictor(elements)
 /// ```
 ///
 /// Example — manual construction:
@@ -83,7 +83,7 @@ impl From<sgp4_predict::Classification> for Classification {
 ///     revolution_number=23587,
 ///     object_name="ISS (ZARYA)",
 /// )
-/// predictor = Predictor.from_elements(elements)
+/// predictor = Predictor(elements)
 /// ```
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]

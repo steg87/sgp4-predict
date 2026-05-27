@@ -4,8 +4,8 @@ from typing import Protocol, runtime_checkable
 from sgp4_predict._sgp4_predict import (
     Classification,
     Elements,
-    Satellite,
-    GroundObserver,
+    Tle,
+    Observer,
     Vec3,
     StateVectorTeme,
     StateVectorEcef,
@@ -57,8 +57,8 @@ class Interval:
 __all__ = [
     "Classification",
     "Elements",
-    "Satellite",
-    "GroundObserver",
+    "Tle",
+    "Observer",
     "Vec3",
     "StateVectorTeme",
     "StateVectorEcef",

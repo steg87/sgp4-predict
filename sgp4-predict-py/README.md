@@ -17,19 +17,19 @@ Requires Python 3.10+.
 
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import Satellite, GroundObserver, Predictor, Interval
+from sgp4_predict import Tle, Observer, Predictor, Interval
 
 # Sentinel-2C TLE
-sat = Satellite(
+sat = Tle(
     "SENTINEL-2C",
     "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",
     "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740",
 )
 
-predictor = Predictor(sat)
+predictor = Predictor.from_tle(sat)
 
 # Ground station: Glasgow
-glasgow = GroundObserver(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
+glasgow = Observer(lat_deg=55.86, lon_deg=-4.25, altitude=40.0)
 
 # Find passes over the next 24 hours
 window = Interval(
@@ -64,8 +64,8 @@ All values are in SI units unless noted otherwise:
 | Range rate                     | m/s (positive = receding)                   |
 | Azimuth / elevation            | radians (use `_deg` properties for degrees) |
 | Altitude (apsis)               | metres above WGS-84 equatorial radius       |
-| `GroundObserver` lat/lon input  | degrees                                     |
-| `GroundObserver` altitude input | metres                                      |
+| `Observer` lat/lon input  | degrees                                     |
+| `Observer` altitude input | metres                                      |
 
 ## API reference
 
@@ -85,24 +85,24 @@ assert isinstance(window, IntervalRange)   # True
 assert isinstance(transit, IntervalRange)  # True — Transit satisfies the protocol
 ```
 
-### `Satellite`
+### `Tle`
 
 Holds the raw TLE strings. No parsing happens here.
 
 ```python
-sat = Satellite(id="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
+sat = Tle(id="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
 
 sat.id      # str
 sat.line_1  # str
 sat.line_2  # str
 ```
 
-### `GroundObserver`
+### `Observer`
 
 A fixed point on Earth's surface. Lat/lon are accepted in degrees.
 
 ```python
-gs = GroundObserver(lat_deg=51.5, lon_deg=-0.1, altitude=10.0)
+gs = Observer(lat_deg=51.5, lon_deg=-0.1, altitude=10.0)
 
 gs.lat_deg   # float — geodetic latitude (degrees, positive north)
 gs.lon_deg   # float — geodetic longitude (degrees, positive east)
@@ -111,12 +111,13 @@ gs.altitude  # float — metres above WGS-84 ellipsoid
 
 ### `Predictor`
 
-The main entry point. Parses the TLE and pre-computes SGP4 constants.
+The main entry point. Pre-computes SGP4 constants.
 
 ```python
-p = Predictor(sat)           # raises ValueError on malformed TLE
-p.epoch                      # datetime (UTC) — TLE epoch
-p.tle_age_seconds(now)       # float — seconds since TLE epoch (positive = past)
+p = Predictor.from_tle(sat)  # from a Tle object — raises ValueError on malformed TLE
+p = Predictor(elements)      # from a pre-parsed Elements (OMM JSON) object
+p.epoch                      # datetime (UTC) — element epoch
+p.tle_age_seconds(now)       # float — seconds since epoch (positive = past)
 ```
 
 #### Propagation

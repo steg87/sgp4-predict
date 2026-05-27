@@ -11,12 +11,12 @@ from sgp4_predict import (
     ApsisEvent,
     Classification,
     Elements,
-    GroundObserver,
+    Observer,
     IlluminationState,
     Interval,
     IntervalRange,
     Predictor,
-    Satellite,
+    Tle,
 )
 
 # ── Canonical test data ────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ TLE_L1 = "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
 TLE_L2 = "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
 
 # Glasgow (matches tests/common/mod.rs ground station)
-GLASGOW = GroundObserver(55.86, -4.25, 40.0)
+GLASGOW = Observer(55.86, -4.25, 40.0)
 
 START = datetime(2025, 12, 22, tzinfo=timezone.utc)
 END = START + timedelta(days=1)
@@ -34,14 +34,14 @@ INTERVAL = Interval(START, END)
 
 
 def make_predictor() -> Predictor:
-    return Predictor.from_tle(Satellite(TLE_ID, TLE_L1, TLE_L2))
+    return Predictor.from_tle(Tle(TLE_ID, TLE_L1, TLE_L2))
 
 
 # ── GroundObserver ──────────────────────────────────────────────────────────────
 
 
 def test_ground_station_round_trip():
-    gs = GroundObserver(51.5, -0.1, 10.0)
+    gs = Observer(51.5, -0.1, 10.0)
     assert abs(gs.latitude_deg - 51.5) < 1e-10
     assert abs(gs.longitude_deg - -0.1) < 1e-10
     assert gs.altitude == 10.0
@@ -52,7 +52,7 @@ def test_ground_station_round_trip():
 
 def test_invalid_tle_raises_value_error():
     with pytest.raises(ValueError):
-        Predictor.from_tle(Satellite("BAD", "not a tle line", "also bad"))
+        Predictor.from_tle(Tle("BAD", "not a tle line", "also bad"))
 
 
 def test_epoch():
@@ -373,7 +373,7 @@ def test_predictor_from_elements():
 
 
 def test_predictor_from_tle_still_works():
-    p = Predictor.from_tle(Satellite(TLE_ID, TLE_L1, TLE_L2))
+    p = Predictor.from_tle(Tle(TLE_ID, TLE_L1, TLE_L2))
     assert p.epoch.year == 2025
 
 

@@ -2,10 +2,10 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::{HasId, HasTle, Observer};
 
-/// A satellite identified by a name and two TLE lines.
+/// A satellite TLE (Two-Line Element set) identified by a name and two TLE lines.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
-pub struct Satellite {
+pub struct Tle {
     id: String,
     line_1: String,
     line_2: String,
@@ -13,7 +13,7 @@ pub struct Satellite {
 
 #[gen_stub_pymethods]
 #[pymethods]
-impl Satellite {
+impl Tle {
     #[new]
     pub fn new(id: String, line_1: String, line_2: String) -> Self {
         Self { id, line_1, line_2 }
@@ -35,13 +35,13 @@ impl Satellite {
     }
 }
 
-impl HasId for Satellite {
+impl HasId for Tle {
     fn id(&self) -> &str {
         &self.id
     }
 }
 
-impl HasTle for Satellite {
+impl HasTle for Tle {
     fn line_1(&self) -> &str {
         &self.line_1
     }
@@ -54,7 +54,12 @@ impl HasTle for Satellite {
 ///
 /// Latitude and longitude are in degrees. Altitude is in metres above the WGS-84 ellipsoid.
 #[gen_stub_pyclass]
-#[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(
+    frozen,
+    name = "Observer",
+    from_py_object,
+    module = "sgp4_predict._sgp4_predict"
+)]
 #[derive(Clone)]
 pub struct GroundObserver {
     latitude_deg: f64,

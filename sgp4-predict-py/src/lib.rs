@@ -13,7 +13,7 @@ use predictor::{
     ApsisIter, IlluminationIter, ObservationIter, PredictionIter, Predictor, Refinement,
     TransitIter,
 };
-use satellite::{GroundObserver, Satellite};
+use satellite::{GroundObserver, Tle};
 use types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit};
 use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorTeme};
 
@@ -27,7 +27,7 @@ pyo3_stub_gen::reexport_module_members!("sgp4_predict", "sgp4_predict._sgp4_pred
 fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Classification>()?;
     m.add_class::<Elements>()?;
-    m.add_class::<Satellite>()?;
+    m.add_class::<Tle>()?;
     m.add_class::<GroundObserver>()?;
     m.add_class::<PyVec3>()?;
     m.add_class::<StateVectorTeme>()?;

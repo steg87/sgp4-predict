@@ -178,7 +178,7 @@ impl Predictor {
             constants,
             refinement: Refinement::default(),
         };
-        tracing::debug!(satellite = %name, epoch = %predictor.epoch(), "predictor initialized from elements");
+        tracing::debug!(satellite = %name, epoch = %predictor.epoch(), "predictor initialized from OMM elements");
         Ok(predictor)
     }
 
@@ -190,12 +190,20 @@ impl Predictor {
     /// Returns an error if the TLE text is malformed or if SGP4
     /// element initialisation fails.
     pub fn from_tle(sat: impl Satellite) -> Result<Self> {
+        let id = sat.id().to_string();
         let elements = Elements::from_tle(
-            Some(sat.id().to_string()),
+            Some(id.clone()),
             sat.line_1().as_bytes(),
             sat.line_2().as_bytes(),
         )?;
-        Self::new(elements)
+        let constants = Constants::from_elements(&elements)?;
+        let predictor = Self {
+            elements,
+            constants,
+            refinement: Refinement::default(),
+        };
+        tracing::debug!(satellite = %id, epoch = %predictor.epoch(), "predictor initialized from TLE");
+        Ok(predictor)
     }
 
     /// Set the root-finder configuration used by [`detect_transit`] and [`max_elevation`].
