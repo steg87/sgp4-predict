@@ -1,5 +1,10 @@
 SILENT:
 
+# Pin the Python interpreter so cargo build scripts for the pyo3 crate always
+# find the correct venv, regardless of any VIRTUAL_ENV set in the shell.
+PYO3_PYTHON := $(CURDIR)/sgp4-predict-py/.venv/bin/python
+export PYO3_PYTHON
+
 .PHONY: init
 init:
 	prek install

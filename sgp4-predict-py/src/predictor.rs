@@ -260,7 +260,7 @@ impl Predictor {
     /// Raises `ValueError` if the TLE is malformed.
     #[new]
     fn new(sat: &Satellite) -> PyResult<Self> {
-        sgp4_predict::Predictor::new(sat)
+        sgp4_predict::Predictor::from_tle(sat)
             .map(|p| Self { inner: p })
             .map_err(to_py_err)
     }

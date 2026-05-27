@@ -12,7 +12,7 @@ pub fn run(args: StateVectorsArgs) -> anyhow::Result<()> {
     let (start, interval) = resolve_interval(&args.common)?;
     let step = Duration::from_std(args.step).context("step out of range")?;
     let tle = load_tle(&args.common)?;
-    let predictor = Predictor::new(&tle)?;
+    let predictor = Predictor::from_tle(&tle)?;
     warn_stale_tle(&predictor, start);
     let mut writer = open_writer(&args.common.out)?;
 
