@@ -4,6 +4,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 
 use crate::{
+    elements::Elements,
     errors::to_py_err,
     satellite::{GroundObserver, Satellite},
     types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
@@ -255,11 +256,24 @@ pub struct Predictor {
 #[gen_stub_pymethods]
 #[pymethods]
 impl Predictor {
-    /// Parse a TLE and initialise SGP4 constants.
+    /// Initialise SGP4 constants from pre-parsed orbital elements.
+    ///
+    /// Pass an `Elements` object — constructed manually, from `Elements.from_json`,
+    /// or obtained from `Satellite.to_elements` (not yet implemented).
+    ///
+    /// Raises `ValueError` if element initialisation fails.
+    #[new]
+    fn new(elements: &Elements) -> PyResult<Self> {
+        sgp4_predict::Predictor::new(elements.inner.clone())
+            .map(|p| Self { inner: p })
+            .map_err(to_py_err)
+    }
+
+    /// Parse TLE string lines and initialise SGP4 constants.
     ///
     /// Raises `ValueError` if the TLE is malformed.
-    #[new]
-    fn new(sat: &Satellite) -> PyResult<Self> {
+    #[staticmethod]
+    fn from_tle(sat: &Satellite) -> PyResult<Self> {
         sgp4_predict::Predictor::from_tle(sat)
             .map(|p| Self { inner: p })
             .map_err(to_py_err)

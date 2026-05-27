@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from sgp4_predict._sgp4_predict import (
+    Classification,
+    Elements,
     Satellite,
     GroundObserver,
     Vec3,
@@ -53,6 +55,8 @@ class Interval:
 
 
 __all__ = [
+    "Classification",
+    "Elements",
     "Satellite",
     "GroundObserver",
     "Vec3",

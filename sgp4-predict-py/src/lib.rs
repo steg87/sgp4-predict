@@ -1,12 +1,14 @@
 use pyo3::prelude::*;
 use pyo3_stub_gen::define_stub_info_gatherer;
 
+mod elements;
 mod errors;
 mod predictor;
 mod satellite;
 mod types;
 mod vectors;
 
+use elements::{Classification, Elements};
 use predictor::{
     ApsisIter, IlluminationIter, ObservationIter, PredictionIter, Predictor, Refinement,
     TransitIter,
@@ -23,6 +25,8 @@ pyo3_stub_gen::reexport_module_members!("sgp4_predict", "sgp4_predict._sgp4_pred
 
 #[pymodule]
 fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<Classification>()?;
+    m.add_class::<Elements>()?;
     m.add_class::<Satellite>()?;
     m.add_class::<GroundObserver>()?;
     m.add_class::<PyVec3>()?;

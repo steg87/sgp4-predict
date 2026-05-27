@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sgp4_predict import (
     ApsisEvent,
+    Classification,
+    Elements,
     GroundObserver,
     IlluminationState,
     Interval,
@@ -32,7 +34,7 @@ INTERVAL = Interval(START, END)
 
 
 def make_predictor() -> Predictor:
-    return Predictor(Satellite(TLE_ID, TLE_L1, TLE_L2))
+    return Predictor.from_tle(Satellite(TLE_ID, TLE_L1, TLE_L2))
 
 
 # ── GroundObserver ──────────────────────────────────────────────────────────────
@@ -50,7 +52,7 @@ def test_ground_station_round_trip():
 
 def test_invalid_tle_raises_value_error():
     with pytest.raises(ValueError):
-        Predictor(Satellite("BAD", "not a tle line", "also bad"))
+        Predictor.from_tle(Satellite("BAD", "not a tle line", "also bad"))
 
 
 def test_epoch():
@@ -302,3 +304,81 @@ def test_observation_iter_missing_interval_raises():
     step = timedelta(seconds=30)
     with pytest.raises(AttributeError):
         list(p.observation_iter(GLASGOW, "not-an-interval", step))
+
+
+# ── Elements / OMM ─────────────────────────────────────────────────────────────
+
+ISS_OMM_JSON = """{
+    "OBJECT_NAME": "ISS (ZARYA)",
+    "OBJECT_ID": "1998-067A",
+    "EPOCH": "2020-07-12T01:19:07.402656",
+    "MEAN_MOTION": 15.49560532,
+    "ECCENTRICITY": 0.0001771,
+    "INCLINATION": 51.6435,
+    "RA_OF_ASC_NODE": 225.4004,
+    "ARG_OF_PERICENTER": 44.9625,
+    "MEAN_ANOMALY": 5.1087,
+    "EPHEMERIS_TYPE": 0,
+    "CLASSIFICATION_TYPE": "U",
+    "NORAD_CAT_ID": 25544,
+    "ELEMENT_SET_NO": 999,
+    "REV_AT_EPOCH": 23587,
+    "BSTAR": 0.0049645,
+    "MEAN_MOTION_DOT": 0.00289036,
+    "MEAN_MOTION_DDOT": 0
+}"""
+
+
+def test_elements_from_json():
+    el = Elements.from_json(ISS_OMM_JSON)
+    assert el.norad_id == 25544
+    assert el.object_name == "ISS (ZARYA)"
+    assert abs(el.mean_motion - 15.49560532) < 1e-9
+    assert abs(el.eccentricity - 0.0001771) < 1e-9
+    assert el.classification == Classification.Unclassified
+    assert el.epoch.year == 2020
+
+
+def test_elements_from_json_invalid_raises():
+    with pytest.raises(ValueError):
+        Elements.from_json("not json")
+
+
+def test_elements_manual_construction():
+    epoch = datetime(2020, 7, 12, 1, 19, 7, tzinfo=timezone.utc)
+    el = Elements(
+        norad_id=25544,
+        epoch=epoch,
+        mean_motion=15.49560532,
+        eccentricity=0.0001771,
+        inclination=51.6435,
+        right_ascension=225.4004,
+        argument_of_perigee=44.9625,
+        mean_anomaly=5.1087,
+        mean_motion_dot=0.00289036,
+        drag_term=0.0049645,
+        revolution_number=23587,
+        object_name="ISS (ZARYA)",
+    )
+    assert el.norad_id == 25544
+    assert el.object_name == "ISS (ZARYA)"
+    assert el.classification == Classification.Unclassified
+    assert el.epoch == epoch
+
+
+def test_predictor_from_elements():
+    el = Elements.from_json(ISS_OMM_JSON)
+    p = Predictor(el)
+    assert p.epoch.year == 2020
+
+
+def test_predictor_from_tle_still_works():
+    p = Predictor.from_tle(Satellite(TLE_ID, TLE_L1, TLE_L2))
+    assert p.epoch.year == 2025
+
+
+def test_elements_repr():
+    el = Elements.from_json(ISS_OMM_JSON)
+    r = repr(el)
+    assert "25544" in r
+    assert "ISS (ZARYA)" in r
