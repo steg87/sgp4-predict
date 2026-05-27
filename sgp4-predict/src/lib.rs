@@ -18,7 +18,7 @@
 //!     .parse()
 //!     .unwrap();
 //!
-//! let predictor = Predictor::new(&tle).unwrap();
+//! let predictor = Predictor::from_tle(&tle).unwrap();
 //! let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
 //!
 //! let start = Utc::now();
@@ -35,7 +35,20 @@
 //! If your application already has types that hold TLE data or coordinates,
 //! implement [`HasId`] + [`HasTle`] (which together satisfy [`Satellite`]
 //! automatically) and [`Observer`] instead of converting to [`Tle`] /
-//! [`GroundObserver`]. See the trait docs for details.
+//! [`GroundObserver`]. Pass your type to [`Predictor::from_tle`]. See the
+//! trait docs for details.
+//!
+//! # OMM support
+//!
+//! The underlying [`sgp4`] crate uses the same [`sgp4::Elements`] type for
+//! both TLE and OMM (Orbit Mean-Elements Message) data. Parse an OMM JSON
+//! object with `serde_json` and pass the result directly to [`Predictor::new`]:
+//!
+//! ```no_run
+//! # let omm_json = "{}";
+//! let elements: sgp4::Elements = serde_json::from_str(omm_json).unwrap();
+//! let predictor = sgp4_predict::Predictor::new(elements).unwrap();
+//! ```
 //!
 //! # Units
 //!
@@ -98,6 +111,12 @@ pub trait HasId {
     fn id(&self) -> &str;
 }
 
+impl<T: HasId> HasId for &T {
+    fn id(&self) -> &str {
+        (*self).id()
+    }
+}
+
 /// A type that provides the two lines of a TLE.
 pub trait HasTle {
     /// Returns TLE line 1.
@@ -106,9 +125,21 @@ pub trait HasTle {
     fn line_2(&self) -> &str;
 }
 
-/// Parsed TLE with pre-computed SGP4 constants, ready for propagation.
+impl<T: HasTle> HasTle for &T {
+    fn line_1(&self) -> &str {
+        (*self).line_1()
+    }
+
+    fn line_2(&self) -> &str {
+        (*self).line_2()
+    }
+}
+
+/// Pre-computed SGP4 constants ready for propagation.
 ///
-/// Construct with [`Predictor::new`] from any [`Satellite`].
+/// Build from TLE string lines via [`Predictor::from_tle`], or from a
+/// pre-parsed [`sgp4::Elements`] (e.g. from an OMM JSON object) via
+/// [`Predictor::new`].
 #[derive(Debug, Clone)]
 pub struct Predictor {
     elements: Elements,
@@ -117,28 +148,44 @@ pub struct Predictor {
 }
 
 impl Predictor {
-    /// Parse a TLE and initialise SGP4 constants.
+    /// Initialise SGP4 constants from pre-parsed orbital elements.
     ///
-    /// Returns an error if the TLE text is malformed or if SGP4
-    /// element initialisation fails.
+    /// Use this when you already have a [`sgp4::Elements`] value — for
+    /// example, one deserialised from an OMM JSON object with `serde_json`.
+    /// For the common case of building from TLE string lines, prefer
+    /// [`from_tle`](Predictor::from_tle).
+    ///
+    /// Returns an error if SGP4 element initialisation fails.
     ///
     /// SGP4 accuracy degrades with TLE age (typically beyond 3–7 days for LEO).
     /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
     /// as appropriate for your use case.
-    pub fn new(sat: &impl Satellite) -> Result<Self> {
-        let elements = Elements::from_tle(
-            Some(sat.id().to_owned()),
-            sat.line_1().as_bytes(),
-            sat.line_2().as_bytes(),
-        )?;
+    pub fn new(elements: Elements) -> Result<Self> {
         let constants = Constants::from_elements(&elements)?;
+        let name = elements.object_name.clone().unwrap_or_default();
         let predictor = Self {
             elements,
             constants,
             refinement: Refinement::default(),
         };
-        tracing::debug!(satellite = sat.id(), epoch = %predictor.epoch(), "predictor initialized");
+        tracing::debug!(satellite = %name, epoch = %predictor.epoch(), "predictor initialized from elements");
         Ok(predictor)
+    }
+
+    /// Parse TLE string lines and initialise SGP4 constants.
+    ///
+    /// Accepts any type implementing [`Satellite`] (i.e. [`HasId`] + [`HasTle`]),
+    /// including [`Tle`], `&`[`Tle`], or your own custom struct.
+    ///
+    /// Returns an error if the TLE text is malformed or if SGP4
+    /// element initialisation fails.
+    pub fn from_tle(sat: impl Satellite) -> Result<Self> {
+        let elements = Elements::from_tle(
+            Some(sat.id().to_string()),
+            sat.line_1().as_bytes(),
+            sat.line_2().as_bytes(),
+        )?;
+        Self::new(elements)
     }
 
     /// Set the root-finder configuration used by [`detect_transit`] and [`max_elevation`].

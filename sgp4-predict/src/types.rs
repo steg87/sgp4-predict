@@ -3,6 +3,7 @@
 //! These concrete types let you get started quickly without defining your own
 //! structs. They are also available via [`crate::prelude`].
 
+use sgp4::{Elements, TleError};
 use std::str::FromStr;
 
 use thiserror::Error as ThisError;
@@ -17,7 +18,7 @@ pub struct TleParseError(pub(crate) String);
 /// A TLE (Two-Line Element set) with an associated satellite identifier.
 ///
 /// Implements [`HasId`] and [`HasTle`] (and therefore [`Satellite`][crate::Satellite])
-/// so it can be passed directly to [`Predictor::new`][crate::Predictor::new].
+/// so it can be passed directly to [`Predictor::from_tle`][crate::Predictor::from_tle].
 ///
 /// # Construction
 ///
@@ -72,6 +73,19 @@ impl HasTle for Tle {
 
     fn line_2(&self) -> &str {
         &self.line_2
+    }
+}
+
+impl TryInto<Elements> for Tle {
+    type Error = TleError;
+
+    fn try_into(self) -> Result<Elements, TleError> {
+        let elements = Elements::from_tle(
+            Some(self.satellite_name),
+            self.line_1.as_bytes(),
+            self.line_2.as_bytes(),
+        )?;
+        Ok(elements)
     }
 }
 

@@ -636,8 +636,8 @@ fn validate() {
             .get(&tc.observer)
             .unwrap_or_else(|| panic!("observer '{}' not found in spec", tc.observer));
 
-        let p: Predictor = Predictor::new(tle)
-            .unwrap_or_else(|e| panic!("Predictor::new failed for '{}': {e}", tc.name));
+        let p: Predictor = Predictor::from_tle(tle)
+            .unwrap_or_else(|e| panic!("Predictor::from_tle failed for '{}': {e}", tc.name));
 
         let (window_start, duration_days, window_end) =
             resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
@@ -755,8 +755,8 @@ fn validate() {
             .get(&tc.observer)
             .unwrap_or_else(|| panic!("observer '{}' not found in spec", tc.observer));
 
-        let p: Predictor = Predictor::new(tle)
-            .unwrap_or_else(|e| panic!("Predictor::new failed for '{}': {e}", tc.name));
+        let p: Predictor = Predictor::from_tle(tle)
+            .unwrap_or_else(|e| panic!("Predictor::from_tle failed for '{}': {e}", tc.name));
 
         let (window_start, duration_days, _) =
             resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
@@ -790,8 +790,8 @@ fn validate() {
             .get(&tc.tle)
             .unwrap_or_else(|| panic!("TLE '{}' not found in spec", tc.tle));
 
-        let p: Predictor = Predictor::new(tle)
-            .unwrap_or_else(|e| panic!("Predictor::new failed for '{}': {e}", tc.name));
+        let p: Predictor = Predictor::from_tle(tle)
+            .unwrap_or_else(|e| panic!("Predictor::from_tle failed for '{}': {e}", tc.name));
 
         let (window_start, duration_days, _) =
             resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
@@ -907,7 +907,7 @@ fn montecarlo_benchmark() {
             .unwrap_or_else(|| panic!("transit case '{}' not found", bc.transit_case));
         let tle = spec.tles.get(&tc.tle).unwrap();
         let gs = spec.observers.get(&tc.observer).unwrap();
-        let p = Predictor::new(tle).unwrap();
+        let p = Predictor::from_tle(tle).unwrap();
         let (window_start, _, window_end) =
             resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
         let min_el = tc.min_elevation.unwrap_or(0.0);

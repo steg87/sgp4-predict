@@ -8,7 +8,7 @@ const WGS84_A: f64 = 6_378_137.0; // metres
 #[test]
 fn test_propagate() {
     let tle = common::create_tle();
-    let p = Predictor::new(&tle).unwrap();
+    let p = Predictor::from_tle(&tle).unwrap();
 
     // Sentinel-2C mean altitude is ~788 km (sun-synchronous orbit). J2 short-period
     // perturbations can shift the instantaneous geocentric radius by up to ~12 km,
