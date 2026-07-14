@@ -66,6 +66,7 @@ mod apsides;
 mod frames;
 mod illumination;
 mod observe;
+mod poles;
 mod predict;
 mod roots;
 mod time;
@@ -84,6 +85,7 @@ pub use crate::{
     frames::{EcefState, EnuState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
+    poles::{PoleApproach, PoleApproachIter, PoleEvent},
     predict::PredictionIter,
     roots::{Brent, NewtonRaphson, Refinement},
     time::{DateTimeIter, IntervalRange},
@@ -166,7 +168,7 @@ impl Predictor {
         };
         tracing::debug!(
             satellite = %predictor.elements.object_name.as_deref().unwrap_or(
-                &format!("NORAD {}", &predictor.elements.norad_id)),
+                &format!("NORAD {}", predictor.elements.norad_id)),
             epoch = %predictor.epoch(),
             "predictor initialized from OMM elements"
         );
@@ -253,6 +255,13 @@ impl Predictor {
     /// Returns an iterator over apsis events in the TEME frame.
     pub fn apsis_iter(&self, interval: impl IntervalRange) -> ApsisIter {
         ApsisIter::new(self.clone(), interval).with_brent(self.refinement.brent)
+    }
+
+    /// Detect northernmost and southernmost points of the orbit over a time interval.
+    ///
+    /// Returns an iterator over pole-approach events.
+    pub fn pole_approach_iter(&self, interval: impl IntervalRange) -> PoleApproachIter {
+        PoleApproachIter::new(self.clone(), interval).with_brent(self.refinement.brent)
     }
 
     /// Calculate all of the transits visible to the observer.
