@@ -16,6 +16,9 @@ from sgp4_predict._sgp4_predict import (
     IlluminationState,
     Observation,
     ObservationIter,
+    PoleApproach,
+    PoleApproachIter,
+    PoleEvent,
     PredictionIter,
     Refinement,
     Tle,
@@ -63,6 +66,7 @@ class Predictor:
     def observation_iter(self, observer: GroundObserver, interval: IntervalRange, step: timedelta) -> ObservationIter: ...
     def transits_iter(self, observer: GroundObserver, interval: IntervalRange, min_elevation_deg: float) -> TransitIter: ...
     def apsis_iter(self, interval: IntervalRange) -> ApsisIter: ...
+    def pole_approach_iter(self, interval: IntervalRange) -> PoleApproachIter: ...
     def illumination_iter(self, interval: IntervalRange) -> IlluminationIter: ...
     def detect_transit(self, t: datetime, observer: GroundObserver, min_elevation_deg: float) -> Transit | None: ...
     def max_elevation(self, observer: GroundObserver, interval: IntervalRange) -> tuple[datetime, Observation]: ...
@@ -83,6 +87,9 @@ __all__ = [
     "IntervalRange",
     "Observation",
     "ObservationIter",
+    "PoleApproach",
+    "PoleApproachIter",
+    "PoleEvent",
     "PredictionIter",
     "Predictor",
     "Refinement",

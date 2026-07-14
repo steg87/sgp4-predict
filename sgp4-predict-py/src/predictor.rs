@@ -8,7 +8,10 @@ use crate::{
     errors::to_py_err,
     observer::GroundObserver,
     tle::Tle,
-    types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
+    types::{
+        Apsis, ApsisEvent, Illumination, IlluminationState, Observation, PoleApproach, PoleEvent,
+        Transit,
+    },
     vectors::StateVectorTeme,
 };
 
@@ -125,6 +128,38 @@ impl ApsisIter {
                     sgp4_predict::ApsisEvent::Perigee => ApsisEvent::Perigee,
                 },
                 altitude: a.altitude,
+            })),
+            Some(Err(e)) => Err(to_py_err(e)),
+        }
+    }
+}
+
+// ── PoleApproachIter ───────────────────────────────────────────────────────────
+
+/// Lazy iterator yielding northernmost and southernmost points within a time interval.
+#[gen_stub_pyclass]
+#[pyclass(module = "sgp4_predict._sgp4_predict")]
+pub struct PoleApproachIter {
+    inner: sgp4_predict::PoleApproachIter,
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PoleApproachIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<PoleApproach>> {
+        match self.inner.next() {
+            None => Ok(None),
+            Some(Ok(a)) => Ok(Some(PoleApproach {
+                time: a.time,
+                event: match a.event {
+                    sgp4_predict::PoleEvent::North => PoleEvent::North,
+                    sgp4_predict::PoleEvent::South => PoleEvent::South,
+                },
+                latitude: a.latitude,
             })),
             Some(Err(e)) => Err(to_py_err(e)),
         }
@@ -373,6 +408,16 @@ impl Predictor {
         let (start, end) = extract_interval(interval)?;
         Ok(ApsisIter {
             inner: self.inner.apsis_iter(start..end),
+        })
+    }
+
+    /// Iterate over northernmost and southernmost points of the orbit within the interval.
+    ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    fn pole_approach_iter(&self, interval: &Bound<'_, PyAny>) -> PyResult<PoleApproachIter> {
+        let (start, end) = extract_interval(interval)?;
+        Ok(PoleApproachIter {
+            inner: self.inner.pole_approach_iter(start..end),
         })
     }
 

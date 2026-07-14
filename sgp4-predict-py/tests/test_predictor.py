@@ -15,6 +15,7 @@ from sgp4_predict import (
     IlluminationState,
     Interval,
     IntervalRange,
+    PoleEvent,
     Predictor,
     Tle,
 )
@@ -183,6 +184,35 @@ def test_apsis_iter_consecutive_alternate():
     apsides = list(p.apsis_iter(Interval(START, START + timedelta(hours=3))))
     for i in range(len(apsides) - 1):
         assert apsides[i].event != apsides[i + 1].event
+
+
+# ── pole_approach_iter ────────────────────────────────────────────────────────
+
+
+def test_pole_approach_iter_yields_both_types():
+    p = make_predictor()
+    approaches = list(p.pole_approach_iter(Interval(START, START + timedelta(hours=3))))
+    events = {a.event for a in approaches}
+    assert PoleEvent.North in events
+    assert PoleEvent.South in events
+
+
+def test_pole_approach_iter_latitudes_in_range():
+    """Sentinel-2C (inclination 98.5671°) reaches ≈180° − 98.5671° = 81.43° latitude."""
+    p = make_predictor()
+    approaches = list(p.pole_approach_iter(Interval(START, START + timedelta(hours=3))))
+    for a in approaches:
+        expected = 81.43 if a.event == PoleEvent.North else -81.43
+        assert abs(a.latitude_deg() - expected) < 1.0, (
+            f"{a.event} latitude {a.latitude_deg():.3f} deg out of range"
+        )
+
+
+def test_pole_approach_iter_consecutive_alternate():
+    p = make_predictor()
+    approaches = list(p.pole_approach_iter(Interval(START, START + timedelta(hours=3))))
+    for i in range(len(approaches) - 1):
+        assert approaches[i].event != approaches[i + 1].event
 
 
 # ── illumination_iter ─────────────────────────────────────────────────────────

@@ -12,11 +12,14 @@ mod vectors;
 use elements::{Classification, Elements};
 use observer::GroundObserver;
 use predictor::{
-    ApsisIter, IlluminationIter, ObservationIter, PredictionIter, Predictor, Refinement,
-    TransitIter,
+    ApsisIter, IlluminationIter, ObservationIter, PoleApproachIter, PredictionIter, Predictor,
+    Refinement, TransitIter,
 };
 use tle::Tle;
-use types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit};
+use types::{
+    Apsis, ApsisEvent, Illumination, IlluminationState, Observation, PoleApproach, PoleEvent,
+    Transit,
+};
 use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorTeme};
 
 define_stub_info_gatherer!(stub_info);
@@ -39,11 +42,14 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Transit>()?;
     m.add_class::<ApsisEvent>()?;
     m.add_class::<Apsis>()?;
+    m.add_class::<PoleEvent>()?;
+    m.add_class::<PoleApproach>()?;
     m.add_class::<IlluminationState>()?;
     m.add_class::<Illumination>()?;
     m.add_class::<Predictor>()?;
     m.add_class::<PredictionIter>()?;
     m.add_class::<ApsisIter>()?;
+    m.add_class::<PoleApproachIter>()?;
     m.add_class::<IlluminationIter>()?;
     m.add_class::<TransitIter>()?;
     m.add_class::<ObservationIter>()?;
