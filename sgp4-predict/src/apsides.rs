@@ -2,13 +2,20 @@
 //!
 //! [`ApsisIter`] scans with a fixed 60-second step, monitoring the sign of
 //! the radial velocity `r·v`. A sign change brackets an apsis event, which
-//! is then refined with Brent's method.
+//! is then refined with Brent's method. It is a thin wrapper over the
+//! generic [`EventIter`](crate::EventIter): `r·v` is the event function and
+//! its zero crossings are the apsides.
 
 use chrono::{DateTime, Duration, Utc};
-use std::ops::Range;
 
-use crate::{Error, Predictor, Result, roots, time};
-use roots::Brent;
+use crate::{
+    Predictor, Result,
+    detect::{
+        CrossingDetector, DetectIter, Direction, EventFunction, EventIter, FixedStep, Sample,
+    },
+    roots::{Brent, Refinement},
+    time,
+};
 
 const STEP: Duration = Duration::seconds(60);
 const WGS84_A: f64 = 6_378_137.0; // WGS-84 equatorial radius, metres
@@ -33,36 +40,51 @@ pub struct Apsis {
     pub altitude: f64,
 }
 
+/// Event function: the satellite's radial velocity `r·v` in the TEME frame.
+///
+/// Zero crossings are apsides: falling (positive → negative) at apogee,
+/// rising (negative → positive) at perigee.
+pub(crate) struct RadialVelocity {
+    predictor: Predictor,
+}
+
+impl EventFunction for RadialVelocity {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
+        Ok(Sample {
+            time: t,
+            value: self.predictor.propagate(t)?.radial_velocity(),
+            rate: None,
+        })
+    }
+}
+
 /// Iterator over apogee and perigee events within a time interval.
 ///
 /// Created by [`Predictor::apsis_iter`](crate::Predictor::apsis_iter).
 /// Scans in 60-second steps and refines each crossing with Brent's method.
 pub struct ApsisIter {
     predictor: Predictor,
-    interval: Range<DateTime<Utc>>,
-    next_time: DateTime<Utc>,
-    prev: Option<(f64, f64)>, // (timestamp as f64, r·v)
-    brent: Brent,
+    inner: EventIter<RadialVelocity, FixedStep>,
 }
 
 impl ApsisIter {
     pub fn new(predictor: Predictor, interval: impl time::IntervalRange) -> Self {
+        let detector = CrossingDetector::new(
+            RadialVelocity {
+                predictor: predictor.clone(),
+            },
+            FixedStep(STEP),
+            Refinement::default(),
+        );
         Self {
             predictor,
-            interval: interval.start()..interval.end(),
-            next_time: interval.start(),
-            prev: None,
-            brent: Brent::default(),
+            inner: DetectIter::new(interval, detector),
         }
     }
 
     pub fn with_brent(mut self, b: Brent) -> Self {
-        self.brent = b;
+        self.inner.detector_mut().refinement_mut().brent = b;
         self
-    }
-
-    fn radial_velocity_at(&self, t: DateTime<Utc>) -> Result<f64> {
-        Ok(self.predictor.propagate(t)?.radial_velocity())
     }
 }
 
@@ -70,67 +92,34 @@ impl Iterator for ApsisIter {
     type Item = Result<Apsis>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.interval.contains(&self.next_time) {
-            let t = self.next_time;
-            let t_f64 = time::datetime_to_f64(t);
+        let crossing = match self.inner.next()? {
+            Ok(crossing) => crossing,
+            Err(e) => return Some(Err(e)),
+        };
 
-            let rv = match self.radial_velocity_at(t) {
-                Ok(v) => v,
-                Err(e) => return Some(Err(e)),
-            };
+        let event = match crossing.direction {
+            Direction::Falling => ApsisEvent::Apogee, // r·v went positive → negative: apogee
+            Direction::Rising => ApsisEvent::Perigee, // r·v went negative → positive: perigee
+        };
 
-            if let Some((prev_t, prev_rv)) = self.prev
-                && prev_rv * rv < 0.0
-            {
-                // Sign change detected — bracket is [prev_t, t_f64]
-                let predictor = self.predictor.clone();
-                match self.brent.solve(prev_t, t_f64, |x| {
-                    let t = time::f64_to_datetime(x);
-                    predictor.propagate(t).map(|s| s.radial_velocity())
-                }) {
-                    Ok(t_refined) => {
-                        self.prev = Some((t_f64, rv));
-                        self.next_time += STEP;
+        let state = match self.predictor.propagate(crossing.time) {
+            Ok(s) => s,
+            Err(e) => return Some(Err(e)),
+        };
+        let p = state.position;
+        let altitude = (p.x * p.x + p.y * p.y + p.z * p.z).sqrt() - WGS84_A;
 
-                        let refined_dt = time::f64_to_datetime(t_refined);
-                        let state = match self.predictor.propagate(refined_dt) {
-                            Ok(s) => s,
-                            Err(e) => return Some(Err(e)),
-                        };
-                        let p = state.position;
-                        let altitude = (p.x * p.x + p.y * p.y + p.z * p.z).sqrt() - WGS84_A;
-
-                        let event = if prev_rv > 0.0 {
-                            ApsisEvent::Apogee // r·v went positive → negative: apogee
-                        } else {
-                            ApsisEvent::Perigee // r·v went negative → positive: perigee
-                        };
-
-                        let apsis = Apsis {
-                            time: refined_dt,
-                            event,
-                            altitude,
-                        };
-                        tracing::debug!(
-                            event = ?apsis.event,
-                            time = %apsis.time,
-                            altitude_km = apsis.altitude / 1_000.0,
-                            "apsis detected"
-                        );
-                        return Some(Ok(apsis));
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "Brent solver failed to refine apsis crossing");
-                        self.prev = Some((t_f64, rv));
-                        self.next_time += STEP;
-                        return Some(Err(Error::Roots(e)));
-                    }
-                };
-            }
-
-            self.prev = Some((t_f64, rv));
-            self.next_time += STEP;
-        }
-        None
+        let apsis = Apsis {
+            time: crossing.time,
+            event,
+            altitude,
+        };
+        tracing::debug!(
+            event = ?apsis.event,
+            time = %apsis.time,
+            altitude_km = apsis.altitude / 1_000.0,
+            "apsis detected"
+        );
+        Some(Ok(apsis))
     }
 }

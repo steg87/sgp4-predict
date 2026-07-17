@@ -6,16 +6,25 @@
 //! located with a 60-second scan and refined to sub-millisecond accuracy
 //! with Brent's method.
 //!
+//! [`IlluminationIter`] is a thin wrapper over the generic
+//! [`WindowIter`](crate::WindowIter) in its default partition mode: the
+//! event function is the shadow value (positive in eclipse) and every
+//! instant belongs to a sunlit or eclipse window.
+//!
 //! [`Illumination`] implements [`IntervalRange`], so illumination windows
 //! can be passed directly to prediction and observation iterators.
 //!
 //! [`IntervalRange`]: crate::IntervalRange
 
 use chrono::{DateTime, Duration, Utc};
-use std::ops::Range;
 
-use crate::{Error, Predictor, Result, frames, roots, time};
-use roots::Brent;
+use crate::{
+    Predictor, Result,
+    detect::{EventFunction, FixedStep, Sample, WindowIter},
+    frames,
+    roots::Brent,
+    time,
+};
 
 const STEP: Duration = Duration::seconds(60);
 
@@ -30,15 +39,6 @@ pub enum IlluminationState {
     Sunlit,
     /// The satellite is in Earth's shadow (cylindrical umbra model).
     Eclipse,
-}
-
-impl IlluminationState {
-    fn opposite(self) -> Self {
-        match self {
-            Self::Sunlit => Self::Eclipse,
-            Self::Eclipse => Self::Sunlit,
-        }
-    }
 }
 
 /// A contiguous window of constant illumination state.
@@ -61,6 +61,22 @@ impl time::IntervalRange for Illumination {
     }
 }
 
+/// Event function: the cylindrical-shadow value (positive in eclipse,
+/// negative when sunlit).
+pub(crate) struct ShadowFunction {
+    predictor: Predictor,
+}
+
+impl EventFunction for ShadowFunction {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
+        Ok(Sample {
+            time: t,
+            value: shadow_value(&self.predictor, t)?,
+            rate: None,
+        })
+    }
+}
+
 /// Iterator over sunlit and eclipse windows within a time interval.
 ///
 /// Scans with a fixed 60-second step and refines shadow-boundary crossings with
@@ -70,103 +86,24 @@ impl time::IntervalRange for Illumination {
 /// the first window always starts at `interval.start` and the last always ends at
 /// `interval.end`, regardless of when the illumination state actually changed.
 pub struct IlluminationIter {
-    predictor: Predictor,
-    interval: Range<DateTime<Utc>>,
-    next_time: DateTime<Utc>,
-    window_start: DateTime<Utc>,
-    current: Option<IlluminationState>,
-    prev: Option<(f64, f64)>, // (t as f64, shadow_value) at previous scan point
-    finished: bool,
-    brent: Brent,
+    inner: WindowIter<ShadowFunction, FixedStep>,
 }
 
 impl IlluminationIter {
     pub fn new(predictor: Predictor, interval: impl time::IntervalRange) -> Self {
-        Self {
-            predictor,
-            interval: interval.start()..interval.end(),
-            next_time: interval.start(),
-            window_start: interval.start(),
-            current: None,
-            prev: None,
-            finished: false,
-            brent: Brent::default(),
-        }
+        let inner = WindowIter::builder()
+            .interval(interval)
+            .event_function(ShadowFunction { predictor })
+            .step(FixedStep(STEP))
+            .build()
+            .expect("interval is always supplied");
+        Self { inner }
     }
 
     /// Override the Brent solver configuration used to refine shadow-boundary crossings.
     pub fn with_brent(mut self, b: Brent) -> Self {
-        self.brent = b;
+        self.inner.detector_mut().refinement_mut().brent = b;
         self
-    }
-
-    fn detect_window(&mut self, t: DateTime<Utc>) -> Result<Option<Illumination>> {
-        let t_f64 = time::datetime_to_f64(t);
-        let sv = shadow_value(&self.predictor, t)?;
-
-        let window = if let Some((prev_t, prev_sv)) = self.prev {
-            if (prev_sv > 0.0) != (sv > 0.0) {
-                // Sign change detected — find the shadow-boundary crossing.
-                // If either scan point is exactly on the boundary (value == 0.0),
-                // Brent's bracket would be degenerate; the scan point itself is
-                // the crossing and no root-finding is needed.
-                let crossing_f64 = if sv == 0.0 {
-                    t_f64
-                } else if prev_sv == 0.0 {
-                    prev_t
-                } else {
-                    // Refine crossing with Brent's method.
-                    let predictor = self.predictor.clone();
-                    self.brent.solve(prev_t, t_f64, |x| {
-                        shadow_value(&predictor, time::f64_to_datetime(x))
-                    }).inspect_err(|e| tracing::warn!(error = %e, "Brent solver failed to refine shadow boundary"))
-                    .map_err(Error::Roots)?
-                };
-                let state = self.current.expect("current initialized with prev");
-                let crossing = time::f64_to_datetime(crossing_f64);
-                let window = Illumination {
-                    start: self.window_start,
-                    end: crossing,
-                    state,
-                };
-                self.window_start = crossing;
-                // Derive the new state directly from sv rather than
-                // using state.opposite(), so the state is always
-                // grounded in the actual shadow-function value and
-                // cannot accumulate error across multiple crossings.
-                // When sv is exactly 0.0 the scan point is itself the
-                // crossing, so sv provides no directional information
-                // and opposite() is the only option.
-                self.current = Some(if sv > 0.0 {
-                    IlluminationState::Eclipse
-                } else if sv < 0.0 {
-                    IlluminationState::Sunlit
-                } else {
-                    state.opposite()
-                });
-                tracing::debug!(
-                    state = ?window.state,
-                    start = %window.start,
-                    end = %window.end,
-                    "illumination window"
-                );
-                Some(window)
-            } else {
-                None
-            }
-        } else {
-            // First sample: determine initial illumination state.
-            self.current = Some(if sv > 0.0 {
-                IlluminationState::Eclipse
-            } else {
-                IlluminationState::Sunlit
-            });
-            self.window_start = self.interval.start;
-            None
-        };
-
-        self.prev = Some((t_f64, sv));
-        Ok(window)
     }
 }
 
@@ -174,51 +111,30 @@ impl Iterator for IlluminationIter {
     type Item = Result<Illumination>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
-
-        while self.interval.contains(&self.next_time) {
-            let t = self.next_time;
-            self.next_time += STEP;
-            match self.detect_window(t) {
-                Ok(Some(window)) => return Some(Ok(window)),
-                Ok(None) => {} // Continue advancing through time
-                Err(e) => {
-                    tracing::warn!("error calculating illumination window: {}", e.to_string());
-                    println!("error");
-                    return Some(Err(e));
-                }
+        Some(match self.inner.next()? {
+            Ok(window) => {
+                let illumination = Illumination {
+                    start: window.start,
+                    end: window.end,
+                    state: if window.positive {
+                        IlluminationState::Eclipse
+                    } else {
+                        IlluminationState::Sunlit
+                    },
+                };
+                tracing::debug!(
+                    state = ?illumination.state,
+                    start = %illumination.start,
+                    end = %illumination.end,
+                    "illumination window"
+                );
+                Ok(illumination)
             }
-        }
-
-        // End of interval
-        // Check if any state transitions occured between t_prev and window end
-        if let Some(state) = self.current {
-            match self.detect_window(self.interval.end) {
-                Ok(Some(window)) => {
-                    // There was a final state transition between t_prev and end of window
-                    return Some(Ok(window));
-                }
-                Ok(None) => {
-                    // No more state transitions between t_prev and end of window, yield the final
-                    // (probably partial) window
-                    self.finished = true;
-                    return Some(Ok(Illumination {
-                        start: self.window_start,
-                        end: self.interval.end,
-                        state,
-                    }));
-                }
-                Err(e) => {
-                    tracing::warn!("error calculating illumination window: {}", e.to_string());
-                    return Some(Err(e));
-                }
+            Err(e) => {
+                tracing::warn!("error calculating illumination window: {}", e.to_string());
+                Err(e)
             }
-        }
-
-        // Interval was empty — nothing to yield.
-        None
+        })
     }
 }
 

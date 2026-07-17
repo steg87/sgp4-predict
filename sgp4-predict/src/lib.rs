@@ -63,6 +63,7 @@
 //! Observer latitude and longitude must be supplied in **degrees**.
 
 mod apsides;
+mod detect;
 mod frames;
 mod illumination;
 mod observe;
@@ -81,6 +82,12 @@ pub use sgp4::{Classification, Elements};
 
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
+    detect::{
+        Crossing, CrossingDetector, DetectIter, Detector, Direction, Error as DetectError,
+        EventFunction, EventIter, EventIterBuilder, FixedStep, Missing, RateFn, Sample,
+        StepStrategy, ThresholdStep, ValueFn, Window, WindowDetector, WindowIter,
+        WindowIterBuilder,
+    },
     frames::{EcefState, EnuState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
@@ -166,7 +173,7 @@ impl Predictor {
         };
         tracing::debug!(
             satellite = %predictor.elements.object_name.as_deref().unwrap_or(
-                &format!("NORAD {}", &predictor.elements.norad_id)),
+                &format!("NORAD {}", predictor.elements.norad_id)),
             epoch = %predictor.epoch(),
             "predictor initialized from OMM elements"
         );
@@ -466,4 +473,6 @@ pub enum Error {
     Roots(#[from] roots::Error),
     #[error("Transit error: {0}")]
     Transit(#[from] transits::Error),
+    #[error("Detection error: {0}")]
+    Detect(#[from] detect::Error),
 }
