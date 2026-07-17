@@ -10,10 +10,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 sgp4-predict = { path = "../sgp4-predict" }
-pyo3 = { version = "0.28", features = ["chrono"] }
+pyo3 = { version = "0.29", features = ["chrono"] }
 chrono = "0.4"
 ouroboros = "0.18"
-pyo3-stub-gen = "0.20"
+pyo3-stub-gen = "0.23"
 serde_json = "1"
 
 [[bin]]
