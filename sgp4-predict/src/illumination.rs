@@ -3,8 +3,8 @@
 //! Uses a cylindrical Earth shadow model: the satellite is in eclipse when
 //! it is on the anti-Sun side of Earth and its perpendicular distance from
 //! the Earth–Sun axis is less than one Earth radius. Shadow boundaries are
-//! located with a 60-second scan and refined to sub-millisecond accuracy
-//! with Brent's method.
+//! located with a 60-second scan and refined to millisecond accuracy
+//! with the bracketed hybrid solver.
 //!
 //! [`IlluminationIter`] is a thin wrapper over the generic
 //! [`WindowIter`](crate::WindowIter) in its default partition mode: the
@@ -22,7 +22,7 @@ use crate::{
     Predictor, Result,
     detect::{EventFunction, FixedStep, Sample, WindowIter},
     frames,
-    roots::Brent,
+    roots::Refinement,
     time,
 };
 
@@ -79,8 +79,8 @@ impl EventFunction for ShadowFunction {
 
 /// Iterator over sunlit and eclipse windows within a time interval.
 ///
-/// Scans with a fixed 60-second step and refines shadow-boundary crossings with
-/// Brent's method to sub-millisecond accuracy.
+/// Scans with a fixed 60-second step and refines shadow-boundary crossings
+/// to millisecond accuracy.
 ///
 /// Windows that extend beyond the search interval are clamped to its boundaries:
 /// the first window always starts at `interval.start` and the last always ends at
@@ -100,9 +100,9 @@ impl IlluminationIter {
         Self { inner }
     }
 
-    /// Override the Brent solver configuration used to refine shadow-boundary crossings.
-    pub fn with_brent(mut self, b: Brent) -> Self {
-        self.inner.detector_mut().refinement_mut().brent = b;
+    /// Override the root-finder configuration used to refine shadow-boundary crossings.
+    pub fn with_refinement(mut self, r: Refinement) -> Self {
+        *self.inner.detector_mut().refinement_mut() = r;
         self
     }
 }
@@ -141,8 +141,8 @@ impl Iterator for IlluminationIter {
 /// Shadow value function for the cylindrical Earth shadow model.
 ///
 /// Returns a negative value when the satellite is sunlit and a positive value
-/// when it is in eclipse. Zero corresponds to the shadow boundary, so Brent's
-/// method can find exact crossing times.
+/// when it is in eclipse. Zero corresponds to the shadow boundary, so the
+/// root finder can find exact crossing times.
 pub(crate) fn shadow_value(predictor: &Predictor, t: DateTime<Utc>) -> Result<f64> {
     let state = predictor.propagate(t)?;
     Ok(shadow_fn(

@@ -256,16 +256,18 @@ All three state vector types expose `.position` and `.velocity` as `Vec3(x, y, z
 
 ### Advanced: `Refinement`
 
-Root-finder tolerances for transit boundary and peak-elevation search. Newton-Raphson is tried first; Brent's method is the bracketed fallback.
+Root-finder configuration used to refine detected event times (transit
+boundaries, apsides, shadow crossings, peak elevation). A bracketed hybrid
+solver: Newton-Raphson steps when a derivative is available, secant/bisection
+otherwise, converging once the crossing time is pinned down to
+`time_tolerance` seconds.
 
 ```python
 from sgp4_predict import Refinement
 
 ref = Refinement()
-ref.nr_tolerance   = 1e-9   # radians (default)
-ref.nr_max_iter    = 50     # (default)
-ref.brent_tolerance = 1e-9  # (default)
-ref.brent_max_iter  = 100   # (default)
+ref.time_tolerance = 1e-3  # seconds (default)
+ref.max_iter       = 100   # (default)
 
 p2 = p.with_refinement(ref)
 ```

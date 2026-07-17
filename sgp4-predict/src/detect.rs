@@ -19,9 +19,12 @@
 //!   [`FixedStep`] scans uniformly, [`ThresholdStep`] takes large steps far
 //!   from a threshold crossing and small steps near it.
 //!
-//! Crossings bracketed by two samples are refined with the crate's root
-//! finders: Newton-Raphson with a Brent fallback when the event function
-//! supplies a derivative ([`Sample::rate`]), Brent's method alone otherwise.
+//! Crossings bracketed by two samples are refined with the crate's
+//! bracketed hybrid solver ([`Refinement`](crate::Refinement)): each
+//! iteration takes a Newton-Raphson step when its sample carries a
+//! derivative ([`Sample::rate`]) and a secant/bisection step otherwise,
+//! converging when the crossing is pinned down to the solver's time
+//! tolerance.
 //!
 //! # Example: northward equator crossings
 //!
@@ -66,8 +69,9 @@ pub struct Sample {
     pub value: f64,
     /// Time derivative of the value in 1/s, if cheaply available.
     ///
-    /// When present, crossings are refined with Newton-Raphson (Brent
-    /// fallback); when absent, with Brent's method alone.
+    /// Refinement takes a fast Newton-Raphson step at samples that carry a
+    /// rate and a secant/bisection step at samples that don't; adaptive
+    /// step strategies ([`ThresholdStep`]) also use it.
     pub rate: Option<f64>,
 }
 
@@ -285,30 +289,27 @@ pub struct Crossing {
     pub direction: Direction,
 }
 
-/// Refine the crossing bracketed by `[t0, t1]` with the configured root
-/// finders: Newton-Raphson with Brent fallback when the function supplies a
-/// rate, Brent's method alone otherwise.
-fn refine<F: EventFunction>(
+/// Adapts an [`EventFunction`] bracket to [`Refinement::solve`], which does
+/// the actual root finding: converts the `DateTime` bracket to the solver's
+/// f64-seconds domain (and the root back), reshapes samples into
+/// `(value, rate)` pairs, and maps solver errors into [`crate::Error`].
+///
+/// Shared by every crossing refinement in this module.
+fn refine_crossing<F: EventFunction>(
     f: &mut F,
     refinement: &Refinement,
     t0: DateTime<Utc>,
     t1: DateTime<Utc>,
-    with_rate: bool,
 ) -> Result<DateTime<Utc>> {
     let a = time::datetime_to_f64(t0);
     let b = time::datetime_to_f64(t1);
-    let root = if with_rate {
-        refinement.hybrid_solve(a, b, |x| {
+    let root = refinement
+        .solve(a, b, |x| {
             f.sample(time::f64_to_datetime(x))
-                .map(|s| (s.value, s.rate.unwrap_or(0.0)))
+                .map(|s| (s.value, s.rate))
         })
-    } else {
-        refinement.brent.solve(a, b, |x| {
-            f.sample(time::f64_to_datetime(x)).map(|s| s.value)
-        })
-    }
-    .inspect_err(|e| tracing::warn!(error = %e, "failed to refine crossing"))
-    .map_err(crate::Error::Roots)?;
+        .inspect_err(|e| tracing::warn!(error = %e, "failed to refine crossing"))
+        .map_err(crate::Error::Roots)?;
     Ok(time::f64_to_datetime(root))
 }
 
@@ -356,8 +357,7 @@ impl<F: EventFunction, S: StepStrategy> Detector for CrossingDetector<F, S> {
                 } else {
                     Direction::Falling
                 };
-                let with_rate = p.rate.is_some() && s.rate.is_some();
-                refine(&mut self.f, &self.refinement, p.time, s.time, with_rate)
+                refine_crossing(&mut self.f, &self.refinement, p.time, s.time)
                     .map(|time| Some(Crossing { time, direction }))
             }
             _ => Ok(None),
@@ -464,8 +464,7 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
         } else if p.value == 0.0 {
             p.time
         } else {
-            let with_rate = p.rate.is_some() && s.rate.is_some();
-            refine(&mut self.f, &self.refinement, p.time, s.time, with_rate)?
+            refine_crossing(&mut self.f, &self.refinement, p.time, s.time)?
         };
 
         let closed_positive = self.positive.expect("initialized with first sample");
@@ -505,8 +504,7 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
             return Ok(None);
         }
 
-        let with_rate = p.rate.is_some() && s.rate.is_some();
-        let start = refine(&mut self.f, &self.refinement, p.time, s.time, with_rate)?;
+        let start = refine_crossing(&mut self.f, &self.refinement, p.time, s.time)?;
 
         // Walk forward until the function goes negative. The step is fixed:
         // an adaptive step could jump clear over the window end and the next
@@ -520,7 +518,7 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
             }
             let w = self.f.sample(t1)?;
             if w.value < 0.0 {
-                let end = refine(&mut self.f, &self.refinement, t0, t1, with_rate)?;
+                let end = refine_crossing(&mut self.f, &self.refinement, t0, t1)?;
                 // Resume the main scan from the first confirmed-outside
                 // sample.
                 self.prev = Some(w);

@@ -2,9 +2,9 @@
 //!
 //! [`ApsisIter`] scans with a fixed 60-second step, monitoring the sign of
 //! the radial velocity `r·v`. A sign change brackets an apsis event, which
-//! is then refined with Brent's method. It is a thin wrapper over the
-//! generic [`EventIter`](crate::EventIter): `r·v` is the event function and
-//! its zero crossings are the apsides.
+//! is then refined with the bracketed hybrid solver. It is a thin wrapper
+//! over the generic [`EventIter`](crate::EventIter): `r·v` is the event
+//! function and its zero crossings are the apsides.
 
 use chrono::{DateTime, Duration, Utc};
 
@@ -13,7 +13,7 @@ use crate::{
     detect::{
         CrossingDetector, DetectIter, Direction, EventFunction, EventIter, FixedStep, Sample,
     },
-    roots::{Brent, Refinement},
+    roots::Refinement,
     time,
 };
 
@@ -61,7 +61,8 @@ impl EventFunction for RadialVelocity {
 /// Iterator over apogee and perigee events within a time interval.
 ///
 /// Created by [`Predictor::apsis_iter`](crate::Predictor::apsis_iter).
-/// Scans in 60-second steps and refines each crossing with Brent's method.
+/// Scans in 60-second steps and refines each crossing with the bracketed
+/// hybrid solver.
 pub struct ApsisIter {
     predictor: Predictor,
     inner: EventIter<RadialVelocity, FixedStep>,
@@ -82,8 +83,9 @@ impl ApsisIter {
         }
     }
 
-    pub fn with_brent(mut self, b: Brent) -> Self {
-        self.inner.detector_mut().refinement_mut().brent = b;
+    /// Override the root-finder configuration used to refine apsis crossings.
+    pub fn with_refinement(mut self, r: Refinement) -> Self {
+        *self.inner.detector_mut().refinement_mut() = r;
         self
     }
 }

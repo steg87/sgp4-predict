@@ -3,7 +3,7 @@
 //! [`TransitIter`] uses an adaptive step-size strategy to scan efficiently:
 //! large steps when the satellite is descending or far below `min_elevation`,
 //! smaller steps as it approaches. Each Outside→Inside transition is refined
-//! to millisecond accuracy using Newton-Raphson with a Brent fallback.
+//! to millisecond accuracy with the bracketed hybrid solver.
 //!
 //! It is a thin wrapper over the generic [`WindowIter`](crate::WindowIter):
 //! the event function is `elevation − min_elevation` and transits are the

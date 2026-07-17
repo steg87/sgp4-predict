@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{GroundObserver, Predictor};
+use sgp4_predict::{GroundObserver, Predictor, Refinement};
 
 #[test]
 fn test_transits() {
@@ -35,7 +35,14 @@ fn test_transit_start_inside_interval() {
     // Design decision: a transit already in progress when the search window opens is
     // excluded. Only transits whose AOS falls within the window are returned.
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    // This test compares two independent refinements of the same crossing to
+    // within 1 ms, so it needs a tighter tolerance than the 1 ms default.
+    let p = Predictor::from_tle(&tle)
+        .unwrap()
+        .with_refinement(Refinement {
+            time_tolerance: 1e-4,
+            ..Refinement::default()
+        });
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
     // Find the first two transits over a wide window.

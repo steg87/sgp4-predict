@@ -92,7 +92,7 @@ pub use crate::{
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,
-    roots::{Brent, NewtonRaphson, Refinement},
+    roots::Refinement,
     time::{DateTimeIter, IntervalRange},
     transits::{Transit, TransitIter},
     types::{GroundObserver, Tle, TleParseError},
@@ -204,7 +204,8 @@ impl Predictor {
         Ok(predictor)
     }
 
-    /// Set the root-finder configuration used by [`detect_transit`] and [`max_elevation`].
+    /// Set the root-finder configuration used to refine event times across
+    /// all detection iterators, [`detect_transit`], and [`max_elevation`].
     ///
     /// [`detect_transit`]: Predictor::detect_transit
     /// [`max_elevation`]: Predictor::max_elevation
@@ -259,7 +260,7 @@ impl Predictor {
     ///
     /// Returns an iterator over apsis events in the TEME frame.
     pub fn apsis_iter(&self, interval: impl IntervalRange) -> ApsisIter {
-        ApsisIter::new(self.clone(), interval).with_brent(self.refinement.brent)
+        ApsisIter::new(self.clone(), interval).with_refinement(self.refinement)
     }
 
     /// Calculate all of the transits visible to the observer.
@@ -288,8 +289,8 @@ impl Predictor {
     ///
     /// If the satellite is below `min_elevation_deg` at `t`, returns `Ok(None)`.
     /// Otherwise, searches backward and forward in 30-second steps to bracket the
-    /// AoS and LoS crossings, then refines each boundary with Newton-Raphson /
-    /// Brent's method to millisecond accuracy.
+    /// AoS and LoS crossings, then refines each boundary with the bracketed
+    /// hybrid solver ([`Refinement`]) to millisecond accuracy.
     ///
     /// Returns an error if either boundary is not found within 1 hour.
     pub fn detect_transit<O: Observer>(
@@ -309,7 +310,8 @@ impl Predictor {
         };
 
         let mut f = |t: f64| {
-            calculate(time::f64_to_datetime(t)).map(|(el, el_rate)| (el - min_elevation, el_rate))
+            calculate(time::f64_to_datetime(t))
+                .map(|(el, el_rate)| (el - min_elevation, Some(el_rate)))
         };
 
         let (el, _) = calculate(t)?;
@@ -329,7 +331,7 @@ impl Predictor {
             }
             let (el, _) = calculate(t_outer)?;
             if el < min_elevation {
-                let s = self.refinement.hybrid_solve(
+                let s = self.refinement.solve(
                     time::datetime_to_f64(t_outer),
                     time::datetime_to_f64(t_inner),
                     &mut f,
@@ -350,7 +352,7 @@ impl Predictor {
             }
             let (el, _) = calculate(t_outer)?;
             if el < min_elevation {
-                let e = self.refinement.hybrid_solve(
+                let e = self.refinement.solve(
                     time::datetime_to_f64(t_inner),
                     time::datetime_to_f64(t_outer),
                     &mut f,
@@ -369,7 +371,8 @@ impl Predictor {
     /// Find the peak elevation of the satellite over an observer within a time interval.
     ///
     /// Scans in 10-second steps to bracket the point where the elevation rate crosses
-    /// zero (ascending → descending), then refines with Brent's method.
+    /// zero (ascending → descending), then refines the crossing with the bracketed
+    /// hybrid solver ([`Refinement`]).
     /// If no sign change is found (satellite never peaks within the interval), a
     /// roots::Error::Unbracketed is returned.
     pub fn max_elevation<O: Observer>(
@@ -396,14 +399,15 @@ impl Predictor {
                 && prev_er > 0.0
                 && el_rate < 0.0
             {
-                // el_rate crossed zero: peak is bracketed in [prev_t, t_f64]
+                // el_rate crossed zero: peak is bracketed in [prev_t, t_f64].
+                // The event function here is the elevation *rate*, whose own
+                // derivative is not available — samples carry no rate.
                 let peak_t_f64 = self
                     .refinement
-                    .brent
                     .solve(prev_t, t_f64, |x| {
                         let tx = time::f64_to_datetime(x);
                         self.propagate(tx)
-                            .map(|s| s.to_ecef(tx).to_enu(observer).elevation_and_rate().1)
+                            .map(|s| (s.to_ecef(tx).to_enu(observer).elevation_and_rate().1, None))
                     })
                     .map_err(Error::Roots)?;
 
@@ -437,10 +441,10 @@ impl Predictor {
     /// Detect all sunlit and eclipse windows over a time interval.
     ///
     /// Returns an iterator over illumination windows, each clamped to the search
-    /// interval. Uses a cylindrical Earth shadow model with 60-second scan steps
-    /// and Brent's method to refine shadow-boundary crossings to millisecond accuracy.
+    /// interval. Uses a cylindrical Earth shadow model with 60-second scan steps,
+    /// refining shadow-boundary crossings to millisecond accuracy.
     pub fn illumination_iter(&self, interval: impl IntervalRange) -> IlluminationIter {
-        IlluminationIter::new(self.clone(), interval).with_brent(self.refinement.brent)
+        IlluminationIter::new(self.clone(), interval).with_refinement(self.refinement)
     }
 
     /// Return the epoch of the TLE.

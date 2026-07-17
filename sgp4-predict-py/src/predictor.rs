@@ -14,9 +14,11 @@ use crate::{
 
 // ── Refinement ─────────────────────────────────────────────────────────────────
 
-/// Root-finder configuration used by transit detection and peak-elevation search.
+/// Root-finder configuration used to refine detected event times.
 ///
-/// Newton-Raphson is attempted first; Brent's method is the bracketed fallback.
+/// A bracketed hybrid solver: each iteration takes a Newton-Raphson step
+/// when a derivative is available and a secant/bisection step otherwise,
+/// converging once the crossing is pinned down to `time_tolerance` seconds.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 pub struct Refinement {
@@ -33,44 +35,24 @@ impl Refinement {
         }
     }
 
-    /// Newton-Raphson convergence tolerance (radians).
+    /// Convergence threshold on the crossing time, in seconds.
     #[getter]
-    fn nr_tolerance(&self) -> f64 {
-        self.inner.newton_raphson.tolerance
+    fn time_tolerance(&self) -> f64 {
+        self.inner.time_tolerance
     }
     #[setter]
-    fn set_nr_tolerance(&mut self, v: f64) {
-        self.inner.newton_raphson.tolerance = v;
+    fn set_time_tolerance(&mut self, v: f64) {
+        self.inner.time_tolerance = v;
     }
 
-    /// Newton-Raphson maximum iteration count.
+    /// Maximum number of solver iterations.
     #[getter]
-    fn nr_max_iter(&self) -> usize {
-        self.inner.newton_raphson.max_iter
+    fn max_iter(&self) -> usize {
+        self.inner.max_iter
     }
     #[setter]
-    fn set_nr_max_iter(&mut self, v: usize) {
-        self.inner.newton_raphson.max_iter = v;
-    }
-
-    /// Brent convergence tolerance.
-    #[getter]
-    fn brent_tolerance(&self) -> f64 {
-        self.inner.brent.tolerance
-    }
-    #[setter]
-    fn set_brent_tolerance(&mut self, v: f64) {
-        self.inner.brent.tolerance = v;
-    }
-
-    /// Brent maximum iteration count.
-    #[getter]
-    fn brent_max_iter(&self) -> usize {
-        self.inner.brent.max_iter
-    }
-    #[setter]
-    fn set_brent_max_iter(&mut self, v: usize) {
-        self.inner.brent.max_iter = v;
+    fn set_max_iter(&mut self, v: usize) {
+        self.inner.max_iter = v;
     }
 }
 
