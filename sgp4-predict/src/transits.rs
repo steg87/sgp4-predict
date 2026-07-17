@@ -22,7 +22,7 @@ use thiserror::Error as ThisError;
 
 use crate::{
     Predictor, Result,
-    detect::{self, EventFunction, Sample, ThresholdStep, WindowIter},
+    detect::{EventFunction, Sample, ThresholdStep, WindowIter},
     observe::Observer,
     roots::Refinement,
     time,
@@ -34,7 +34,8 @@ const MIN_STEP: Duration = Duration::seconds(10);
 /// Fixed step used to walk from a transit's start to its end; an adaptive
 /// step could jump clear over the peak and out the far side.
 const WALK_STEP: Duration = Duration::seconds(30);
-/// A transit longer than this is reported as [`Error::TransitEndNotFound`].
+/// A transit longer than this is reported as
+/// [`DetectError::WindowEndNotFound`](crate::DetectError::WindowEndNotFound).
 const WALK_TIMEOUT: Duration = Duration::hours(1);
 
 /// A satellite pass — the window during which the satellite is above
@@ -163,18 +164,11 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
     type Item = Result<Transit>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(match self.inner.next()? {
-            Ok(window) => {
-                let transit = Transit::new(window.start, window.end);
-                tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
-                Ok(transit)
-            }
-            Err(crate::Error::Detect(detect::Error::WindowEndNotFound { start, .. })) => {
-                tracing::warn!(%start, "transit end not found within 1 hour");
-                Err(Error::TransitEndNotFound { start }.into())
-            }
-            Err(e) => Err(e),
-        })
+        Some(self.inner.next()?.map(|window| {
+            let transit = Transit::new(window.start, window.end);
+            tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
+            transit
+        }))
     }
 }
 

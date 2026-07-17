@@ -291,8 +291,8 @@ pub struct Crossing {
 
 /// Adapts an [`EventFunction`] bracket to [`Refinement::solve`], which does
 /// the actual root finding: converts the `DateTime` bracket to the solver's
-/// f64-seconds domain (and the root back), reshapes samples into
-/// `(value, rate)` pairs, and maps solver errors into [`crate::Error`].
+/// f64-seconds domain (and the root back) and reshapes samples into
+/// `(value, rate)` pairs.
 ///
 /// Shared by every crossing refinement in this module.
 fn refine_crossing<F: EventFunction>(
@@ -308,8 +308,7 @@ fn refine_crossing<F: EventFunction>(
             f.sample(time::f64_to_datetime(x))
                 .map(|s| (s.value, s.rate))
         })
-        .inspect_err(|e| tracing::warn!(error = %e, "failed to refine crossing"))
-        .map_err(crate::Error::Roots)?;
+        .inspect_err(|e| tracing::warn!(error = %e, "failed to refine crossing"))?;
     Ok(time::f64_to_datetime(root))
 }
 

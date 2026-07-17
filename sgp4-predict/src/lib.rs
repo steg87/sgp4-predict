@@ -402,14 +402,11 @@ impl Predictor {
                 // el_rate crossed zero: peak is bracketed in [prev_t, t_f64].
                 // The event function here is the elevation *rate*, whose own
                 // derivative is not available — samples carry no rate.
-                let peak_t_f64 = self
-                    .refinement
-                    .solve(prev_t, t_f64, |x| {
-                        let tx = time::f64_to_datetime(x);
-                        self.propagate(tx)
-                            .map(|s| (s.to_ecef(tx).to_enu(observer).elevation_and_rate().1, None))
-                    })
-                    .map_err(Error::Roots)?;
+                let peak_t_f64 = self.refinement.solve(prev_t, t_f64, |x| {
+                    let tx = time::f64_to_datetime(x);
+                    self.propagate(tx)
+                        .map(|s| (s.to_ecef(tx).to_enu(observer).elevation_and_rate().1, None))
+                })?;
 
                 let peak_t = time::f64_to_datetime(peak_t_f64);
                 let obs = self.observe_at(peak_t, observer)?;
@@ -422,7 +419,7 @@ impl Predictor {
         }
 
         // No sign change found — no peak within the interval
-        Err(Error::Roots(roots::Error::Unbracketed))
+        Err(roots::Error::Unbracketed.into())
     }
 
     /// Determine whether the satellite is sunlit or in eclipse at time t.
