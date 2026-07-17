@@ -107,6 +107,30 @@ impl IlluminationIter {
     }
 }
 
+impl Predictor {
+    /// Determine whether the satellite is sunlit or in eclipse at time t.
+    ///
+    /// Uses a cylindrical Earth shadow model: the satellite is in eclipse when it
+    /// is on the anti-Sun side of Earth and within one Earth radius of the
+    /// Earth–Sun axis.
+    pub fn illumination_state(&self, t: DateTime<Utc>) -> Result<IlluminationState> {
+        Ok(if shadow_value(self, t)? < 0.0 {
+            IlluminationState::Sunlit
+        } else {
+            IlluminationState::Eclipse
+        })
+    }
+
+    /// Detect all sunlit and eclipse windows over a time interval.
+    ///
+    /// Returns an iterator over illumination windows, each clamped to the search
+    /// interval. Uses a cylindrical Earth shadow model with 60-second scan steps,
+    /// refining shadow-boundary crossings to millisecond accuracy.
+    pub fn illumination_iter(&self, interval: impl time::IntervalRange) -> IlluminationIter {
+        IlluminationIter::new(self.clone(), interval).with_refinement(self.refinement)
+    }
+}
+
 impl Iterator for IlluminationIter {
     type Item = Result<Illumination>;
 
@@ -143,7 +167,7 @@ impl Iterator for IlluminationIter {
 /// Returns a negative value when the satellite is sunlit and a positive value
 /// when it is in eclipse. Zero corresponds to the shadow boundary, so the
 /// root finder can find exact crossing times.
-pub(crate) fn shadow_value(predictor: &Predictor, t: DateTime<Utc>) -> Result<f64> {
+fn shadow_value(predictor: &Predictor, t: DateTime<Utc>) -> Result<f64> {
     let state = predictor.propagate(t)?;
     Ok(shadow_fn(
         state.position.x,

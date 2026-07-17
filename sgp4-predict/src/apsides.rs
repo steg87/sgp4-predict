@@ -125,3 +125,12 @@ impl Iterator for ApsisIter {
         Some(Ok(apsis))
     }
 }
+
+impl Predictor {
+    /// Detect apogee and perigee events over a time interval.
+    ///
+    /// Returns an iterator over apsis events in the TEME frame.
+    pub fn apsis_iter(&self, interval: impl time::IntervalRange) -> ApsisIter {
+        ApsisIter::new(self.clone(), interval).with_refinement(self.refinement)
+    }
+}

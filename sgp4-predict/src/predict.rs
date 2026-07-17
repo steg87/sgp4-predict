@@ -63,3 +63,12 @@ impl Iterator for PredictionIter {
         }
     }
 }
+
+impl Predictor {
+    /// Propagate the TLE over a time interval.
+    ///
+    /// Returns an iterator over predicted state vectors in the TEME frame.
+    pub fn prediction_iter(&self, interval: impl IntervalRange, step: Duration) -> PredictionIter {
+        PredictionIter::new(self.clone(), interval, step)
+    }
+}
