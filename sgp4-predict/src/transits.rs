@@ -18,11 +18,12 @@
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
 use chrono::{DateTime, Duration, Utc};
-use thiserror::Error as ThisError;
 
 use crate::{
     Predictor, Result,
-    detect::{Direction, EventFunction, EventIter, FixedStep, Sample, ThresholdStep, WindowIter},
+    detect::{
+        self, Direction, EventFunction, EventIter, FixedStep, Sample, ThresholdStep, WindowIter,
+    },
     observe::{Observation, Observer},
     roots::Refinement,
     time,
@@ -35,8 +36,8 @@ const MIN_STEP: Duration = Duration::seconds(10);
 /// step could jump clear over the peak and out the far side.
 const WALK_STEP: Duration = Duration::seconds(30);
 /// A transit longer than this is reported as
-/// [`DetectError::WindowEndNotFound`](crate::DetectError::WindowEndNotFound).
-const WALK_TIMEOUT: Duration = Duration::hours(1);
+/// [`DetectError::WindowTooLong`](crate::DetectError::WindowTooLong).
+const MAX_TRANSIT_DURATION: Duration = Duration::hours(1);
 
 /// A satellite pass — the window during which the satellite is above
 /// `min_elevation` as seen from the observer.
@@ -146,9 +147,8 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 min: MIN_STEP,
                 max: MAX_STEP,
             })
-            .emit_positive_only()
-            .skip_leading_partial()
-            .scan_past_end(WALK_STEP, WALK_TIMEOUT)
+            .walk_step(WALK_STEP)
+            .max_window_duration(MAX_TRANSIT_DURATION)
             .build()
             .expect("interval is always supplied");
         Self { inner }
@@ -198,84 +198,32 @@ impl Predictor {
     /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
     ///
     /// If the satellite is below `min_elevation_deg` at `t`, returns `Ok(None)`.
-    /// Otherwise, searches backward and forward in 30-second steps to bracket the
-    /// AoS and LoS crossings, then refines each boundary with the bracketed
-    /// hybrid solver ([`Refinement`](crate::Refinement)) to millisecond accuracy.
+    /// Otherwise, walks backward and forward from `t` in 30-second steps to
+    /// find the AoS and LoS crossings, refining each with the bracketed
+    /// hybrid solver ([`Refinement`](crate::Refinement)) to millisecond
+    /// accuracy — see [`detect_window`](crate::detect::detect_window), the
+    /// primitive this is a thin wrapper over.
     ///
-    /// Returns an error if either boundary is not found within 1 hour.
+    /// Returns [`Error::Detect`](crate::Error::Detect) if the transit is
+    /// longer than 1 hour.
     pub fn detect_transit<O: Observer>(
         &self,
         t: DateTime<Utc>,
         observer: &O,
         min_elevation_deg: f64,
     ) -> Result<Option<Transit>> {
-        let min_elevation = min_elevation_deg.to_radians();
-        let calculate = |t: DateTime<Utc>| -> Result<(f64, f64)> {
-            let (el, el_rate) = self
-                .propagate(t)?
-                .to_ecef(t)
-                .to_enu(observer)
-                .elevation_and_rate();
-            Ok((el, el_rate))
+        let mut f = ElevationAboveMin {
+            predictor: self.clone(),
+            observer,
+            min_elevation: min_elevation_deg.to_radians(),
         };
-
-        let mut f = |t: f64| {
-            calculate(time::f64_to_datetime(t))
-                .map(|(el, el_rate)| (el - min_elevation, Some(el_rate)))
-        };
-
-        let (el, _) = calculate(t)?;
-        if el < min_elevation {
-            return Ok(None);
-        }
-
-        const STEP: Duration = Duration::seconds(30);
-
-        // --- Find start (search backward) ---
-        let mut t_inner = t;
-        let mut t_outer = t - STEP;
-        let start = loop {
-            if t - t_outer > Duration::hours(1) {
-                tracing::warn!(at = %t, "transit start not found within 1 hour");
-                return Err(Error::TransitStartNotFound { at: t }.into());
-            }
-            let (el, _) = calculate(t_outer)?;
-            if el < min_elevation {
-                let s = self.refinement.solve(
-                    time::datetime_to_f64(t_outer),
-                    time::datetime_to_f64(t_inner),
-                    &mut f,
-                )?;
-                break time::f64_to_datetime(s);
-            }
-            t_inner = t_outer;
-            t_outer -= STEP;
-        };
-
-        // --- Find end (search forward) ---
-        let mut t_inner = t;
-        let mut t_outer = t + STEP;
-        let end = loop {
-            if t_outer - t > Duration::hours(1) {
-                tracing::warn!(%start, "transit end not found within 1 hour");
-                return Err(Error::TransitEndNotFound { start }.into());
-            }
-            let (el, _) = calculate(t_outer)?;
-            if el < min_elevation {
-                let e = self.refinement.solve(
-                    time::datetime_to_f64(t_inner),
-                    time::datetime_to_f64(t_outer),
-                    &mut f,
-                )?;
-                break time::f64_to_datetime(e);
-            }
-            t_inner = t_outer;
-            t_outer += STEP;
-        };
-
-        let transit = Transit::new(start, end);
-        tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
-        Ok(Some(transit))
+        let window =
+            detect::detect_window(&mut f, t, WALK_STEP, MAX_TRANSIT_DURATION, &self.refinement)?;
+        Ok(window.map(|w| {
+            let transit = Transit::new(w.start, w.end);
+            tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
+            transit
+        }))
     }
 
     /// Find the peak elevation of the satellite over an observer within a time interval.
@@ -339,19 +287,4 @@ impl Predictor {
         );
         Ok((peak_t, obs))
     }
-}
-
-/// Errors that can occur during transit detection.
-#[derive(Debug, ThisError)]
-pub enum Error {
-    #[error(
-        "transit end not found: satellite remained above minimum elevation \
-        for more than 1 hour from {start}"
-    )]
-    TransitEndNotFound { start: DateTime<Utc> },
-    #[error(
-        "transit start not found: satellite remained above minimum elevation \
-         for more than 1 hour before {at}"
-    )]
-    TransitStartNotFound { at: DateTime<Utc> },
 }

@@ -265,8 +265,6 @@ pub enum Error {
     Interval(String),
     #[error("Roots error: {0}")]
     Roots(#[from] roots::Error),
-    #[error("Transit error: {0}")]
-    Transit(#[from] transits::Error),
     #[error("Detection error: {0}")]
     Detect(#[from] detect::Error),
     /// Escape hatch for custom `EventFunction` implementations (`generics`

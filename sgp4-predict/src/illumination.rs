@@ -7,9 +7,11 @@
 //! with the bracketed hybrid solver.
 //!
 //! [`IlluminationIter`] is a thin wrapper over the generic
-//! [`WindowIter`](crate::WindowIter) in its default partition mode: the
-//! event function is the shadow value (positive in eclipse) and every
-//! instant belongs to a sunlit or eclipse window.
+//! [`WindowIter`](crate::WindowIter) in its partition mode
+//! (`include_negative_windows` + `include_leading_partial` +
+//! `clamp_to_interval`): the event function is
+//! the shadow value (positive in eclipse) and every instant belongs to a
+//! sunlit or eclipse window.
 //!
 //! [`Illumination`] implements [`IntervalRange`], so illumination windows
 //! can be passed directly to prediction and observation iterators.
@@ -95,6 +97,11 @@ impl IlluminationIter {
             .interval(interval)
             .event_function(ShadowFunction { predictor })
             .step(FixedStep(STEP))
+            // Eclipse should not generally exceed 1h
+            .max_window_duration(Duration::hours(1))
+            .include_negative_windows()
+            .include_leading_partial()
+            .clamp_to_interval()
             .build()
             .expect("interval is always supplied");
         Self { inner }

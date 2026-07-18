@@ -318,6 +318,145 @@ fn refine_crossing<F: EventFunction>(
     Ok(time::f64_to_datetime(root))
 }
 
+/// Walk from `t0` (a sample already known to be non-negative) in `step`
+/// increments — negative `step` walks backward — until a negative sample is
+/// found, then refines that bracket to the crossing.
+///
+/// Returns `(refined, resume_from)`: `refined` is the precise crossing (or,
+/// if clamped, the clamp bound), suitable for reporting as a window
+/// boundary. `resume_from` is always an already-*sampled* point — `refined`
+/// itself is not, in general (its exact value only ever comes from bisecting
+/// down to a tolerance, not from an `EventFunction` evaluation) — so it must
+/// never be re-sampled to decide what lies past it: at the true crossing,
+/// sign is inherently ambiguous in floating point, and resuming a scan from
+/// an ambiguous point risks detecting the same crossing over and over,
+/// forever.
+///
+/// If `clamp` is `Some(bound)` and the walk would step at or past `bound`
+/// before finding a negative sample, `bound` itself is sampled — there may
+/// be a crossing between the previous sample and `bound` that a larger step
+/// would otherwise skip — and used as both the refined and resume value if
+/// it isn't negative either. Otherwise, the walk gives up once it passes
+/// `giving_up_at` — an absolute time, not a duration, so the caller can
+/// bound the two directions of a window search by its *total* size rather
+/// than by how far each one individually strays from the query point —
+/// calling `on_give_up` to produce the error.
+fn walk_to_crossing<F: EventFunction>(
+    f: &mut F,
+    t0: DateTime<Utc>,
+    step: Duration,
+    giving_up_at: DateTime<Utc>,
+    clamp: Option<DateTime<Utc>>,
+    refinement: &Refinement,
+    on_give_up: impl FnOnce() -> Error,
+) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    let past = |t: DateTime<Utc>, bound: DateTime<Utc>| {
+        (step < Duration::zero() && t <= bound) || (step > Duration::zero() && t >= bound)
+    };
+    let mut prev = t0;
+    let mut candidate = t0 + step;
+    loop {
+        let clamped_at = clamp.filter(|&bound| past(candidate, bound));
+        let next = clamped_at.unwrap_or(candidate);
+
+        if clamped_at.is_none() && past(next, giving_up_at) {
+            tracing::warn!(at = %t0, %giving_up_at, "window boundary not found");
+            return Err(on_give_up().into());
+        }
+
+        if f.sample(next)?.value < 0.0 {
+            let refined = refine_crossing(f, refinement, prev, next)?;
+            return Ok((refined, next));
+        }
+        if let Some(bound) = clamped_at {
+            return Ok((bound, bound));
+        }
+        prev = next;
+        candidate = next + step;
+    }
+}
+
+/// Walk outward from `t` to find the positive window containing it.
+///
+/// Returns `Ok(None)` if `t` does not currently lie inside a positive
+/// window. Otherwise walks backward from `t` in `step` increments until a
+/// negative sample is found, refining that bracket to the window's start,
+/// then walks forward the same way to find its end. Neither walk is bounded
+/// by an interval, so a window can be resolved even when it extends
+/// arbitrarily far from `t` — only its total duration is bounded, by
+/// `max_window_duration`; [`Error::WindowTooLong`] if it's exceeded.
+///
+/// This is the primitive [`WindowIter`]'s internal detector is built on; use
+/// it directly for one-off "is an event in progress right now, and if so
+/// what are its bounds" queries (see [`Predictor::detect_transit`] for an
+/// example) rather than scanning a whole interval for one instant.
+///
+/// [`Predictor::detect_transit`]: crate::Predictor::detect_transit
+pub fn detect_window<F: EventFunction>(
+    f: &mut F,
+    t: DateTime<Utc>,
+    step: Duration,
+    max_window_duration: Duration,
+    refinement: &Refinement,
+) -> Result<Option<Window>> {
+    if f.sample(t)?.value < 0.0 {
+        return Ok(None);
+    }
+    let (window, _) =
+        resolve_positive_window(f, t, step, max_window_duration, None, None, refinement)?;
+    Ok(Some(window))
+}
+
+/// Resolve the full positive window containing `t`, which must already be
+/// known non-negative (callers that haven't just sampled `t` themselves
+/// should use [`detect_window`] instead, which checks first).
+///
+/// Shared by [`detect_window`] and [`WindowDetector`]'s internal window
+/// resolution — the only difference between the two is that the latter also
+/// clamps to an enclosing interval. Also returns the point immediately past
+/// the window's end that's safe to resume scanning from (see
+/// [`walk_to_crossing`]'s doc comment).
+fn resolve_positive_window<F: EventFunction>(
+    f: &mut F,
+    t: DateTime<Utc>,
+    step: Duration,
+    max_window_duration: Duration,
+    start_clamp: Option<DateTime<Utc>>,
+    end_clamp: Option<DateTime<Utc>>,
+    refinement: &Refinement,
+) -> Result<(Window, DateTime<Utc>)> {
+    let too_long = || Error::WindowTooLong {
+        at: t,
+        max_window_duration,
+    };
+    let (start, _) = walk_to_crossing(
+        f,
+        t,
+        -step,
+        t - max_window_duration,
+        start_clamp,
+        refinement,
+        too_long,
+    )?;
+    let (end, resume_from) = walk_to_crossing(
+        f,
+        t,
+        step,
+        start + max_window_duration,
+        end_clamp,
+        refinement,
+        too_long,
+    )?;
+    Ok((
+        Window {
+            start,
+            end,
+            positive: true,
+        },
+        resume_from,
+    ))
+}
+
 /// A [`Detector`] that yields the refined zero [`Crossing`]s of an
 /// [`EventFunction`]. Build one with [`EventIter::builder`], or with
 /// [`CrossingDetector::new`] for use in a custom [`DetectIter`].
@@ -385,52 +524,54 @@ pub struct Window {
     pub positive: bool,
 }
 
-/// How a [`WindowDetector`] treats a window still open at the interval end.
-enum EndPolicy {
-    /// Clamp the trailing window to the interval end and emit it (after
-    /// checking for one final crossing between the last sample and the end).
-    Clamp,
-    /// On entering a positive window, immediately walk forward in `step`
-    /// increments — beyond the interval end if necessary — to find and
-    /// refine the window's true end. Errors with
-    /// [`Error::WindowEndNotFound`] if the window does not close within
-    /// `timeout`.
-    ScanPastEnd { step: Duration, timeout: Duration },
-}
-
-enum FinishStage {
-    CheckEnd,
-    Flush,
-    Done,
-}
-
 /// A [`Detector`] that pairs the zero crossings of an [`EventFunction`] into
 /// [`Window`]s. Build one with [`WindowIter::builder`].
 ///
-/// By default it partitions the interval: every instant belongs to a window
-/// labelled by the function's sign, and partial windows at the interval
-/// boundaries are emitted clamped (the illumination-iterator behaviour).
-/// The builder's [`emit_positive_only`](WindowIterBuilder::emit_positive_only),
-/// [`skip_leading_partial`](WindowIterBuilder::skip_leading_partial) and
-/// [`scan_past_end`](WindowIterBuilder::scan_past_end) options select the
-/// transit-iterator behaviour instead.
+/// The coarse scan (`S`, e.g. [`FixedStep`] or [`ThresholdStep`]) only has to
+/// find *some* sample inside the next positive window; once one is found,
+/// [`detect_window`] takes over and walks outward from it with a small fixed
+/// step to pin down the window's true start and end.
+///
+/// A window is only considered to fall within the interval if
+/// `interval.start <= window.start < interval.end`, so by default a window
+/// already open at the very first sample — which cannot satisfy that — is
+/// skipped ([`include_leading_partial`][ilp] opts back in), while a window
+/// still open at the interval end is walked outward past it to find its true
+/// end regardless ([`clamp_to_interval`][cti] opts into clamping both cases
+/// to the interval bounds instead — the illumination-iterator behaviour,
+/// where every instant must belong to some window).
+///
+/// By default only positive windows are emitted; enable
+/// [`include_negative_windows`][inw] to also get the windows in between
+/// (illumination needs both sunlit and eclipse windows).
+///
+/// [cti]: WindowIterBuilder::clamp_to_interval
+/// [ilp]: WindowIterBuilder::include_leading_partial
+/// [inw]: WindowIterBuilder::include_negative_windows
 pub struct WindowDetector<F, S> {
     f: F,
     step: S,
     refinement: Refinement,
     positive_only: bool,
     skip_leading_partial: bool,
-    end_policy: EndPolicy,
+    clamp_to_interval: bool,
+    walk_step: Duration,
+    max_window_duration: Duration,
+    interval: Range<DateTime<Utc>>,
+    /// Last coarse-scan sample, used only to drive the `S` step strategy.
     prev: Option<Sample>,
-    /// Sign of the currently open window; `None` until the first sample.
-    positive: Option<bool>,
-    /// Start of the currently open window; `None` when the window is
-    /// suppressed (leading partial with `skip_leading_partial`).
-    window_start: Option<DateTime<Utc>>,
-    /// Where to resume the main scan after an inline end-walk
-    /// (`ScanPastEnd` mode).
+    /// End of the most recently resolved window (or the interval start, if
+    /// none yet) — the start of the next negative window, when emitted.
+    last_boundary: Option<DateTime<Utc>>,
+    /// A positive window found while emitting the negative window ahead of
+    /// it, held back for the following call.
+    pending: Option<Window>,
+    /// Where to resume the coarse scan once a window has been fully
+    /// resolved (its end, which may lie outside the interval).
     resume: Option<DateTime<Utc>>,
-    finish_stage: FinishStage,
+    /// Whether [`finish`](Detector::finish) has already produced its one
+    /// possible trailing window.
+    flushed: bool,
 }
 
 impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
@@ -439,105 +580,43 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
         &mut self.refinement
     }
 
-    fn emit(&self, window: Option<Window>) -> Option<Window> {
-        window.filter(|w| !self.positive_only || w.positive)
-    }
+    /// Resolve the positive window found at `t` (`s.value >= 0.0`), emitting
+    /// the negative window ahead of it (unless this is the first window, or
+    /// `positive_only` is set) and stashing the positive window as
+    /// [`pending`](Self::pending) in that case.
+    fn resolve_window(&mut self, t: DateTime<Utc>, first: bool) -> Result<Option<Window>> {
+        let start_clamp = self.clamp_to_interval.then_some(self.interval.start);
+        let end_clamp = self.clamp_to_interval.then_some(self.interval.end);
+        let (window, resume_from) = resolve_positive_window(
+            &mut self.f,
+            t,
+            self.walk_step,
+            self.max_window_duration,
+            start_clamp,
+            end_clamp,
+            &self.refinement,
+        )?;
+        // Resume from an already-sampled point, never from the window's end
+        // itself — see walk_to_crossing's doc comment.
+        self.resume = Some(resume_from);
 
-    /// Partition-mode transition handling: on a sign change between the
-    /// previous sample and `s`, refine the crossing, close the open window
-    /// and open the next one.
-    fn partition_transition(&mut self, s: Sample) -> Result<Option<Window>> {
-        let Some(p) = self.prev.replace(s) else {
-            // First sample: open the initial window at the interval start.
-            self.positive = Some(s.value > 0.0);
-            self.window_start = if self.skip_leading_partial {
-                None
-            } else {
-                Some(s.time)
-            };
-            return Ok(None);
-        };
-        if (p.value > 0.0) == (s.value > 0.0) {
-            return Ok(None);
-        }
-
-        // Sign change detected — find the crossing. If either sample sits
-        // exactly on zero, the bracket is degenerate: the sample itself is
-        // the crossing and no root-finding is needed.
-        let crossing = if s.value == 0.0 {
-            s.time
-        } else if p.value == 0.0 {
-            p.time
-        } else {
-            refine_crossing(&mut self.f, &self.refinement, p.time, s.time)?
-        };
-
-        let closed_positive = self.positive.expect("initialized with first sample");
-        let window = self.window_start.map(|start| Window {
-            start,
-            end: crossing,
-            positive: closed_positive,
-        });
-        self.window_start = Some(crossing);
-        // Ground the new window's sign in the actual function value so it
-        // cannot accumulate error across crossings; a sample exactly on zero
-        // carries no direction, so flip the previous sign instead.
-        self.positive = Some(if s.value != 0.0 {
-            s.value > 0.0
-        } else {
-            !closed_positive
-        });
-        Ok(self.emit(window))
-    }
-
-    /// `ScanPastEnd`-mode detection: on a rising transition, refine the
-    /// window start, then walk forward in fixed steps (beyond the scan
-    /// interval if necessary) until the function goes negative, and refine
-    /// the window end.
-    fn detect_complete_window(
-        &mut self,
-        s: Sample,
-        walk_step: Duration,
-        timeout: Duration,
-    ) -> Result<Option<Window>> {
-        let Some(p) = self.prev.replace(s) else {
-            // A window already open at the interval start has no detectable
-            // start crossing and is skipped.
-            return Ok(None);
-        };
-        if !(p.value < 0.0 && s.value >= 0.0) {
+        if first && self.skip_leading_partial {
+            // Already open at the interval start with no desired start
+            // crossing: skip it, just resume the scan past its end.
+            self.last_boundary = Some(window.end);
             return Ok(None);
         }
 
-        let start = refine_crossing(&mut self.f, &self.refinement, p.time, s.time)?;
-
-        // Walk forward until the function goes negative. The step is fixed:
-        // an adaptive step could jump clear over the window end and the next
-        // window's start, merging two windows.
-        let mut t0 = start;
-        let mut t1 = t0 + walk_step;
-        let end = loop {
-            if t1 - start > timeout {
-                tracing::warn!(%start, "window end not found within {timeout}");
-                return Err(Error::WindowEndNotFound { start, timeout }.into());
-            }
-            let w = self.f.sample(t1)?;
-            if w.value < 0.0 {
-                let end = refine_crossing(&mut self.f, &self.refinement, t0, t1)?;
-                // Resume the main scan from the first confirmed-outside
-                // sample.
-                self.prev = Some(w);
-                self.resume = Some(t1);
-                break end;
-            }
-            t0 = t1;
-            t1 += walk_step;
-        };
-
+        let gap_start = self.last_boundary;
+        self.last_boundary = Some(window.end);
+        if first || self.positive_only {
+            return Ok(Some(window));
+        }
+        self.pending = Some(window);
         Ok(Some(Window {
-            start,
-            end,
-            positive: true,
+            start: gap_start.expect("set on every call once past the first"),
+            end: window.start,
+            positive: false,
         }))
     }
 }
@@ -546,6 +625,11 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
     type Event = Window;
 
     fn next_time(&mut self, current: DateTime<Utc>) -> DateTime<Utc> {
+        if self.pending.is_some() {
+            // Stay put; detect_event will drain the pending window without
+            // taking a new sample.
+            return current;
+        }
         if let Some(resume) = self.resume.take() {
             return resume;
         }
@@ -554,50 +638,53 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
     }
 
     fn detect_event(&mut self, t: DateTime<Utc>) -> Result<Option<Window>> {
-        let s = self.f.sample(t)?;
-        match self.end_policy {
-            EndPolicy::Clamp => self.partition_transition(s),
-            EndPolicy::ScanPastEnd { step, timeout } => {
-                self.detect_complete_window(s, step, timeout)
-            }
+        if let Some(w) = self.pending.take() {
+            return Ok(Some(w));
         }
+        let first = self.last_boundary.is_none();
+        let s = self.f.sample(t)?;
+        if s.value < 0.0 {
+            if first {
+                self.last_boundary = Some(t);
+            }
+            self.prev = Some(s);
+            return Ok(None);
+        }
+        self.resolve_window(t, first)
     }
 
     fn finish(&mut self, end: DateTime<Utc>) -> Result<Option<Window>> {
-        if matches!(self.end_policy, EndPolicy::ScanPastEnd { .. }) {
-            // Complete windows were emitted as soon as they opened; nothing
-            // is left to flush.
+        if let Some(w) = self.pending.take() {
+            return Ok(Some(w));
+        }
+        if self.flushed {
             return Ok(None);
         }
-        loop {
-            match self.finish_stage {
-                FinishStage::CheckEnd => {
-                    self.finish_stage = FinishStage::Flush;
-                    if self.positive.is_none() {
-                        // Empty interval: no samples, nothing to yield.
-                        self.finish_stage = FinishStage::Done;
-                        return Ok(None);
-                    }
-                    // A crossing may still lie between the last scan sample
-                    // and the exact interval end.
-                    let s = self.f.sample(end)?;
-                    if let Some(window) = self.partition_transition(s)? {
-                        return Ok(Some(window));
-                    }
-                }
-                FinishStage::Flush => {
-                    self.finish_stage = FinishStage::Done;
-                    let positive = self.positive.expect("checked in CheckEnd");
-                    let window = self.window_start.map(|start| Window {
-                        start,
-                        end,
-                        positive,
-                    });
-                    return Ok(self.emit(window));
-                }
-                FinishStage::Done => return Ok(None),
-            }
+        self.flushed = true;
+        let Some(last_boundary) = self.last_boundary else {
+            // Empty interval: no samples, nothing to yield.
+            return Ok(None);
+        };
+        if last_boundary >= end {
+            // The most recently resolved positive window already reached
+            // (or, walked/clamped, extended past) the interval end: nothing
+            // left to check. Sampling at `end` here would re-enter that
+            // same already-emitted window and duplicate it.
+            return Ok(None);
         }
+        // A crossing may still lie between the last coarse-scan sample and
+        // the exact interval end.
+        let s = self.f.sample(end)?;
+        if s.value < 0.0 {
+            return Ok(
+                (!self.positive_only && last_boundary < end).then_some(Window {
+                    start: last_boundary,
+                    end,
+                    positive: false,
+                }),
+            );
+        }
+        self.resolve_window(end, false)
     }
 }
 
@@ -722,6 +809,13 @@ impl<F: EventFunction, S: StepStrategy> EventIterBuilder<F, S> {
     }
 }
 
+/// Default fixed step used to walk outward from a detected window to pin
+/// down its exact start and end.
+const DEFAULT_WALK_STEP: Duration = Duration::seconds(30);
+/// Default cap on a positive window's total duration, from start to end,
+/// before [`WindowDetector`] gives up with [`Error::WindowTooLong`].
+const DEFAULT_MAX_WINDOW_DURATION: Duration = Duration::hours(1);
+
 /// Builder for [`WindowIter`]. Obtain via [`WindowIter::builder`].
 pub struct WindowIterBuilder<F = Missing, S = FixedStep> {
     interval: Option<Range<DateTime<Utc>>>,
@@ -730,7 +824,9 @@ pub struct WindowIterBuilder<F = Missing, S = FixedStep> {
     refinement: Refinement,
     positive_only: bool,
     skip_leading_partial: bool,
-    end_policy: EndPolicy,
+    clamp_to_interval: bool,
+    walk_step: Duration,
+    max_window_duration: Duration,
 }
 
 impl WindowIterBuilder {
@@ -740,9 +836,11 @@ impl WindowIterBuilder {
             function: Missing,
             step: FixedStep(Duration::seconds(60)),
             refinement: Refinement::default(),
-            positive_only: false,
-            skip_leading_partial: false,
-            end_policy: EndPolicy::Clamp,
+            positive_only: true,
+            skip_leading_partial: true,
+            clamp_to_interval: false,
+            walk_step: DEFAULT_WALK_STEP,
+            max_window_duration: DEFAULT_MAX_WINDOW_DURATION,
         }
     }
 }
@@ -782,11 +880,16 @@ impl<F, S> WindowIterBuilder<F, S> {
             refinement: self.refinement,
             positive_only: self.positive_only,
             skip_leading_partial: self.skip_leading_partial,
-            end_policy: self.end_policy,
+            clamp_to_interval: self.clamp_to_interval,
+            walk_step: self.walk_step,
+            max_window_duration: self.max_window_duration,
         }
     }
 
-    /// The stepping strategy (default: [`FixedStep`] of 60 seconds).
+    /// The coarse stepping strategy used to search for the next window
+    /// (default: [`FixedStep`] of 60 seconds). Only needs to land *some*
+    /// sample inside the next positive window — its exact bounds are then
+    /// found by the boundary walk (see [`walk_step`](Self::walk_step)).
     pub fn step<S2: StepStrategy>(self, step: S2) -> WindowIterBuilder<F, S2> {
         WindowIterBuilder {
             interval: self.interval,
@@ -795,7 +898,9 @@ impl<F, S> WindowIterBuilder<F, S> {
             refinement: self.refinement,
             positive_only: self.positive_only,
             skip_leading_partial: self.skip_leading_partial,
-            end_policy: self.end_policy,
+            clamp_to_interval: self.clamp_to_interval,
+            walk_step: self.walk_step,
+            max_window_duration: self.max_window_duration,
         }
     }
 
@@ -805,33 +910,49 @@ impl<F, S> WindowIterBuilder<F, S> {
         self
     }
 
-    /// Emit only windows where the function is positive (default: emit
-    /// every window, labelled by [`Window::positive`]).
-    pub fn emit_positive_only(mut self) -> Self {
-        self.positive_only = true;
+    /// Also emit the windows in between positive ones (default: only
+    /// positive windows, labelled [`Window::positive`], are emitted).
+    pub fn include_negative_windows(mut self) -> Self {
+        self.positive_only = false;
         self
     }
 
-    /// Do not emit a window already open at the interval start (default:
-    /// emit it, clamped to the interval start).
-    pub fn skip_leading_partial(mut self) -> Self {
-        self.skip_leading_partial = true;
+    /// Also emit a window already open at the interval start (default:
+    /// skip it — a window is usually considered to fall within an interval
+    /// only if `interval.start <= window.start < interval.end`, which a
+    /// window already open at the very first sample cannot satisfy). Its
+    /// start is found the same way as any other boundary — see
+    /// [`clamp_to_interval`](Self::clamp_to_interval).
+    pub fn include_leading_partial(mut self) -> Self {
+        self.skip_leading_partial = false;
         self
     }
 
-    /// On entering a positive window, immediately walk forward in `step`
-    /// increments — beyond the interval end if necessary — to find its true
-    /// end, erroring with [`Error::WindowEndNotFound`] if the window does
-    /// not close within `timeout`.
-    ///
-    /// In this mode only complete positive windows are emitted: a window
-    /// already open at the interval start has no detectable start crossing
-    /// and is skipped, and [`emit_positive_only`](Self::emit_positive_only) /
-    /// [`skip_leading_partial`](Self::skip_leading_partial) are implied.
-    /// This is the transit-detection behaviour. The default is instead to
-    /// clamp partial windows to the interval boundaries.
-    pub fn scan_past_end(mut self, step: Duration, timeout: Duration) -> Self {
-        self.end_policy = EndPolicy::ScanPastEnd { step, timeout };
+    /// Clamp windows already open at the interval start, or still open at
+    /// the interval end, to the interval bounds instead of walking outward
+    /// past them to find the true boundary (the illumination-iterator
+    /// behaviour: every instant belongs to a window, none of which extend
+    /// beyond the requested interval).
+    pub fn clamp_to_interval(mut self) -> Self {
+        self.clamp_to_interval = true;
+        self
+    }
+
+    /// The fixed step used to walk outward from a detected window to pin
+    /// down its exact start and end (default: 30 seconds). Deliberately
+    /// independent of the coarse [`step`](Self::step) strategy, which can
+    /// jump clear over a short window if used for this instead.
+    pub fn walk_step(mut self, step: Duration) -> Self {
+        self.walk_step = step;
+        self
+    }
+
+    /// The longest a positive window's total duration (start to end) is
+    /// allowed to be; exceeding it gives up with [`Error::WindowTooLong`]
+    /// (default: 1 hour). Only positive windows are walked out to their
+    /// boundaries, so this has no effect on negative ones.
+    pub fn max_window_duration(mut self, max_window_duration: Duration) -> Self {
+        self.max_window_duration = max_window_duration;
         self
     }
 }
@@ -843,19 +964,22 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
             .interval
             .ok_or_else(|| missing_interval("WindowIter"))?;
         Ok(DetectIter::new(
-            interval,
+            interval.clone(),
             WindowDetector {
                 f: self.function,
                 step: self.step,
                 refinement: self.refinement,
                 positive_only: self.positive_only,
                 skip_leading_partial: self.skip_leading_partial,
-                end_policy: self.end_policy,
+                clamp_to_interval: self.clamp_to_interval,
+                walk_step: self.walk_step,
+                max_window_duration: self.max_window_duration,
+                interval,
                 prev: None,
-                positive: None,
-                window_start: None,
+                last_boundary: None,
+                pending: None,
                 resume: None,
-                finish_stage: FinishStage::CheckEnd,
+                flushed: false,
             },
         ))
     }
@@ -865,12 +989,12 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error(
-        "window end not found: event function remained non-negative \
-         for more than {timeout} after {start}"
+        "window too long: the positive window containing {at} exceeds the \
+         {max_window_duration} maximum"
     )]
-    WindowEndNotFound {
-        start: DateTime<Utc>,
-        timeout: Duration,
+    WindowTooLong {
+        at: DateTime<Utc>,
+        max_window_duration: Duration,
     },
 }
 
@@ -982,7 +1106,7 @@ mod tests {
         assert!(WindowIter::builder().function(sine(600.0)).build().is_err());
     }
 
-    // --- WindowIter / WindowDetector: partition (clamp) mode ---
+    // --- WindowIter / WindowDetector: clamp_to_interval (partition) mode ---
 
     #[test]
     fn test_window_iter_partitions_interval() {
@@ -995,6 +1119,9 @@ mod tests {
             .interval(t0() + Duration::seconds(10)..t0() + Duration::seconds(1490))
             .function(sine(600.0))
             .step(FixedStep(Duration::seconds(60)))
+            .include_negative_windows()
+            .include_leading_partial()
+            .clamp_to_interval()
             .build()
             .unwrap();
 
@@ -1021,12 +1148,13 @@ mod tests {
     }
 
     #[test]
-    fn test_window_iter_positive_only_filters() {
+    fn test_window_iter_positive_only_is_default() {
         let iter = WindowIter::builder()
             .interval(t0() + Duration::seconds(10)..t0() + Duration::seconds(1490))
             .function(sine(600.0))
             .step(FixedStep(Duration::seconds(60)))
-            .emit_positive_only()
+            .include_leading_partial()
+            .clamp_to_interval()
             .build()
             .unwrap();
 
@@ -1036,13 +1164,15 @@ mod tests {
     }
 
     #[test]
-    fn test_window_iter_skip_leading_partial() {
-        // First (partial) window 10-300 s is suppressed; the rest emit.
+    fn test_window_iter_skip_leading_partial_is_default_even_when_clamped() {
+        // First (partial) window 10-300 s is suppressed by default even in
+        // clamp_to_interval mode; the rest emit.
         let iter = WindowIter::builder()
             .interval(t0() + Duration::seconds(10)..t0() + Duration::seconds(700))
             .function(sine(600.0))
             .step(FixedStep(Duration::seconds(60)))
-            .skip_leading_partial()
+            .include_negative_windows()
+            .clamp_to_interval()
             .build()
             .unwrap();
 
@@ -1064,6 +1194,9 @@ mod tests {
             .interval(t0() + Duration::seconds(10)..t0() + Duration::seconds(310))
             .function(sine(600.0))
             .step(FixedStep(Duration::seconds(80)))
+            .include_negative_windows()
+            .include_leading_partial()
+            .clamp_to_interval()
             .build()
             .unwrap();
 
@@ -1075,18 +1208,17 @@ mod tests {
         assert_eq!(windows[1].end, t0() + Duration::seconds(310));
     }
 
-    // --- WindowIter: scan-past-end (complete windows) mode ---
+    // --- WindowIter: default mode (walk past interval bounds) ---
 
     #[test]
-    fn test_window_iter_scan_past_end_completes_trailing_window() {
+    fn test_window_iter_completes_trailing_window_by_default() {
         // Positive window (600, 900) straddles the interval end at 700 s:
         // the emitted window's end must be the true 900 s crossing, beyond
-        // the interval.
+        // the interval — the default behaviour, no builder option needed.
         let iter = WindowIter::builder()
             .interval(t0()..t0() + Duration::seconds(700))
             .function(sine(600.0))
             .step(FixedStep(Duration::seconds(60)))
-            .scan_past_end(Duration::seconds(30), Duration::hours(1))
             .build()
             .unwrap();
 
@@ -1097,14 +1229,38 @@ mod tests {
     }
 
     #[test]
-    fn test_window_iter_scan_past_end_skips_open_window_at_start() {
+    fn test_window_iter_include_leading_partial_walks_past_start() {
+        // Window (0, 300) is already open at the interval start; by default
+        // it would be skipped (skip_leading_partial is the default), but
+        // with include_leading_partial its true start is found by walking
+        // backward past the interval boundary, exactly as the end is walked
+        // forward past the boundary in the test above.
+        let iter = WindowIter::builder()
+            .interval(t0() + Duration::seconds(30)..t0() + Duration::seconds(200))
+            .function(sine(600.0))
+            .step(FixedStep(Duration::seconds(60)))
+            .include_leading_partial()
+            .build()
+            .unwrap();
+
+        let windows: Vec<Window> = iter.map(|w| w.unwrap()).collect();
+        assert_eq!(windows.len(), 1);
+        assert!(
+            secs(windows[0].start).abs() < 1e-3,
+            "expected true start ≈0 s, got {}",
+            secs(windows[0].start)
+        );
+        assert!((secs(windows[0].end) - 300.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_window_iter_skips_open_window_at_start_by_default() {
         // The positive window (0, 300) is already open at the interval
         // start and must not be emitted; the (600, 900) window must be.
         let iter = WindowIter::builder()
             .interval(t0() + Duration::seconds(30)..t0() + Duration::seconds(1000))
             .function(sine(600.0))
             .step(FixedStep(Duration::seconds(60)))
-            .scan_past_end(Duration::seconds(30), Duration::hours(1))
             .build()
             .unwrap();
 
@@ -1114,22 +1270,59 @@ mod tests {
     }
 
     #[test]
-    fn test_window_iter_scan_past_end_timeout_errors() {
+    fn test_window_iter_timeout_errors() {
         // f rises at 100 s and never comes back down: the end walk must
-        // give up after the timeout.
+        // give up after the max_window_duration.
         let iter = WindowIter::builder()
             .interval(t0()..t0() + Duration::seconds(600))
             .function(|t| Ok(secs(t) - 100.0))
             .step(FixedStep(Duration::seconds(60)))
-            .scan_past_end(Duration::seconds(30), Duration::minutes(5))
+            .max_window_duration(Duration::minutes(5))
             .build()
             .unwrap();
 
         let results: Vec<_> = iter.collect();
         assert!(matches!(
             results[0],
-            Err(crate::Error::Detect(Error::WindowEndNotFound { .. }))
+            Err(crate::Error::Detect(Error::WindowTooLong { .. }))
         ));
+    }
+
+    // --- detect_window ---
+
+    #[test]
+    fn test_detect_window_finds_containing_window() {
+        let mut f = ValueFn(sine(600.0));
+        let t = t0() + Duration::seconds(750); // inside (600, 900)
+        let window = detect_window(
+            &mut f,
+            t,
+            Duration::seconds(30),
+            Duration::hours(1),
+            &Refinement::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert!((secs(window.start) - 600.0).abs() < 1e-3);
+        assert!((secs(window.end) - 900.0).abs() < 1e-3);
+        assert!(window.positive);
+    }
+
+    #[test]
+    fn test_detect_window_returns_none_outside_window() {
+        let mut f = ValueFn(sine(600.0));
+        let t = t0() + Duration::seconds(450); // inside negative (300, 600)
+        let window = detect_window(
+            &mut f,
+            t,
+            Duration::seconds(30),
+            Duration::hours(1),
+            &Refinement::default(),
+        )
+        .unwrap();
+
+        assert!(window.is_none());
     }
 
     // --- ThresholdStep (ported from transits.rs step_size tests) ---
