@@ -61,6 +61,16 @@
 //!
 //! All positions are in **metres** and velocities in **m/s**.
 //! Observer latitude and longitude must be supplied in **degrees**.
+//!
+//! # Cargo features
+//!
+//! - `generics` — exposes the generic event/window detection building blocks
+//!   (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) that power
+//!   the concrete iterators, so new kinds of satellite events can be detected
+//!   without a bespoke iterator. Off by default: the concrete iterators above
+//!   cover everyday use, and this keeps the API surface small.
+
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 mod apsides;
 mod detect;
@@ -82,12 +92,7 @@ pub use sgp4::{Classification, Elements};
 
 pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter},
-    detect::{
-        Crossing, CrossingDetector, DetectIter, Detector, Direction, Error as DetectError,
-        EventFunction, EventIter, EventIterBuilder, FixedStep, Missing, RateFn, Sample,
-        StepStrategy, ThresholdStep, ValueFn, Window, WindowDetector, WindowIter,
-        WindowIterBuilder,
-    },
+    detect::Error as DetectError,
     frames::{EcefState, EnuState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
@@ -97,6 +102,13 @@ pub use crate::{
     transits::{Transit, TransitIter},
     types::{GroundObserver, Tle, TleParseError},
     vectors::{Position, StateVector, Velocity},
+};
+
+#[cfg(feature = "generics")]
+pub use crate::detect::{
+    Crossing, CrossingDetector, DetectIter, Detector, Direction, EventFunction, EventIter,
+    EventIterBuilder, FixedStep, Missing, RateFn, Sample, StepStrategy, ThresholdStep, ValueFn,
+    Window, WindowDetector, WindowIter, WindowIterBuilder,
 };
 
 /// Commonly used types for quick onboarding.
@@ -257,4 +269,8 @@ pub enum Error {
     Transit(#[from] transits::Error),
     #[error("Detection error: {0}")]
     Detect(#[from] detect::Error),
+    /// Escape hatch for custom `EventFunction` implementations (`generics`
+    /// feature) whose failures don't fit another variant.
+    #[error("{0}")]
+    Custom(String),
 }

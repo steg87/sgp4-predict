@@ -11,6 +11,13 @@ categories = ["aerospace", "science", "simulation"]
 
 [features]
 default = []
+# Expose the generic event/window detection building blocks (EventIter,
+# WindowIter, Detector, ...) that power the concrete iterators.
+generics = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 chrono = "0.4.44"

@@ -1,7 +1,8 @@
 //! Generic event and window detection over scalar functions of time.
 //!
 //! This module contains the building blocks that power [`ApsisIter`],
-//! [`TransitIter`] and [`IlluminationIter`], exposed so that new kinds of
+//! [`TransitIter`] and [`IlluminationIter`], re-exported at the crate root
+//! when the `generics` Cargo feature is enabled so that new kinds of
 //! satellite events can be detected without writing a bespoke iterator.
 //!
 //! # Layers
@@ -31,7 +32,8 @@
 //! In the TEME frame the equator is the plane `z = 0`, so ascending-node
 //! crossings are the rising zero crossings of the satellite's z coordinate:
 //!
-//! ```no_run
+#![cfg_attr(feature = "generics", doc = "```no_run")]
+#![cfg_attr(not(feature = "generics"), doc = "```ignore")]
 //! use chrono::{Duration, Utc};
 //! use sgp4_predict::{Direction, EventIter, FixedStep, Predictor, Tle};
 //!
@@ -53,6 +55,10 @@
 //!     }
 //! }
 //! ```
+
+// Without the `generics` feature, items that exist only for external use
+// (builder adapters, accessors) are not reachable from outside the crate.
+#![cfg_attr(not(feature = "generics"), allow(dead_code))]
 
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;

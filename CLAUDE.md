@@ -54,6 +54,10 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 - `transits_iter(observer, interval, min_elevation)` → `TransitIter`
 - `apsis_iter(interval)` → `ApsisIter`
 
+### Generic detection (`detect.rs`, opt-in `generics` feature)
+
+The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) power `ApsisIter`, `TransitIter`, and `IlluminationIter` internally, so the module always compiles — but its public re-exports at the crate root are gated behind the off-by-default `generics` Cargo feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowEndNotFound)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
+
 ### Type-safe coordinate frames
 
 `frames.rs` uses phantom marker structs (`Teme`, `Ecef`, `Enu`) to make coordinate frame tracking a compile-time guarantee. `StateVector<F>`, `Position<F>`, and `Velocity<F>` in `vectors.rs` are all generic over frame. Conversion methods are implemented directly on the concrete instantiations:
@@ -85,6 +89,10 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 ### `IntervalRange` trait (`time.rs`)
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
+
+## Conventions
+
+- **Code comments**: keep terse. State the non-obvious fact, not the reasoning behind it or alternatives considered.
 
 ## Repo infrastructure
 

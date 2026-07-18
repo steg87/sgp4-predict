@@ -2,6 +2,8 @@
 //! crossings — an event kind the crate has no bespoke iterator for — using
 //! only the public `EventIter` building blocks.
 
+#![cfg(feature = "generics")]
+
 mod common;
 
 use chrono::Duration;
