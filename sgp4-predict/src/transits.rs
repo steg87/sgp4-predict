@@ -293,10 +293,12 @@ impl Predictor {
         observer: &O,
     ) -> Result<(DateTime<Utc>, Observation)> {
         const SCAN_STEP: Duration = Duration::seconds(10);
-        let mut candidate_times = vec![interval.start(), interval.end()];
+        let start_t = interval.start();
+        let end_t = interval.end();
 
         let crossings = EventIter::builder()
             .interval(interval)
+            // Check for crossings when elevation rate is zero
             .function(|t| {
                 Ok(self
                     .propagate(t)?
@@ -310,26 +312,31 @@ impl Predictor {
             .build()
             .expect("interval is always supplied");
 
-        for crossing in crossings {
-            let crossing = crossing?;
-            if crossing.direction == Direction::Falling {
-                candidate_times.push(crossing.time);
-            }
-        }
+        let (peak_t, obs) = crossings
+            // Only consider ascending -> descending crossings
+            .filter_map(|c| match c {
+                Ok(c) if c.direction == Direction::Falling => Some(Ok(c.time)),
+                Ok(_) => None,
+                Err(e) => Some(Err(e)),
+            })
+            // Add start and end times, in case there are no crossings within the interval
+            .chain([Ok(start_t), Ok(end_t)])
+            // Calculate elevation at each time
+            .map(|t| -> Result<_> {
+                let t = t?;
+                Ok((t, self.observe_at(t, observer)?))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            // Find max elevation
+            .max_by(|a, b| a.1.elevation.total_cmp(&b.1.elevation))
+            .expect("candidates always include the interval endpoints");
 
-        let mut peak: Option<(DateTime<Utc>, Observation)> = None;
-        for t in candidate_times {
-            let obs = self.observe_at(t, observer)?;
-            if peak
-                .as_ref()
-                .is_none_or(|(_, p)| obs.elevation > p.elevation)
-            {
-                peak = Some((t, obs));
-            }
-        }
-        let (peak_t, obs) = peak.expect("candidates always include the interval endpoints");
-
-        tracing::debug!(time = %peak_t, elevation_deg = obs.elevation.to_degrees(), "peak elevation found");
+        tracing::debug!(
+            time = %peak_t,
+            elevation_deg = obs.elevation.to_degrees(),
+            "peak elevation found"
+        );
         Ok((peak_t, obs))
     }
 }
