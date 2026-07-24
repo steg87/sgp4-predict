@@ -170,14 +170,12 @@ impl StepStrategy for ThresholdStep {
     fn next_time(&mut self, current: DateTime<Utc>, sample: Option<&Sample>) -> DateTime<Utc> {
         let step = match sample.and_then(|s| s.rate.map(|rate| (s.value, rate))) {
             Some((value, rate)) if rate > 0.0 => {
-                // Clamp as f64 seconds before constructing a Duration: for a
-                // tiny positive rate, -value / rate can exceed the range
-                // Duration::seconds can represent, and `as i64` saturates to
-                // i64::MAX instead of erroring, which panics on construction
-                // before Duration's own .clamp() would ever run.
-                let seconds = (-value / rate)
-                    .clamp(self.min.num_seconds() as f64, self.max.num_seconds() as f64);
-                Duration::seconds(seconds as i64)
+                // Clamping the f64 seconds to at most max_seconds first
+                // keeps the Duration::seconds conversion below from
+                // overflowing, and already bounds the result to self.max —
+                // only the floor still needs enforcing.
+                let seconds = (-value / rate).clamp(0.0, self.max.num_seconds() as f64);
+                Duration::seconds(seconds as i64).max(self.min)
             }
             _ => self.max,
         };
@@ -1409,5 +1407,24 @@ mod tests {
     fn test_threshold_step_without_sample_uses_max() {
         let mut step = ThresholdStep::default();
         assert_eq!(step.next_time(t0(), None), t0() + step.max);
+    }
+
+    #[test]
+    fn test_threshold_step_sub_second_min_still_advances() {
+        // A sub-second min must not truncate to a zero step and stall.
+        let mut step = ThresholdStep {
+            min: Duration::milliseconds(500),
+            max: Duration::minutes(10),
+        };
+        let s = threshold_sample(-0.0001, 1.0);
+        assert_eq!(step.next_time(t0(), Some(&s)), t0() + step.min);
+    }
+
+    #[test]
+    fn test_threshold_step_nan_value_still_advances() {
+        // A NaN ratio must land on min, not stall at a zero step.
+        let mut step = ThresholdStep::default();
+        let s = threshold_sample(f64::NAN, 1.0);
+        assert_eq!(step.next_time(t0(), Some(&s)), t0() + step.min);
     }
 }
