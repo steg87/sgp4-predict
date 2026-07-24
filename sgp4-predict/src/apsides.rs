@@ -13,12 +13,12 @@ use crate::{
     detect::{
         CrossingDetector, DetectIter, Direction, EventFunction, EventIter, FixedStep, Sample,
     },
+    frames::WGS84_A,
     roots::Refinement,
     time,
 };
 
 const STEP: Duration = Duration::seconds(60);
-const WGS84_A: f64 = 6_378_137.0; // WGS-84 equatorial radius, metres
 
 /// The type of an apsis event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

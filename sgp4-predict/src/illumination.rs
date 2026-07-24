@@ -24,15 +24,12 @@ use crate::{
     Predictor, Result,
     detect::{EventFunction, FixedStep, Sample, WindowIter},
     frames,
+    frames::WGS84_A,
     roots::Refinement,
     time,
 };
 
 const STEP: Duration = Duration::seconds(60);
-
-/// Earth's equatorial radius (WGS-84), metres.
-/// Used as the radius of the cylindrical shadow.
-const WGS84_A: f64 = 6_378_137.0;
 
 /// Whether the satellite is in sunlight or in Earth's shadow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

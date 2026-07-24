@@ -9,7 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{
     Error, Predictor, Result,
-    frames::EcefState,
+    frames::{EcefState, WGS84_A},
     predict::PredictionIter,
     time::IntervalRange,
     vectors::{Position, StateVector, Velocity},
@@ -41,7 +41,7 @@ pub(crate) trait ObserverExt: Observer {
 
     fn to_ecef(&self) -> EcefState {
         let h = self.altitude();
-        let a = 6378137.0; // meters
+        let a = WGS84_A;
         let f = 1.0 / 298.257223563;
         let e2 = f * (2.0 - f);
 
