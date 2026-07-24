@@ -63,15 +63,29 @@ fn test_transit_opts_max_duration_exceeded() {
 fn test_transit_opts_zero_step_does_not_hang() {
     // A zero (or negative) step never advances the coarse scan or boundary
     // walk on its own; opts values must be floored to a positive duration
-    // rather than stalling the iterator forever.
+    // rather than stalling the iterator forever. Bracket a known AOS tightly
+    // so the search interval starts outside the transit and ends inside it
+    // — this exercises both the coarse-scan floor (min_step/max_step) and
+    // the boundary-walk floor (walk_step), rather than just returning an
+    // empty result from a window with no transit in it at all.
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
     let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
 
+    let reference = p
+        .transits_iter(
+            &gs,
+            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
+            0.0,
+        )
+        .next()
+        .expect("no transits during search interval")
+        .expect("error calculating transit");
+
     let result = p
         .transits_iter_with_opts(
             &gs,
-            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-20T12:01:00Z"),
+            (reference.start - Duration::seconds(10))..(reference.start + Duration::seconds(10)),
             0.0,
             TransitIterOpts {
                 min_step: Duration::zero(),

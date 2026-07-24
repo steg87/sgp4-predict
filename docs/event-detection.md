@@ -72,6 +72,13 @@ updated twice in a row) guarantees convergence regardless of the function's shap
 Convergence is declared when the bracket is narrower than `Refinement::time_tolerance` (seconds), so
 timing precision is independent of the event function's units.
 
+### Peak Elevation
+
+`Predictor::max_elevation` finds the highest-elevation instant within an interval (typically a
+`Transit`) by scanning for falling zero crossings of the elevation *rate* — the same root-finding
+infrastructure, applied to a different event function. Its fixed scan step (10 seconds by default)
+is configurable via `MaxElevationOpts` (`Predictor::max_elevation_with_opts`).
+
 ---
 
 ## Apsis Detection
@@ -123,7 +130,8 @@ a **shadow scalar** is computed that is:
 The sign change of this scalar is found using the same root-finding infrastructure as transit
 detection (the shadow scalar has no cheap derivative, so refinement proceeds by secant/bisection
 steps). `IlluminationIter` yields `Illumination` events marking the start and end of each sunlit
-interval.
+interval. The scan step, boundary-walk step, and window duration cap are configurable via
+`IlluminationIterOpts` (`Predictor::illumination_iter_with_opts`).
 
 ### Limitation
 

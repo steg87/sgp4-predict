@@ -11,16 +11,13 @@ use chrono::{DateTime, Duration, Utc};
 use crate::{
     Predictor, Result,
     detect::{
-        CrossingDetector, DetectIter, Direction, EventFunction, EventIter, FixedStep, Sample,
+        CrossingDetector, DetectIter, Direction, EventFunction, EventIter, FixedStep,
+        MIN_POSITIVE_STEP, Sample,
     },
     frames::WGS84_A,
     roots::Refinement,
     time,
 };
-
-/// Floor applied to [`ApsisIterOpts::step`]: a zero or negative step never
-/// advances the coarse scan, hanging the iterator.
-const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
 
 /// Tuning knobs for [`ApsisIter`]'s coarse scan.
 ///

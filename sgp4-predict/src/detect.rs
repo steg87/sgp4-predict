@@ -396,6 +396,9 @@ fn walk_to_crossing<F: EventFunction>(
 /// what are its bounds" queries (see [`Predictor::detect_transit`] for an
 /// example) rather than scanning a whole interval for one instant.
 ///
+/// A non-positive `step` is floored to a small positive duration rather than
+/// hanging the walk.
+///
 /// [`Predictor::detect_transit`]: crate::Predictor::detect_transit
 pub fn detect_window<F: EventFunction>(
     f: &mut F,
@@ -430,6 +433,7 @@ fn resolve_positive_window<F: EventFunction>(
     end_clamp: Option<DateTime<Utc>>,
     refinement: &Refinement,
 ) -> Result<(Window, DateTime<Utc>)> {
+    let step = step.max(MIN_POSITIVE_STEP);
     let too_long = || Error::WindowTooLong {
         at: t,
         max_window_duration,
@@ -809,6 +813,10 @@ impl<F, S> EventIterBuilder<F, S> {
     }
 
     /// The stepping strategy (default: [`FixedStep`] of 60 seconds).
+    ///
+    /// A strategy that returns a non-positive step (e.g. [`FixedStep`] of
+    /// zero) never advances the scan and hangs the iterator; this is not
+    /// validated here.
     pub fn step<S2: StepStrategy>(self, step: S2) -> EventIterBuilder<F, S2> {
         EventIterBuilder {
             interval: self.interval,
@@ -842,6 +850,11 @@ const DEFAULT_WALK_STEP: Duration = Duration::seconds(30);
 /// Default cap on a positive window's total duration, from start to end,
 /// before [`WindowDetector`] gives up with [`Error::WindowTooLong`].
 const DEFAULT_MAX_WINDOW_DURATION: Duration = Duration::hours(1);
+
+/// Floor applied to step durations throughout this module and by the
+/// concrete `*IterOpts` structs built on it: a zero or negative step never
+/// advances the coarse scan or boundary walk, hanging the iterator.
+pub(crate) const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
 
 /// Builder for [`WindowIter`]. Obtain via [`WindowIter::builder`].
 pub struct WindowIterBuilder<F = Missing, S = FixedStep> {
@@ -917,6 +930,10 @@ impl<F, S> WindowIterBuilder<F, S> {
     /// (default: [`FixedStep`] of 60 seconds). Only needs to land *some*
     /// sample inside the next positive window — its exact bounds are then
     /// found by the boundary walk (see [`walk_step`](Self::walk_step)).
+    ///
+    /// A strategy that returns a non-positive step (e.g. [`FixedStep`] of
+    /// zero) never advances the scan and hangs the iterator; this is not
+    /// validated here.
     pub fn step<S2: StepStrategy>(self, step: S2) -> WindowIterBuilder<F, S2> {
         WindowIterBuilder {
             interval: self.interval,
@@ -968,7 +985,9 @@ impl<F, S> WindowIterBuilder<F, S> {
     /// The fixed step used to walk outward from a detected window to pin
     /// down its exact start and end (default: 30 seconds). Deliberately
     /// independent of the coarse [`step`](Self::step) strategy, which can
-    /// jump clear over a short window if used for this instead.
+    /// jump clear over a short window if used for this instead. A
+    /// non-positive value is floored to a small positive duration at
+    /// [`build`](Self::build) rather than hanging the boundary walk.
     pub fn walk_step(mut self, step: Duration) -> Self {
         self.walk_step = step;
         self
@@ -999,7 +1018,7 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
                 positive_only: self.positive_only,
                 skip_leading_partial: self.skip_leading_partial,
                 clamp_to_interval: self.clamp_to_interval,
-                walk_step: self.walk_step,
+                walk_step: self.walk_step.max(MIN_POSITIVE_STEP),
                 max_window_duration: self.max_window_duration,
                 interval,
                 prev: None,

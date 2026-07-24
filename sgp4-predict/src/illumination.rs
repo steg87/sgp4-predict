@@ -22,17 +22,12 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{
     Predictor, Result,
-    detect::{EventFunction, FixedStep, Sample, WindowIter},
+    detect::{EventFunction, FixedStep, MIN_POSITIVE_STEP, Sample, WindowIter},
     frames,
     frames::WGS84_A,
     roots::Refinement,
     time,
 };
-
-/// Floor applied to [`IlluminationIterOpts`]'s step durations: a zero or
-/// negative step never advances the coarse scan or boundary walk, hanging
-/// the iterator.
-const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
 
 /// Tuning knobs for [`IlluminationIter`]'s coarse scan and window walk.
 ///
@@ -132,7 +127,7 @@ impl IlluminationIter {
             .interval(interval)
             .event_function(ShadowFunction { predictor })
             .step(FixedStep(opts.step.max(MIN_POSITIVE_STEP)))
-            .walk_step(opts.walk_step.max(MIN_POSITIVE_STEP))
+            .walk_step(opts.walk_step)
             .max_window_duration(opts.max_window_duration)
             .include_negative_windows()
             .include_leading_partial()

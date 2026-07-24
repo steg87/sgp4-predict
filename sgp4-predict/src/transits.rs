@@ -22,17 +22,14 @@ use chrono::{DateTime, Duration, Utc};
 use crate::{
     Predictor, Result,
     detect::{
-        self, Direction, EventFunction, EventIter, FixedStep, Sample, ThresholdStep, WindowIter,
+        self, Direction, EventFunction, EventIter, FixedStep, MIN_POSITIVE_STEP, Sample,
+        ThresholdStep, WindowIter,
     },
     observe::{Observation, Observer},
     roots::Refinement,
     time,
     time::IntervalRange,
 };
-
-/// Floor applied to [`TransitIterOpts`]'s step durations: a zero or negative
-/// step never advances the coarse scan or boundary walk, hanging the iterator.
-const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
 
 /// A satellite pass — the window during which the satellite is above
 /// `min_elevation` as seen from the observer.
@@ -206,7 +203,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 min: opts.min_step.max(MIN_POSITIVE_STEP),
                 max: opts.max_step.max(MIN_POSITIVE_STEP),
             })
-            .walk_step(opts.walk_step.max(MIN_POSITIVE_STEP))
+            .walk_step(opts.walk_step)
             .max_window_duration(opts.max_transit_duration)
             .refinement(refinement);
         if !opts.skip_leading_partial {
@@ -279,13 +276,14 @@ impl Predictor {
     /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
     ///
     /// If the satellite is below `min_elevation_deg` at `t`, returns
-    /// `Ok(None)`. Otherwise, walks backward and forward from `t` in
-    /// 30-second steps to find the AoS and LoS crossings, refining each with
-    /// the bracketed hybrid solver ([`Refinement`]) to millisecond accuracy —
-    /// see `detect_window`, the primitive this is a thin wrapper over.
+    /// `Ok(None)`. Otherwise, walks backward and forward from `t` using
+    /// [`TransitIterOpts::default`]'s `walk_step` to find the AoS and LoS
+    /// crossings, refining each with the bracketed hybrid solver
+    /// ([`Refinement`]) to millisecond accuracy — see `detect_window`, the
+    /// primitive this is a thin wrapper over.
     ///
     /// Returns [`Error::Detect`](crate::Error::Detect) if the transit is
-    /// longer than 1 hour.
+    /// longer than [`TransitIterOpts::default`]'s `max_transit_duration`.
     pub fn detect_transit<O: Observer>(
         &self,
         t: DateTime<Utc>,
@@ -314,7 +312,7 @@ impl Predictor {
         let window = detect::detect_window(
             &mut f,
             t,
-            opts.walk_step.max(MIN_POSITIVE_STEP),
+            opts.walk_step,
             opts.max_transit_duration,
             &self.refinement,
         )?;
