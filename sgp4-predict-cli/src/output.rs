@@ -118,8 +118,8 @@ where
             w,
             "{:<24} {:>8.2} {:>8.2} {:>10.2} {:>16.2}",
             t.format("%Y-%m-%dT%H:%M:%SZ"),
-            obs.azimuth_deg(),
-            obs.elevation_deg(),
+            obs.azimuth.to_degrees(),
+            obs.elevation.to_degrees(),
             obs.range / 1_000.0,
             obs.range_rate / 1_000.0,
         )?;
@@ -159,10 +159,10 @@ where
             "{:<24} {:<24} {:>12.2} {:>12.2} {:<24} {:>12.2} {:>10}",
             transit.start.format("%Y-%m-%dT%H:%M:%SZ"),
             transit.end.format("%Y-%m-%dT%H:%M:%SZ"),
-            aos_obs.azimuth_deg(),
-            los_obs.azimuth_deg(),
+            aos_obs.azimuth.to_degrees(),
+            los_obs.azimuth.to_degrees(),
             tca_time.format("%Y-%m-%dT%H:%M:%SZ"),
-            tca_obs.elevation_deg(),
+            tca_obs.elevation.to_degrees(),
             duration_str,
         )?;
     }

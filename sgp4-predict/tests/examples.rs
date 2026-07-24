@@ -2,7 +2,7 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
-    GroundObserver, IlluminationState, IntervalRange, Observation, Predictor, Transit,
+    Degrees, GroundObserver, IlluminationState, IntervalRange, Observation, Predictor, Transit,
 };
 
 /// Propagate the satellite state in TEME and ECEF frames for the next day, sampled every 15 minutes.
@@ -38,14 +38,14 @@ fn daily_state_vectors() {
 fn current_ground_station_pass() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(1);
 
     // Find the next transit so we have a known "mid-pass" time to hand to detect_transit.
     let transit: Transit = p
-        .transits_iter(&gs, start..end, 5.0)
+        .transits_iter(&gs, start..end, Degrees(5.0))
         .next()
         .expect("no transits during search interval")
         .expect("error calculating transit");
@@ -55,7 +55,7 @@ fn current_ground_station_pass() {
 
     // Recover the full pass window from a single timestamp.
     let detected = p
-        .detect_transit(now, &gs, 5.0)
+        .detect_transit(now, &gs, Degrees(5.0))
         .expect("propagation error")
         .expect("satellite is not overhead at the given time");
 
@@ -90,14 +90,14 @@ fn current_ground_station_pass() {
 fn next_ground_station_pass() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(1);
 
     // Lazily find the next transit that satisfies the predicate
     let next_transit = p
-        .transits_iter(&gs, start..end, 15.0)
+        .transits_iter(&gs, start..end, Degrees(15.0))
         .next()
         .expect("no transits during search interval") // Iterator returned None
         .expect("error calculating transit"); // Redundant in this case since we've checked already
@@ -129,7 +129,7 @@ fn next_ground_station_pass() {
 fn ground_station_passes() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -145,7 +145,7 @@ fn ground_station_passes() {
 
     println!("start,end,aos_azimuth_deg,los_azimuth_deg,tca_elevation_deg,duration");
     for pass in p
-        .transits_iter(&gs, start..end, 10.0)
+        .transits_iter(&gs, start..end, Degrees(10.0))
         .flatten()
         .map(|t| GroundStationPass {
             start: t.start(),
@@ -161,9 +161,9 @@ fn ground_station_passes() {
             "{},{},{:.2},{:.2},{:.2},{}",
             pass.start.format("%Y-%m-%d %H:%M:%S"),
             pass.end.format("%Y-%m-%d %H:%M:%S"),
-            pass.aos.azimuth_deg(),
-            pass.los.azimuth_deg(),
-            pass.tca.elevation_deg(),
+            pass.aos.azimuth.to_degrees(),
+            pass.los.azimuth.to_degrees(),
+            pass.tca.elevation.to_degrees(),
             humantime::format_duration(std::time::Duration::from_secs(
                 (pass.end - pass.start).num_seconds() as u64
             ))
@@ -202,7 +202,7 @@ fn sunlight_windows() {
 fn eclipse_transits() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -212,7 +212,7 @@ fn eclipse_transits() {
     let mut n_transits = 0;
     let mut n_windows = 0;
     println!("start,end,duration");
-    for transit in p.transits_iter(&gs, start..end, 30.0).flatten() {
+    for transit in p.transits_iter(&gs, start..end, Degrees(30.0)).flatten() {
         n_transits += 1;
         // Detect eclipse portions of transits
         for window in p

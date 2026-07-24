@@ -90,12 +90,13 @@ callers. No unit conversion is needed anywhere else in the library or in user co
 
 Implement the `Observer` trait on your ground-station type with three methods:
 
-- **`latitude_deg()`**: geodetic latitude in degrees (positive north)
-- **`longitude_deg()`**: geodetic longitude in degrees (positive east)
+- **`latitude()`**: geodetic latitude as `Degrees` (positive north)
+- **`longitude()`**: geodetic longitude as `Degrees` (positive east)
 - **`altitude()`**: metres above the WGS-84 ellipsoid
 
-The trait is intentionally degree-first since this is the commond human readable form. Radian 
-conversions are handled internally by `ObserverExt`.
+The trait is intentionally degree-first since this is the common human readable form. `Degrees`
+and `Radians` (see `angle.rs`) tag a plain `f64` with its unit so the two can't be silently mixed
+up at a function boundary; conversion between them goes through `.to_radians()`/`.to_degrees()`.
 
-`Observation` provides `azimuth_deg()` and `elevation_deg()` convenience methods alongside the
-radian fields (`azimuth`, `elevation`).
+`Observation::azimuth` and `Observation::elevation` are `Radians`; call `.to_degrees()` on either
+for the degree equivalent.

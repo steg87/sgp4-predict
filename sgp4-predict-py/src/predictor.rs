@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use ouroboros::self_referencing;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
+use sgp4_predict::Degrees;
 
 use crate::{
     elements::Elements,
@@ -341,7 +342,7 @@ impl Predictor {
             inner: TransitIterOwnedBuilder {
                 observer: obs_clone,
                 iter_builder: move |obs| {
-                    predictor.transits_iter(obs, start..end, min_elevation_deg)
+                    predictor.transits_iter(obs, start..end, Degrees(min_elevation_deg))
                 },
             }
             .build(),
@@ -379,7 +380,7 @@ impl Predictor {
         min_elevation_deg: f64,
     ) -> PyResult<Option<Transit>> {
         self.inner
-            .detect_transit(t, observer, min_elevation_deg)
+            .detect_transit(t, observer, Degrees(min_elevation_deg))
             .map(|opt| {
                 opt.map(|t| Transit {
                     start: t.start,

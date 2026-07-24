@@ -150,8 +150,8 @@ impl StateVectorEnu {
     fn to_observation(&self) -> Observation {
         let obs = self.inner.to_observation();
         Observation {
-            azimuth: obs.azimuth,
-            elevation: obs.elevation,
+            azimuth: obs.azimuth.to_f64(),
+            elevation: obs.elevation.to_f64(),
             range: obs.range,
             range_rate: obs.range_rate,
         }

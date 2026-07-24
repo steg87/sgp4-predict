@@ -9,6 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{
     Error, Predictor, Result,
+    angle::{Degrees, Radians},
     frames::{EcefState, WGS84_A},
     predict::PredictionIter,
     time::IntervalRange,
@@ -17,38 +18,27 @@ use crate::{
 
 /// A fixed point on Earth's surface from which satellite passes are observed.
 ///
-/// All angular values must be in **degrees**. Altitude is in **metres**
-/// above the WGS-84 ellipsoid.
+/// Altitude is in **metres** above the WGS-84 ellipsoid.
 pub trait Observer {
-    /// Geodetic latitude in degrees (positive north).
-    fn latitude_deg(&self) -> f64;
-    /// Geodetic longitude in degrees (positive east).
-    fn longitude_deg(&self) -> f64;
+    /// Geodetic latitude (positive north).
+    fn latitude(&self) -> Degrees;
+    /// Geodetic longitude (positive east).
+    fn longitude(&self) -> Degrees;
     /// Height above the WGS-84 ellipsoid in metres.
     fn altitude(&self) -> f64;
 }
 
 pub(crate) trait ObserverExt: Observer {
-    /// Geodetic latitude in radians (positive north).
-    fn latitude(&self) -> f64 {
-        self.latitude_deg().to_radians()
-    }
-
-    /// Geodetic longitude in radians (positive east).
-    fn longitude(&self) -> f64 {
-        self.longitude_deg().to_radians()
-    }
-
     fn to_ecef(&self) -> EcefState {
         let h = self.altitude();
         let a = WGS84_A;
         let f = 1.0 / 298.257223563;
         let e2 = f * (2.0 - f);
 
-        let sin_lat = self.latitude().sin();
-        let cos_lat = self.latitude().cos();
-        let sin_lon = self.longitude().sin();
-        let cos_lon = self.longitude().cos();
+        let sin_lat = self.latitude().to_radians().to_f64().sin();
+        let cos_lat = self.latitude().to_radians().to_f64().cos();
+        let sin_lon = self.longitude().to_radians().to_f64().sin();
+        let cos_lon = self.longitude().to_radians().to_f64().cos();
 
         let n = a / (1.0 - e2 * sin_lat * sin_lat).sqrt();
 
@@ -67,31 +57,19 @@ impl<T: Observer> ObserverExt for T {}
 
 /// A point observation of a satellite from a ground location.
 ///
-/// Angular values are in **radians**, range in **metres**, range rate in
-/// **metres per second**. Use [`azimuth_deg`](Observation::azimuth_deg) and
-/// [`elevation_deg`](Observation::elevation_deg) for degree equivalents.
+/// Range is in **metres**, range rate in **metres per second**. Use
+/// `.to_degrees()` on [`azimuth`](Observation::azimuth) or
+/// [`elevation`](Observation::elevation) for degree equivalents.
 #[derive(Debug, Clone)]
 pub struct Observation {
-    /// Azimuth from north, measured clockwise, in radians.
-    pub azimuth: f64,
-    /// Elevation above the horizon in radians.
-    pub elevation: f64,
+    /// Azimuth from north, measured clockwise.
+    pub azimuth: Radians,
+    /// Elevation above the horizon.
+    pub elevation: Radians,
     /// Slant range from observer to satellite in metres.
     pub range: f64,
     /// Rate of change of slant range in metres per second (positive = receding).
     pub range_rate: f64,
-}
-
-impl Observation {
-    /// Azimuth in degrees (0 = North, clockwise).
-    pub fn azimuth_deg(&self) -> f64 {
-        self.azimuth.to_degrees()
-    }
-
-    /// Elevation above the horizon in degrees.
-    pub fn elevation_deg(&self) -> f64 {
-        self.elevation.to_degrees()
-    }
 }
 
 /// Iterator over time-stamped [`Observation`]s at regular intervals.
@@ -169,13 +147,13 @@ impl Predictor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::GroundObserver;
+    use crate::{angle::Degrees, types::GroundObserver};
 
     #[test]
     fn test_to_ecef_equator_prime_meridian() {
         // At lat=0°, lon=0°, alt=0 the ECEF position is exactly [a, 0, 0]
         // where a = 6 378 137 m (WGS-84 semi-major axis).
-        let obs = GroundObserver::new(0.0, 0.0, 0.0);
+        let obs = GroundObserver::new(Degrees(0.0), Degrees(0.0), 0.0);
         let ecef = obs.to_ecef();
         assert!((ecef.position.x - 6_378_137.0).abs() < 1.0);
         assert!(ecef.position.y.abs() < 1e-6);
@@ -186,7 +164,7 @@ mod tests {
     fn test_to_ecef_north_pole() {
         // At the geographic north pole the ECEF position is [0, 0, b]
         // where b ≈ 6 356 752.314 m (WGS-84 semi-minor axis).
-        let obs = GroundObserver::new(90.0, 0.0, 0.0);
+        let obs = GroundObserver::new(Degrees(90.0), Degrees(0.0), 0.0);
         let ecef = obs.to_ecef();
         assert!(ecef.position.x.abs() < 1.0);
         assert!(ecef.position.y.abs() < 1e-6);
@@ -200,7 +178,7 @@ mod tests {
     #[test]
     fn test_to_ecef_velocity_is_zero() {
         // A stationary ground observer has no velocity in ECEF.
-        let obs = GroundObserver::new(28.6, 77.2, 100.0);
+        let obs = GroundObserver::new(Degrees(28.6), Degrees(77.2), 100.0);
         let ecef = obs.to_ecef();
         assert_eq!(ecef.velocity.x, 0.0);
         assert_eq!(ecef.velocity.y, 0.0);

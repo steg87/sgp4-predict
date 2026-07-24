@@ -2,19 +2,20 @@ mod common;
 
 use chrono::Duration;
 use sgp4_predict::{
-    DetectError, Error, GroundObserver, MaxElevationOpts, Predictor, Refinement, TransitIterOpts,
+    Degrees, DetectError, Error, GroundObserver, MaxElevationOpts, Predictor, Refinement,
+    TransitIterOpts,
 };
 
 #[test]
 fn test_transits() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
     let transits = p
         .transits_iter(
             &gs,
             common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
-            0.0,
+            Degrees(0.0),
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
@@ -38,13 +39,13 @@ fn test_transit_opts_max_duration_exceeded() {
     // must surface as WindowTooLong instead of silently using the default.
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let result = p
         .transits_iter_with_opts(
             &gs,
             common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
-            0.0,
+            Degrees(0.0),
             TransitIterOpts {
                 max_transit_duration: Duration::seconds(1),
                 ..TransitIterOpts::default()
@@ -70,13 +71,13 @@ fn test_transit_opts_zero_step_does_not_hang() {
     // empty result from a window with no transit in it at all.
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let reference = p
         .transits_iter(
             &gs,
             common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
-            0.0,
+            Degrees(0.0),
         )
         .next()
         .expect("no transits during search interval")
@@ -86,7 +87,7 @@ fn test_transit_opts_zero_step_does_not_hang() {
         .transits_iter_with_opts(
             &gs,
             (reference.start - Duration::seconds(10))..(reference.start + Duration::seconds(10)),
-            0.0,
+            Degrees(0.0),
             TransitIterOpts {
                 min_step: Duration::zero(),
                 max_step: Duration::zero(),
@@ -117,13 +118,13 @@ fn test_transit_start_inside_interval() {
             time_tolerance: 1e-4,
             ..Refinement::default()
         });
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     // Find the first two transits over a wide window.
     let wide_start = common::datetime("2025-12-20T12:00:00Z");
     let wide_end = common::datetime("2026-01-21T12:00:00Z");
     let all_transits = p
-        .transits_iter(&gs, wide_start..wide_end, 0.0)
+        .transits_iter(&gs, wide_start..wide_end, Degrees(0.0))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(
@@ -137,7 +138,7 @@ fn test_transit_start_inside_interval() {
     // Open a new search window mid-way through the first transit.
     let mid_first = first.start + (first.end - first.start) / 2;
     let trimmed = p
-        .transits_iter(&gs, mid_first..wide_end, 0.0)
+        .transits_iter(&gs, mid_first..wide_end, Degrees(0.0))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
@@ -169,14 +170,14 @@ fn test_transit_start_inside_interval() {
 fn test_detect_transit() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     // Find the first transit via the iterator (ground truth).
     let transits = p
         .transits_iter(
             &gs,
             common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
-            0.0,
+            Degrees(0.0),
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
@@ -189,7 +190,7 @@ fn test_detect_transit() {
     let midpoint = reference.start + (reference.end - reference.start) / 2;
 
     // detect_transit at the midpoint must return Some and match the iterator result to ~1 s.
-    let detected = p.detect_transit(midpoint, &gs, 0.0).unwrap();
+    let detected = p.detect_transit(midpoint, &gs, Degrees(0.0)).unwrap();
     let detected = detected.expect("expected Some(Transit) at midpoint of a known pass");
 
     let start_diff = (detected.start - reference.start).num_milliseconds().abs();
@@ -212,7 +213,7 @@ fn test_detect_transit() {
     // detect_transit at a time clearly outside any transit must return None.
     // Use a time 5 minutes before the first transit's AoS.
     let before_transit = reference.start - Duration::minutes(5);
-    let outside = p.detect_transit(before_transit, &gs, 0.0).unwrap();
+    let outside = p.detect_transit(before_transit, &gs, Degrees(0.0)).unwrap();
     assert!(
         outside.is_none(),
         "expected None before any transit, got {:?}",
@@ -227,13 +228,13 @@ fn test_max_elevation_trimmed_interval_returns_higher_endpoint() {
     // endpoint instead of erroring.
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let transits = p
         .transits_iter(
             &gs,
             common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
-            0.0,
+            Degrees(0.0),
         )
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
@@ -273,7 +274,7 @@ fn test_max_elevation_opts_zero_step_does_not_hang() {
     // rather than stalling the scan forever.
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = common::datetime("2025-12-20T12:00:00Z");
     let end = start + Duration::minutes(1);
@@ -301,7 +302,7 @@ fn test_transits_to_csv() {
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -321,7 +322,7 @@ fn test_transits_to_csv() {
     .unwrap();
 
     let mut count = 0;
-    for transit in p.transits_iter(&gs, start..end, 0.0) {
+    for transit in p.transits_iter(&gs, start..end, Degrees(0.0)) {
         let transit = transit.unwrap();
 
         let obs_start = p.observe_at(transit.start, &gs).unwrap();
