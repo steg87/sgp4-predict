@@ -99,7 +99,7 @@ Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Trans
 
 - **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.
 - **CI** (`.github/workflows/`):
-  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`. Also installs `uv` in the test job.
+  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`, and `cargo doc` (denying rustdoc warnings). Installs `uv` in the test and docs jobs.
   - `audit.yml` — weekly `cargo audit` for security advisories.
   - `labeler.yml` — auto-labels PRs based on changed files (config in `.github/labeler.yml`).
 - **Dependencies**: `serde_yaml` (not `serde_yml`) is used for YAML parsing in dev/tests.
