@@ -55,6 +55,8 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 - `transits_iter(observer, interval, min_elevation)` → `TransitIter`
 - `apsis_iter(interval)` → `ApsisIter`
 
+`transits_iter`, `apsis_iter`, and `illumination_iter` each have a `_with_opts` sibling (`transits_iter_with_opts`, `apsis_iter_with_opts`, `illumination_iter_with_opts`) taking an additional `opts: TransitIterOpts` / `ApsisIterOpts` / `IlluminationIterOpts` and a `refinement: Refinement` — in that order. Each `XxxOpts` has a `Default` reproducing the iterator's prior hardcoded behavior (coarse-scan step, walk step where applicable, window/duration caps). Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at construction time (`.refinement(refinement)`), not mutated after the iterator is built — there is deliberately no post-construction `with_refinement` on these iterators (unlike `Predictor::with_refinement`, which configures the `Predictor` itself before any iterator is created from it). `detect_transit` similarly takes `walk_step`/`max_duration` as explicit parameters rather than hidden defaults.
+
 ### Generic detection (`detect.rs`, opt-in `generics` feature)
 
 The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) power `ApsisIter`, `TransitIter`, and `IlluminationIter` internally, so the module always compiles — but its public re-exports at the crate root are gated behind the off-by-default `generics` Cargo feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
@@ -75,7 +77,7 @@ The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `D
 
 ### Apsis detection (`apsides.rs`)
 
-`ApsisIter` detects apogee and perigee events in the TEME frame with a fixed 60-second step. It monitors the sign of the radial velocity `r · v` (dot product of position and velocity vectors). A sign change brackets an event:
+`ApsisIter` detects apogee and perigee events in the TEME frame with a fixed step (60 seconds by default; see `ApsisIterOpts`). It monitors the sign of the radial velocity `r · v` (dot product of position and velocity vectors). A sign change brackets an event:
 - `r·v > 0 → < 0`: apogee (`ApsisEvent::Apogee`)
 - `r·v < 0 → > 0`: perigee (`ApsisEvent::Perigee`)
 
@@ -83,7 +85,7 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 
 ### Transit detection (`transits.rs`)
 
-`TransitIter` uses an adaptive step-size strategy: large steps when the satellite is descending or far from `min_elevation`, smaller steps when approaching. On detecting an Outside→Inside transition, it refines the exact crossing time using root finding (`roots.rs`):
+`TransitIter` uses an adaptive step-size strategy: large steps when the satellite is descending or far from `min_elevation`, smaller steps when approaching. Step bounds, the boundary-walk step, and the max transit duration are configurable via `TransitIterOpts`. On detecting an Outside→Inside transition, it refines the exact crossing time using root finding (`roots.rs`):
 1. Newton-Raphson (uses elevation rate as derivative, fast convergence)
 2. Falls back to Brent's method (bracketed, guaranteed convergence) if Newton-Raphson fails
 

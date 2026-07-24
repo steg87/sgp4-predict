@@ -16,13 +16,14 @@ exceeds a configurable `min_elevation` threshold (Acquisition of Signal → Loss
 
 `TransitIter` avoids scanning every second of a multi-day window by using two step sizes:
 
-- **Large step** (~10 minutes): used when the satellite is well below `min_elevation` or descending away.
+- **Large step** (10 minutes by default): used when the satellite is well below `min_elevation` or descending away.
   Moves quickly through idle periods.
-- **Small step** (~10 seconds): used when the satellite is approaching or already above `min_elevation`.
+- **Small step** (10 seconds by default): used when the satellite is approaching or already above `min_elevation`.
   Provides enough resolution to bracket the exact crossing precisely.
 
 The step size is selected based on the current elevation and its rate of change, so the iterator
-automatically narrows its resolution only where it matters.
+automatically narrows its resolution only where it matters. These bounds, the boundary-walk step, and the
+max transit duration are all configurable via `TransitIterOpts` (`Predictor::transits_iter_with_opts`).
 
 ### State Machine
 
@@ -79,7 +80,8 @@ timing precision is independent of the event function's units.
 
 ### Radial Velocity Sign Change
 
-`ApsisIter` monitors the **radial velocity** scalar at a fixed 60-second step:
+`ApsisIter` monitors the **radial velocity** scalar at a fixed step (60 seconds by default,
+configurable via `ApsisIterOpts` / `Predictor::apsis_iter_with_opts`):
 
 ```
 r·v = position · velocity   (dot product)
@@ -98,9 +100,10 @@ converge in very few iterations on a tight bracket.
 ### Correctness Note
 
 The radial-velocity sign-change method is correct and efficient for **near-circular LEO orbits**
-(eccentricity ≲ 0.01). For highly elliptical orbits (HEO, Molniya), the 60-second fixed step may
-skip closely-spaced events near perigee where the satellite moves very fast. If using this library
-with non-LEO TLEs, consider whether apsis timing precision is critical to your use case.
+(eccentricity ≲ 0.01). For highly elliptical orbits (HEO, Molniya), the 60-second default step may
+skip closely-spaced events near perigee where the satellite moves very fast — pass a smaller `step`
+via `ApsisIterOpts` if needed. If using this library with non-LEO TLEs, consider whether apsis
+timing precision is critical to your use case.
 
 ---
 

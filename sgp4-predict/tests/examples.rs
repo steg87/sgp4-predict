@@ -55,7 +55,7 @@ fn current_ground_station_pass() {
 
     // Recover the full pass window from a single timestamp.
     let detected = p
-        .detect_transit(now, &gs, 5.0)
+        .detect_transit(now, &gs, 5.0, Duration::seconds(30), Duration::hours(1))
         .expect("propagation error")
         .expect("satellite is not overhead at the given time");
 

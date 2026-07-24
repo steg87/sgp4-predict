@@ -1,10 +1,10 @@
 //! Apsis (apogee and perigee) detection over a time interval.
 //!
-//! [`ApsisIter`] scans with a fixed 60-second step, monitoring the sign of
-//! the radial velocity `r·v`. A sign change brackets an apsis event, which
-//! is then refined with the bracketed hybrid solver. It is a thin wrapper
-//! over the generic [`EventIter`](crate::EventIter): `r·v` is the event
-//! function and its zero crossings are the apsides.
+//! [`ApsisIter`] scans with a fixed step (60 seconds by default), monitoring
+//! the sign of the radial velocity `r·v`. A sign change brackets an apsis
+//! event, which is then refined with the bracketed hybrid solver. It is a
+//! thin wrapper over the generic [`EventIter`](crate::EventIter): `r·v` is
+//! the event function and its zero crossings are the apsides.
 
 use chrono::{DateTime, Duration, Utc};
 
@@ -18,7 +18,24 @@ use crate::{
     time,
 };
 
-const STEP: Duration = Duration::seconds(60);
+/// Tuning knobs for [`ApsisIter`]'s coarse scan.
+///
+/// The default reproduces the fixed behavior `ApsisIter` used before this was
+/// configurable: a 60-second fixed step. Pass a customized value to
+/// [`Predictor::apsis_iter_with_opts`](crate::Predictor::apsis_iter_with_opts).
+#[derive(Debug, Clone, Copy)]
+pub struct ApsisIterOpts {
+    /// Fixed step used to scan for `r·v` sign changes.
+    pub step: Duration,
+}
+
+impl Default for ApsisIterOpts {
+    fn default() -> Self {
+        Self {
+            step: Duration::seconds(60),
+        }
+    }
+}
 
 /// The type of an apsis event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,32 +78,31 @@ impl EventFunction for RadialVelocity {
 /// Iterator over apogee and perigee events within a time interval.
 ///
 /// Created by [`Predictor::apsis_iter`](crate::Predictor::apsis_iter).
-/// Scans in 60-second steps and refines each crossing with the bracketed
-/// hybrid solver.
+/// Scans in fixed steps (60 seconds by default) and refines each crossing
+/// with the bracketed hybrid solver.
 pub struct ApsisIter {
     predictor: Predictor,
     inner: EventIter<RadialVelocity, FixedStep>,
 }
 
 impl ApsisIter {
-    pub fn new(predictor: Predictor, interval: impl time::IntervalRange) -> Self {
+    pub fn new(
+        predictor: Predictor,
+        interval: impl time::IntervalRange,
+        opts: ApsisIterOpts,
+        refinement: Refinement,
+    ) -> Self {
         let detector = CrossingDetector::new(
             RadialVelocity {
                 predictor: predictor.clone(),
             },
-            FixedStep(STEP),
-            Refinement::default(),
+            FixedStep(opts.step),
+            refinement,
         );
         Self {
             predictor,
             inner: DetectIter::new(interval, detector),
         }
-    }
-
-    /// Override the root-finder configuration used to refine apsis crossings.
-    pub fn with_refinement(mut self, r: Refinement) -> Self {
-        *self.inner.detector_mut().refinement_mut() = r;
-        self
     }
 }
 
@@ -131,6 +147,18 @@ impl Predictor {
     ///
     /// Returns an iterator over apsis events in the TEME frame.
     pub fn apsis_iter(&self, interval: impl time::IntervalRange) -> ApsisIter {
-        ApsisIter::new(self.clone(), interval).with_refinement(self.refinement)
+        self.apsis_iter_with_opts(interval, ApsisIterOpts::default(), self.refinement)
+    }
+
+    /// Like [`Predictor::apsis_iter`], but with a customized root-finder
+    /// configuration and coarse-scan tuning. See [`Refinement`] and
+    /// [`ApsisIterOpts`].
+    pub fn apsis_iter_with_opts(
+        &self,
+        interval: impl time::IntervalRange,
+        opts: ApsisIterOpts,
+        refinement: Refinement,
+    ) -> ApsisIter {
+        ApsisIter::new(self.clone(), interval, opts, refinement)
     }
 }

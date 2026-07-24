@@ -91,15 +91,15 @@ use thiserror::Error as ThisError;
 pub use sgp4::{Classification, Elements};
 
 pub use crate::{
-    apsides::{Apsis, ApsisEvent, ApsisIter},
+    apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
     detect::Error as DetectError,
     frames::{EcefState, EnuState, TemeState},
-    illumination::{Illumination, IlluminationIter, IlluminationState},
+    illumination::{Illumination, IlluminationIter, IlluminationIterOpts, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::PredictionIter,
     roots::Refinement,
     time::{DateTimeIter, IntervalRange},
-    transits::{Transit, TransitIter},
+    transits::{Transit, TransitIter, TransitIterOpts},
     types::{GroundObserver, Tle, TleParseError},
     vectors::{Position, StateVector, Velocity},
 };

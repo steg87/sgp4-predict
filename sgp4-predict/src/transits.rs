@@ -30,15 +30,6 @@ use crate::{
     time::IntervalRange,
 };
 
-const MAX_STEP: Duration = Duration::minutes(10);
-const MIN_STEP: Duration = Duration::seconds(10);
-/// Fixed step used to walk from a transit's start to its end; an adaptive
-/// step could jump clear over the peak and out the far side.
-const WALK_STEP: Duration = Duration::seconds(30);
-/// A transit longer than this is reported as
-/// [`DetectError::WindowTooLong`](crate::DetectError::WindowTooLong).
-const MAX_TRANSIT_DURATION: Duration = Duration::hours(1);
-
 /// A satellite pass — the window during which the satellite is above
 /// `min_elevation` as seen from the observer.
 ///
@@ -122,6 +113,49 @@ impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
     }
 }
 
+/// Tuning knobs for [`TransitIter`]'s coarse scan and window walk.
+///
+/// The defaults reproduce the fixed behavior `TransitIter` used before these
+/// were configurable: a [`ThresholdStep`] between 10 seconds and 10 minutes,
+/// a 30-second walk step, and a 1-hour transit duration cap. Pass a
+/// customized value to
+/// [`Predictor::transits_iter_with_opts`](crate::Predictor::transits_iter_with_opts).
+#[derive(Debug, Clone, Copy)]
+pub struct TransitIterOpts {
+    /// Lower bound of the adaptive coarse-scan step (`ThresholdStep::min`).
+    pub min_step: Duration,
+    /// Upper bound of the adaptive coarse-scan step (`ThresholdStep::max`).
+    pub max_step: Duration,
+    /// Fixed step used to walk from a transit's start to its end; an
+    /// adaptive step could jump clear over the peak and out the far side.
+    pub walk_step: Duration,
+    /// A transit longer than this is reported as
+    /// [`DetectError::WindowTooLong`](crate::DetectError::WindowTooLong).
+    pub max_transit_duration: Duration,
+    /// A transit already in progress at the interval start is discarded by
+    /// default (only transits whose AOS falls within the interval are
+    /// returned); set to `false` to instead walk backward past the interval
+    /// start and find its true AOS.
+    pub skip_leading_partial: bool,
+    /// A transit still in progress at the interval end is walked forward
+    /// past the interval to find its true LOS by default; set to `true` to
+    /// instead clamp its end to the interval bounds.
+    pub clamp_to_interval: bool,
+}
+
+impl Default for TransitIterOpts {
+    fn default() -> Self {
+        Self {
+            min_step: Duration::seconds(10),
+            max_step: Duration::minutes(10),
+            walk_step: Duration::seconds(30),
+            max_transit_duration: Duration::hours(1),
+            skip_leading_partial: true,
+            clamp_to_interval: false,
+        }
+    }
+}
+
 /// Iterator over satellite passes visible to an observer within a time interval.
 ///
 /// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
@@ -135,8 +169,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
         observer: &'a O,
         interval: impl time::IntervalRange,
         min_elevation: f64,
+        opts: TransitIterOpts,
+        refinement: Refinement,
     ) -> Self {
-        let inner = WindowIter::builder()
+        let mut builder = WindowIter::builder()
             .interval(interval)
             .event_function(ElevationAboveMin {
                 predictor,
@@ -144,19 +180,20 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 min_elevation,
             })
             .step(ThresholdStep {
-                min: MIN_STEP,
-                max: MAX_STEP,
+                min: opts.min_step,
+                max: opts.max_step,
             })
-            .walk_step(WALK_STEP)
-            .max_window_duration(MAX_TRANSIT_DURATION)
-            .build()
-            .expect("interval is always supplied");
+            .walk_step(opts.walk_step)
+            .max_window_duration(opts.max_transit_duration)
+            .refinement(refinement);
+        if !opts.skip_leading_partial {
+            builder = builder.include_leading_partial();
+        }
+        if opts.clamp_to_interval {
+            builder = builder.clamp_to_interval();
+        }
+        let inner = builder.build().expect("interval is always supplied");
         Self { inner }
-    }
-
-    pub fn with_refinement(mut self, r: Refinement) -> Self {
-        *self.inner.detector_mut().refinement_mut() = r;
-        self
     }
 }
 
@@ -184,13 +221,34 @@ impl Predictor {
         interval: impl IntervalRange,
         min_elevation_deg: f64,
     ) -> TransitIter<'a, O> {
+        self.transits_iter_with_opts(
+            observer,
+            interval,
+            min_elevation_deg,
+            TransitIterOpts::default(),
+            self.refinement,
+        )
+    }
+
+    /// Like [`Predictor::transits_iter`], but with a customized root-finder
+    /// configuration and coarse-scan/window-walk tuning. See [`Refinement`]
+    /// and [`TransitIterOpts`].
+    pub fn transits_iter_with_opts<'a, O: Observer>(
+        &self,
+        observer: &'a O,
+        interval: impl IntervalRange,
+        min_elevation_deg: f64,
+        opts: TransitIterOpts,
+        refinement: Refinement,
+    ) -> TransitIter<'a, O> {
         TransitIter::new(
             self.clone(),
             observer,
             interval,
             min_elevation_deg.to_radians(),
+            opts,
+            refinement,
         )
-        .with_refinement(self.refinement)
     }
 
     /// Detect whether a transit is in progress at time `t`.
@@ -199,25 +257,27 @@ impl Predictor {
     ///
     /// If the satellite is below `min_elevation_deg` at `t`, returns
     /// `Ok(None)`. Otherwise, walks backward and forward from `t` in
-    /// 30-second steps to find the AoS and LoS crossings, refining each with
-    /// the bracketed hybrid solver ([`Refinement`]) to millisecond accuracy —
-    /// see `detect_window`, the primitive this is a thin wrapper over.
+    /// `walk_step` steps to find the AoS and LoS crossings, refining each
+    /// with the bracketed hybrid solver ([`Refinement`]) to millisecond
+    /// accuracy — see `detect_window`, the primitive this is a thin wrapper
+    /// over.
     ///
     /// Returns [`Error::Detect`](crate::Error::Detect) if the transit is
-    /// longer than 1 hour.
+    /// longer than `max_duration`.
     pub fn detect_transit<O: Observer>(
         &self,
         t: DateTime<Utc>,
         observer: &O,
         min_elevation_deg: f64,
+        walk_step: Duration,
+        max_duration: Duration,
     ) -> Result<Option<Transit>> {
         let mut f = ElevationAboveMin {
             predictor: self.clone(),
             observer,
             min_elevation: min_elevation_deg.to_radians(),
         };
-        let window =
-            detect::detect_window(&mut f, t, WALK_STEP, MAX_TRANSIT_DURATION, &self.refinement)?;
+        let window = detect::detect_window(&mut f, t, walk_step, max_duration, &self.refinement)?;
         Ok(window.map(|w| {
             let transit = Transit::new(w.start, w.end);
             tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");

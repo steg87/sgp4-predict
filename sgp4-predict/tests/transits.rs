@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{GroundObserver, Predictor, Refinement};
+use sgp4_predict::{DetectError, Error, GroundObserver, Predictor, Refinement, TransitIterOpts};
 
 #[test]
 fn test_transits() {
@@ -28,6 +28,33 @@ fn test_transits() {
             duration_secs
         );
     }
+}
+
+#[test]
+fn test_transit_opts_max_duration_exceeded() {
+    // A real pass is well over 1 second; capping max_transit_duration that low
+    // must surface as WindowTooLong instead of silently using the default.
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+
+    let result = p
+        .transits_iter_with_opts(
+            &gs,
+            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2026-01-21T12:00:00Z"),
+            0.0,
+            TransitIterOpts {
+                max_transit_duration: Duration::seconds(1),
+                ..TransitIterOpts::default()
+            },
+            Refinement::default(),
+        )
+        .collect::<Result<Vec<_>, _>>();
+
+    assert!(matches!(
+        result,
+        Err(Error::Detect(DetectError::WindowTooLong { .. }))
+    ));
 }
 
 #[test]
@@ -115,7 +142,15 @@ fn test_detect_transit() {
     let midpoint = reference.start + (reference.end - reference.start) / 2;
 
     // detect_transit at the midpoint must return Some and match the iterator result to ~1 s.
-    let detected = p.detect_transit(midpoint, &gs, 0.0).unwrap();
+    let detected = p
+        .detect_transit(
+            midpoint,
+            &gs,
+            0.0,
+            Duration::seconds(30),
+            Duration::hours(1),
+        )
+        .unwrap();
     let detected = detected.expect("expected Some(Transit) at midpoint of a known pass");
 
     let start_diff = (detected.start - reference.start).num_milliseconds().abs();
@@ -138,7 +173,15 @@ fn test_detect_transit() {
     // detect_transit at a time clearly outside any transit must return None.
     // Use a time 5 minutes before the first transit's AoS.
     let before_transit = reference.start - Duration::minutes(5);
-    let outside = p.detect_transit(before_transit, &gs, 0.0).unwrap();
+    let outside = p
+        .detect_transit(
+            before_transit,
+            &gs,
+            0.0,
+            Duration::seconds(30),
+            Duration::hours(1),
+        )
+        .unwrap();
     assert!(
         outside.is_none(),
         "expected None before any transit, got {:?}",
