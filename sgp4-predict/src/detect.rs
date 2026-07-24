@@ -534,8 +534,8 @@ pub struct Window {
 ///
 /// The coarse scan (`S`, e.g. [`FixedStep`] or [`ThresholdStep`]) only has to
 /// find *some* sample inside the next positive window; once one is found,
-/// [`detect_window`] takes over and walks outward from it with a small fixed
-/// step to pin down the window's true start and end.
+/// `detect_window` takes over and walks outward from it with a small fixed step
+/// to pin down the window's true start and end.
 ///
 /// A window is only considered to fall within the interval if
 /// `interval.start <= window.start < interval.end`, so by default a window

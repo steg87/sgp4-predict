@@ -15,6 +15,7 @@ make test                      # full test suite (preferred — matches CI and p
 make coverage                  # llvm-cov summary
 make validation                # cross-validate against pypredict/skyfield reference data
 make benchmark                 # Rust vs pypredict monte carlo benchmark
+make docs                      # build cargo docs and open in a browser
 ```
 
 **Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.

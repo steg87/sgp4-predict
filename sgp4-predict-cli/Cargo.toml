@@ -12,6 +12,7 @@ categories = ["aerospace", "science", "simulation", "command-line-utilities"]
 [[bin]]
 name = "sgp4-predict"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 sgp4-predict       = { path = "../sgp4-predict" }

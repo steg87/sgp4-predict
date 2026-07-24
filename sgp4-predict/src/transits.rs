@@ -197,12 +197,11 @@ impl Predictor {
     ///
     /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
     ///
-    /// If the satellite is below `min_elevation_deg` at `t`, returns `Ok(None)`.
-    /// Otherwise, walks backward and forward from `t` in 30-second steps to
-    /// find the AoS and LoS crossings, refining each with the bracketed
-    /// hybrid solver ([`Refinement`](crate::Refinement)) to millisecond
-    /// accuracy — see [`detect_window`](crate::detect::detect_window), the
-    /// primitive this is a thin wrapper over.
+    /// If the satellite is below `min_elevation_deg` at `t`, returns
+    /// `Ok(None)`. Otherwise, walks backward and forward from `t` in
+    /// 30-second steps to find the AoS and LoS crossings, refining each with
+    /// the bracketed hybrid solver ([`Refinement`]) to millisecond accuracy —
+    /// see `detect_window`, the primitive this is a thin wrapper over.
     ///
     /// Returns [`Error::Detect`](crate::Error::Detect) if the transit is
     /// longer than 1 hour.
@@ -228,13 +227,13 @@ impl Predictor {
 
     /// Find the peak elevation of the satellite over an observer within a time interval.
     ///
-    /// Built on [`EventIter`](crate::detect::EventIter): the event function is
-    /// the elevation rate, and interior peaks are its falling zero crossings
-    /// (ascending → descending), refined with the bracketed hybrid solver
-    /// ([`Refinement`](crate::Refinement)). The global maximum over the
-    /// interval is attained either at one of these interior peaks or at an
-    /// interval boundary, so every candidate — each falling crossing plus
-    /// both endpoints — is compared and the highest returned.
+    /// Built on [`EventIter`]: the event function is the elevation rate, and
+    /// interior peaks are its falling zero crossings (ascending →
+    /// descending), refined with the bracketed hybrid solver
+    /// ([`Refinement`]). The global maximum over the interval is attained
+    /// either at one of these interior peaks or at an interval boundary, so
+    /// every candidate — each falling crossing plus both endpoints — is
+    /// compared and the highest returned.
     pub fn max_elevation<O: Observer>(
         &self,
         interval: impl IntervalRange,

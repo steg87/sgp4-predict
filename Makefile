@@ -37,3 +37,7 @@ coverage:
 audit:
 	cargo audit
 
+.PHONY: docs
+docs:
+	cargo doc --all-features --no-deps --open
+

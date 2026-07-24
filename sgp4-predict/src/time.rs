@@ -74,8 +74,8 @@ impl IntervalRange for Range<DateTime<Utc>> {
 /// Iterator that yields equally-spaced [`DateTime<Utc>`] values over an interval.
 ///
 /// Yields times `[start, start + step, start + 2·step, …)` up to but not
-/// including `end`. Call [`include_end`](DateTimeIter::include_end) to append
-/// the exact end time as a final sample.
+/// including `end`. Call `include_end` to append the exact end time as a final
+/// sample.
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,

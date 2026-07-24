@@ -39,7 +39,7 @@ pub struct Refinement {
     /// Convergence threshold on the bracket width, in seconds: iteration
     /// stops once the crossing is pinned down to within this duration.
     pub time_tolerance: f64,
-    /// Maximum number of iterations before returning [`Error::FailedToConverge`].
+    /// Maximum number of iterations before returning `Error::FailedToConverge`.
     pub max_iter: usize,
 }
 

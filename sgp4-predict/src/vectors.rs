@@ -52,6 +52,8 @@ impl<K, F> std::ops::Sub for Vec3<K, F> {
 /// so the compiler enforces correct frame usage at each conversion step.
 ///
 /// [`TemeState`]: crate::TemeState
+/// [`EcefState`]: crate::EcefState
+/// [`EnuState`]: crate::EnuState
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StateVector<F> {
     pub position: Position<F>,
