@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use thiserror::Error as ThisError;
 
-use crate::{TleRecord, observe::Observer};
+use crate::{TleRecord, angle::Degrees, observe::Observer};
 
 /// Error returned when a [`Tle`] cannot be parsed from a string.
 #[derive(Debug, ThisError)]
@@ -128,23 +128,22 @@ impl FromStr for Tle {
 /// [`Predictor::observation_iter`][crate::Predictor::observation_iter], and
 /// [`Predictor::transits_iter`][crate::Predictor::transits_iter].
 ///
-/// Coordinates are in **degrees**; altitude is in **metres** above the WGS-84
-/// ellipsoid.
+/// Altitude is in **metres** above the WGS-84 ellipsoid.
 ///
 /// # Example
 ///
 /// ```
-/// use sgp4_predict::GroundObserver;
+/// use sgp4_predict::{Degrees, GroundObserver};
 ///
 /// // London, ~20 m ASL
-/// let london = GroundObserver::new(51.5074, -0.1278, 20.0);
+/// let london = GroundObserver::new(Degrees(51.5074), Degrees(-0.1278), 20.0);
 /// ```
 #[derive(Debug, Clone)]
 pub struct GroundObserver {
-    /// Geodetic latitude in degrees (positive north).
-    latitude_deg: f64,
-    /// Geodetic longitude in degrees (positive east).
-    longitude_deg: f64,
+    /// Geodetic latitude (positive north).
+    latitude: Degrees,
+    /// Geodetic longitude (positive east).
+    longitude: Degrees,
     /// Height above the WGS-84 ellipsoid in metres.
     altitude: f64,
 }
@@ -152,25 +151,25 @@ pub struct GroundObserver {
 impl GroundObserver {
     /// Construct a [`GroundObserver`].
     ///
-    /// - `latitude_deg` — geodetic latitude in degrees (positive north)
-    /// - `longitude_deg` — geodetic longitude in degrees (positive east)
+    /// - `latitude` — geodetic latitude (positive north)
+    /// - `longitude` — geodetic longitude (positive east)
     /// - `altitude` — height above the WGS-84 ellipsoid in metres
-    pub const fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
+    pub const fn new(latitude: Degrees, longitude: Degrees, altitude: f64) -> Self {
         Self {
-            latitude_deg,
-            longitude_deg,
+            latitude,
+            longitude,
             altitude,
         }
     }
 }
 
 impl Observer for GroundObserver {
-    fn latitude_deg(&self) -> f64 {
-        self.latitude_deg
+    fn latitude(&self) -> Degrees {
+        self.latitude
     }
 
-    fn longitude_deg(&self) -> f64 {
-        self.longitude_deg
+    fn longitude(&self) -> Degrees {
+        self.longitude
     }
 
     fn altitude(&self) -> f64 {

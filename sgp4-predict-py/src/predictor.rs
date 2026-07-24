@@ -341,7 +341,11 @@ impl Predictor {
             inner: TransitIterOwnedBuilder {
                 observer: obs_clone,
                 iter_builder: move |obs| {
-                    predictor.transits_iter(obs, start..end, min_elevation_deg)
+                    predictor.transits_iter(
+                        obs,
+                        start..end,
+                        sgp4_predict::Degrees(min_elevation_deg),
+                    )
                 },
             }
             .build(),
@@ -379,7 +383,7 @@ impl Predictor {
         min_elevation_deg: f64,
     ) -> PyResult<Option<Transit>> {
         self.inner
-            .detect_transit(t, observer, min_elevation_deg)
+            .detect_transit(t, observer, sgp4_predict::Degrees(min_elevation_deg))
             .map(|opt| {
                 opt.map(|t| Transit {
                     start: t.start,

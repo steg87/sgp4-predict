@@ -8,7 +8,7 @@
 //! # Quick start
 //!
 //! ```no_run
-//! use sgp4_predict::{GroundObserver, Predictor, Tle};
+//! use sgp4_predict::{Degrees, GroundObserver, Predictor, Tle};
 //! use chrono::{Duration, Utc};
 //!
 //! let tle: Tle = "\
@@ -19,12 +19,12 @@
 //!     .unwrap();
 //!
 //! let predictor = Predictor::from_tle(&tle).unwrap();
-//! let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
+//! let glasgow = GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0);
 //!
 //! let start = Utc::now();
 //! let end = start + Duration::days(1);
 //!
-//! for transit in predictor.transits_iter(&glasgow, start..end, 5.0) {
+//! for transit in predictor.transits_iter(&glasgow, start..end, Degrees(5.0)) {
 //!     let transit = transit.unwrap();
 //!     println!("AoS: {}  LoS: {}", transit.start, transit.end);
 //! }
@@ -59,8 +59,14 @@
 //!
 //! # Units
 //!
-//! All positions are in **metres** and velocities in **m/s**.
-//! Observer latitude and longitude must be supplied in **degrees**.
+//! All positions are in **metres** and velocities in **m/s**. Angles are
+//! type-safe: [`Degrees`] and [`Radians`] tag a plain `f64` with its unit so
+//! the two can't be mixed up at a function boundary — construction is always
+//! explicit (`Degrees(51.5)`, `Radians(1.2)`) and conversion goes through
+//! `.to_radians()`/`.to_degrees()` or the corresponding `From` impls.
+//! [`Observer::latitude`]/[`longitude`](Observer::longitude) and
+//! `min_elevation` parameters take [`Degrees`]; [`Observation::azimuth`] and
+//! [`elevation`](Observation::elevation) are [`Radians`].
 //!
 //! # Cargo features
 //!
@@ -72,6 +78,7 @@
 
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+mod angle;
 mod apsides;
 mod detect;
 mod frames;
@@ -91,6 +98,7 @@ use thiserror::Error as ThisError;
 pub use sgp4::{Classification, Elements};
 
 pub use crate::{
+    angle::{Degrees, Radians},
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
     detect::Error as DetectError,
     frames::{EcefState, EnuState, TemeState},
@@ -118,8 +126,8 @@ pub use crate::detect::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, Classification, Elements, Error, GroundObserver, IlluminationState,
-        Observation, Observer, Predictor, Result, Tle, TleRecord, Transit,
+        ApsisEvent, Classification, Degrees, Elements, Error, GroundObserver, IlluminationState,
+        Observation, Observer, Predictor, Radians, Result, Tle, TleRecord, Transit,
     };
 }
 

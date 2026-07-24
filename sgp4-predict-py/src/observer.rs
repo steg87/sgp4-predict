@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
-use sgp4_predict::Observer;
+use sgp4_predict::{Degrees, Observer};
 
 /// A fixed point on Earth's surface from which satellite passes are observed.
 ///
@@ -51,11 +51,11 @@ impl GroundObserver {
 }
 
 impl Observer for GroundObserver {
-    fn latitude_deg(&self) -> f64 {
-        self.latitude_deg
+    fn latitude(&self) -> Degrees {
+        Degrees(self.latitude_deg)
     }
-    fn longitude_deg(&self) -> f64 {
-        self.longitude_deg
+    fn longitude(&self) -> Degrees {
+        Degrees(self.longitude_deg)
     }
     fn altitude(&self) -> f64 {
         self.altitude

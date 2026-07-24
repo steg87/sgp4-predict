@@ -19,8 +19,8 @@ pub struct Observation {
 impl Observation {
     pub(crate) fn from_inner(obs: sgp4_predict::Observation) -> Self {
         Self {
-            azimuth: obs.azimuth,
-            elevation: obs.elevation,
+            azimuth: obs.azimuth.to_f64(),
+            elevation: obs.elevation.to_f64(),
             range: obs.range,
             range_rate: obs.range_rate,
         }

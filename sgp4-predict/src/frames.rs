@@ -14,6 +14,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     Observation, Observer,
+    angle::Radians,
     observe::ObserverExt,
     vectors::{Position, StateVector, Velocity},
 };
@@ -22,7 +23,6 @@ use crate::{
 pub(crate) const WGS84_A: f64 = 6_378_137.0;
 
 pub struct JulianDate(f64);
-pub struct Radians(f64);
 
 /// State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
 pub type TemeState = StateVector<markers::Teme>;
@@ -42,7 +42,7 @@ impl TemeState {
         // Earth's sidereal rotation rate (rad/s), WGS-84
         const OMEGA_EARTH: f64 = 7.292_115_0e-5;
 
-        let (sin_g, cos_g) = gmst(julian_date(t)).0.sin_cos();
+        let (sin_g, cos_g) = gmst(julian_date(t)).to_f64().sin_cos();
 
         // Rotate position into ECEF: r_ECEF = R(θ) · r_TEME
         let rx = cos_g * self.position.x + sin_g * self.position.y;
@@ -78,8 +78,8 @@ impl EcefState {
         let dp = self.position - obs_ecef.position;
         let dv = self.velocity - obs_ecef.velocity;
 
-        let (sin_lat, cos_lat) = observer.latitude().sin_cos();
-        let (sin_lon, cos_lon) = observer.longitude().sin_cos();
+        let (sin_lat, cos_lat) = observer.latitude().to_radians().to_f64().sin_cos();
+        let (sin_lon, cos_lon) = observer.longitude().to_radians().to_f64().sin_cos();
 
         StateVector::new(
             Position::new(
@@ -111,8 +111,8 @@ impl EnuState {
         let elevation = (u / range).asin();
 
         Observation {
-            azimuth,
-            elevation,
+            azimuth: Radians(azimuth),
+            elevation: Radians(elevation),
             range,
             range_rate,
         }
@@ -261,9 +261,9 @@ mod tests {
         let g = gmst(julian_date(t));
         let expected = 67310.54841 * std::f64::consts::TAU / 86400.0;
         assert!(
-            (g.0 - expected).abs() < 1e-9,
+            (g.to_f64() - expected).abs() < 1e-9,
             "GMST at J2000.0 = {:.9}, expected {:.9}",
-            g.0,
+            g.to_f64(),
             expected
         );
     }
@@ -280,9 +280,9 @@ mod tests {
         for t in &dates {
             let g = gmst(julian_date(*t));
             assert!(
-                g.0 >= 0.0 && g.0 < std::f64::consts::TAU,
+                g.to_f64() >= 0.0 && g.to_f64() < std::f64::consts::TAU,
                 "GMST {:.6} out of [0, 2π) for {t:?}",
-                g.0
+                g.to_f64()
             );
         }
     }

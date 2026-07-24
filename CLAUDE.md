@@ -71,7 +71,7 @@ The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `D
 
 **All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `sgp4-predict/src/predict.rs` in the `From<sgp4::Prediction>` impl.
 
-**Observer lat/lon are in degrees** (both `GroundObserver` and the `Observer` trait return degrees from `latitude_deg()` / `longitude_deg()`; internal conversions to radians happen inside frame math).
+**Angles are type-safe in Rust** (`angle.rs`): `Degrees(f64)` and `Radians(f64)` tag a plain `f64` with its unit so the two can't be silently mixed up at a function boundary. There is deliberately no `From<f64>` for either — construction is always explicit (`Degrees(51.5)`, `Radians(1.2)`), and conversion goes through `.to_radians()`/`.to_degrees()` or the corresponding `From` impls. `Observer::latitude()`/`longitude()` (both the trait and `GroundObserver`) and `min_elevation` parameters (`transits_iter`, `detect_transit`, ...) take `Degrees`; `Observation::azimuth`/`elevation` are `Radians`. Internal-only angle math (GMST, elevation rate, sun-position angles) stays plain `f64` — it never crosses the public API, so typing it would be ceremony without payoff. This type safety is Rust-only: the Python bindings keep plain `float` with `_deg`-suffixed field/arg names, converting to/from `Degrees`/`Radians` at the FFI boundary.
 
 **Python vs Rust naming**: in Rust, `Observer` is the *trait*; the concrete type is `GroundObserver`. In the Python bindings, the class is also named `GroundObserver`.
 

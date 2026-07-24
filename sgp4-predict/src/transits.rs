@@ -21,6 +21,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{
     Predictor, Result,
+    angle::Degrees,
     detect::{
         self, Direction, EventFunction, EventIter, FixedStep, MIN_POSITIVE_STEP, Sample,
         ThresholdStep, WindowIter,
@@ -232,19 +233,19 @@ impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
 impl Predictor {
     /// Calculate all of the transits visible to the observer.
     ///
-    /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
+    /// `min_elevation` is the minimum elevation above the horizon.
     ///
     /// Returns an iterator over transits.
     pub fn transits_iter<'a, O: Observer>(
         &self,
         observer: &'a O,
         interval: impl IntervalRange,
-        min_elevation_deg: f64,
+        min_elevation: Degrees,
     ) -> TransitIter<'a, O> {
         self.transits_iter_with_opts(
             observer,
             interval,
-            min_elevation_deg,
+            min_elevation,
             TransitIterOpts::default(),
             self.refinement,
         )
@@ -257,7 +258,7 @@ impl Predictor {
         &self,
         observer: &'a O,
         interval: impl IntervalRange,
-        min_elevation_deg: f64,
+        min_elevation: Degrees,
         opts: TransitIterOpts,
         refinement: Refinement,
     ) -> TransitIter<'a, O> {
@@ -265,7 +266,7 @@ impl Predictor {
             self.clone(),
             observer,
             interval,
-            min_elevation_deg.to_radians(),
+            min_elevation.to_radians().to_f64(),
             opts,
             refinement,
         )
@@ -273,9 +274,9 @@ impl Predictor {
 
     /// Detect whether a transit is in progress at time `t`.
     ///
-    /// `min_elevation_deg` is the minimum elevation above the horizon in **degrees**.
+    /// `min_elevation` is the minimum elevation above the horizon.
     ///
-    /// If the satellite is below `min_elevation_deg` at `t`, returns
+    /// If the satellite is below `min_elevation` at `t`, returns
     /// `Ok(None)`. Otherwise, walks backward and forward from `t` using
     /// [`TransitIterOpts::default`]'s `walk_step` to find the AoS and LoS
     /// crossings, refining each with the bracketed hybrid solver
@@ -288,9 +289,9 @@ impl Predictor {
         &self,
         t: DateTime<Utc>,
         observer: &O,
-        min_elevation_deg: f64,
+        min_elevation: Degrees,
     ) -> Result<Option<Transit>> {
-        self.detect_transit_with_opts(t, observer, min_elevation_deg, TransitIterOpts::default())
+        self.detect_transit_with_opts(t, observer, min_elevation, TransitIterOpts::default())
     }
 
     /// Like [`Predictor::detect_transit`], but with a customized walk step
@@ -301,13 +302,13 @@ impl Predictor {
         &self,
         t: DateTime<Utc>,
         observer: &O,
-        min_elevation_deg: f64,
+        min_elevation: Degrees,
         opts: TransitIterOpts,
     ) -> Result<Option<Transit>> {
         let mut f = ElevationAboveMin {
             predictor: self.clone(),
             observer,
-            min_elevation: min_elevation_deg.to_radians(),
+            min_elevation: min_elevation.to_radians().to_f64(),
         };
         let window = detect::detect_window(
             &mut f,
@@ -384,12 +385,12 @@ impl Predictor {
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             // Find max elevation
-            .max_by(|a, b| a.1.elevation.total_cmp(&b.1.elevation))
+            .max_by(|a, b| a.1.elevation.to_f64().total_cmp(&b.1.elevation.to_f64()))
             .expect("candidates always include the interval endpoints");
 
         tracing::debug!(
             time = %peak_t,
-            elevation_deg = obs.elevation.to_degrees(),
+            elevation_deg = obs.elevation.to_degrees().to_f64(),
             "peak elevation found"
         );
         Ok((peak_t, obs))

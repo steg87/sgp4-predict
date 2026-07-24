@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use sgp4_predict::Predictor;
+use sgp4_predict::{Degrees, Predictor};
 
 use super::{
     format_observer_str, load_tle, open_writer, resolve_interval, warn_stale_tle, write_args_header,
@@ -38,7 +38,7 @@ pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
     }
 
     let transits = predictor
-        .transits_iter(&observer, interval, args.min_elevation_deg)
+        .transits_iter(&observer, interval, Degrees(args.min_elevation_deg))
         .map(|result| {
             let transit = result.context("transit detection error")?;
             let aos_obs = predictor

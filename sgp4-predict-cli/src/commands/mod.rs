@@ -60,8 +60,8 @@ pub fn format_observer_str(observer_arg: Option<&str>, obs: &GroundObserver) -> 
     observer_arg.map(str::to_owned).unwrap_or_else(|| {
         format!(
             "{},{},{}",
-            obs.latitude_deg(),
-            obs.longitude_deg(),
+            obs.latitude().to_f64(),
+            obs.longitude().to_f64(),
             obs.altitude()
         )
     })

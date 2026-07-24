@@ -1,13 +1,13 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{GroundObserver, Predictor};
+use sgp4_predict::{Degrees, GroundObserver, Predictor};
 
 #[test]
 fn test_observe() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
     let observations = p
         .observation_iter(
             &gs,
@@ -33,13 +33,13 @@ fn test_observe() {
 fn test_observe_cross_validate_skyfield() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let t = common::datetime("2025-12-20T12:35:00Z");
     let obs = p.observe_at(t, &gs).unwrap();
 
-    let az_deg = obs.azimuth.to_degrees().rem_euclid(360.0);
-    let el_deg = obs.elevation.to_degrees();
+    let az_deg = obs.azimuth.to_degrees().to_f64().rem_euclid(360.0);
+    let el_deg = obs.elevation.to_degrees().to_f64();
     let range_km = obs.range / 1_000.0;
 
     // skyfield reference (computed offline)
@@ -75,13 +75,13 @@ fn test_next_transit_observations_to_csv() {
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
 
     let start = p.epoch();
     let end = start + Duration::hours(3);
 
     let next_transit = p
-        .transits_iter(&gs, start..end, 0.0)
+        .transits_iter(&gs, start..end, Degrees(0.0))
         .next()
         .expect("No transits found in the next 3 hours")
         .unwrap();
