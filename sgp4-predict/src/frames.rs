@@ -18,6 +18,9 @@ use crate::{
     vectors::{Position, StateVector, Velocity},
 };
 
+/// Earth's equatorial radius (WGS-84), metres.
+pub(crate) const WGS84_A: f64 = 6_378_137.0;
+
 pub struct JulianDate(f64);
 pub struct Radians(f64);
 

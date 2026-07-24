@@ -8,8 +8,8 @@
 use chrono::{DateTime, Duration, Utc};
 
 use crate::{
-    Error, Predictor,
-    frames::EcefState,
+    Error, Predictor, Result,
+    frames::{EcefState, WGS84_A},
     predict::PredictionIter,
     time::IntervalRange,
     vectors::{Position, StateVector, Velocity},
@@ -41,7 +41,7 @@ pub(crate) trait ObserverExt: Observer {
 
     fn to_ecef(&self) -> EcefState {
         let h = self.altitude();
-        let a = 6378137.0; // meters
+        let a = WGS84_A;
         let f = 1.0 / 298.257223563;
         let e2 = f * (2.0 - f);
 
@@ -123,7 +123,7 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
 }
 
 impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
-    type Item = Result<(DateTime<Utc>, Observation), Error>;
+    type Item = std::result::Result<(DateTime<Utc>, Observation), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (time, teme_state) = match self.predict_iter.next()? {
@@ -137,6 +137,32 @@ impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
                 .to_enu(self.observer)
                 .to_observation(),
         )))
+    }
+}
+
+impl Predictor {
+    /// Calculate observation at time t.
+    ///
+    /// Returns a predicted local observation.
+    pub fn observe_at<O: Observer>(&self, t: DateTime<Utc>, observer: &O) -> Result<Observation> {
+        let observation = self
+            .propagate(t)?
+            .to_ecef(t)
+            .to_enu(observer)
+            .to_observation();
+        Ok(observation)
+    }
+
+    /// Observe the TLE from an observer on Earth.
+    ///
+    /// Returns an iterator over observations.
+    pub fn observation_iter<'a, O: Observer>(
+        &self,
+        observer: &'a O,
+        interval: impl IntervalRange,
+        step: Duration,
+    ) -> ObservationIter<'a, O> {
+        ObservationIter::new(self.clone(), observer, interval, step)
     }
 }
 

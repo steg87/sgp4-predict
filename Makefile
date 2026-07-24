@@ -21,6 +21,10 @@ lint:
 validation:  ## downloads de421.bsp (~17 MB) from NASA on first run
 	cargo test --test validation validate -- --ignored --nocapture
 
+.PHONY: validation-regen
+validation-regen:  ## regenerate reference CSVs from pypredict/skyfield, then validate
+	SGP4_PREDICT_REGEN=1 cargo test --test validation validate -- --ignored --nocapture
+
 .PHONY: benchmark
 benchmark:
 	cargo test --test validation montecarlo_benchmark -- --ignored --nocapture
@@ -32,4 +36,8 @@ coverage:
 .PHONY: audit
 audit:
 	cargo audit
+
+.PHONY: docs
+docs:
+	cargo doc --all-features --no-deps --open
 

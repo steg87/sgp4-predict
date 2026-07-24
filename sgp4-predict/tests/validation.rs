@@ -604,23 +604,49 @@ fn validate() {
     let illum_dir: &Path = Path::new("tests/data/illumination");
     let report_path: &Path = Path::new("tests/data/validation_report.txt");
 
-    // --- 1. Regenerate reference CSVs ---
-    let py_output: std::process::Output = std::process::Command::new("uv")
-        .args(["run", "tests/data/validation.py"])
-        .output()
-        .expect("failed to run uv — is uv installed?");
-    assert!(
-        py_output.status.success(),
-        "validation.py failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&py_output.stdout),
-        String::from_utf8_lossy(&py_output.stderr),
-    );
-
-    // --- 2. Parse spec ---
+    // --- 1. Parse spec ---
     let spec_text: String = std::fs::read_to_string(spec_path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", spec_path.display()));
     let spec: TestVectors = serde_yaml::from_str(&spec_text)
         .unwrap_or_else(|e| panic!("cannot parse {}: {e}", spec_path.display()));
+
+    // --- 2. Regenerate reference CSVs when missing or explicitly requested ---
+    //
+    // The committed CSVs are the reference. Regenerating on every run would
+    // dirty the working tree with float-formatting noise whenever the local
+    // pypredict/skyfield environment differs from the one that produced them.
+    // Set SGP4_PREDICT_REGEN=1 (or run `make validation-regen`) to force it.
+    let expected_csvs: Vec<PathBuf> = spec
+        .test_cases
+        .transits
+        .iter()
+        .map(|tc| transits_dir.join(format!("{}.csv", tc.name)))
+        .chain(
+            spec.test_cases
+                .observations
+                .iter()
+                .map(|tc| obs_dir.join(format!("{}.csv", tc.name))),
+        )
+        .chain(
+            spec.test_cases
+                .illumination
+                .iter()
+                .map(|tc| illum_dir.join(format!("{}.csv", tc.name))),
+        )
+        .collect();
+    let force_regen: bool = std::env::var_os("SGP4_PREDICT_REGEN").is_some();
+    if force_regen || expected_csvs.iter().any(|p| !p.exists()) {
+        let py_output: std::process::Output = std::process::Command::new("uv")
+            .args(["run", "tests/data/validation.py"])
+            .output()
+            .expect("failed to run uv — is uv installed?");
+        assert!(
+            py_output.status.success(),
+            "validation.py failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&py_output.stdout),
+            String::from_utf8_lossy(&py_output.stderr),
+        );
+    }
 
     // --- 3. Validate transit test cases ---
     let mut transit_reports: Vec<TransitReport> = Vec::new();

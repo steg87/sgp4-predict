@@ -18,14 +18,17 @@ graph TD
     lib --> transits
     lib --> apsides
     lib --> illumination
+    lib --> detect
     lib --> frames
     lib --> vectors
     lib --> roots
     lib --> time
-    transits --> roots
+    transits --> detect
     transits --> observe
-    apsides --> roots
-    illumination --> roots
+    apsides --> detect
+    illumination --> detect
+    detect --> roots
+    detect --> time
     observe --> frames
     observe --> vectors
     predict --> frames
@@ -38,12 +41,13 @@ graph TD
 | `lib.rs` | `Predictor` struct — public API entry point |
 | `predict.rs` | SGP4 call + km→m unit conversion; `StateVector<Teme>` production |
 | `observe.rs` | TEME→ECEF→ENU→Observation pipeline; `Observation` type |
-| `transits.rs` | Adaptive-step transit iterator; AoS/LoS root refinement |
-| `apsides.rs` | Fixed-step apogee/perigee detector; Brent refinement |
-| `illumination.rs` | Cylindrical shadow model; sunlit/eclipse boundary finder |
+| `detect.rs` | Generic event/window detection: `Detector` trait, `DetectIter` loop, `EventIter`/`WindowIter` and their builders, step strategies |
+| `transits.rs` | `TransitIter` — thin wrapper over `WindowIter` (event function: elevation − min_elevation) |
+| `apsides.rs` | `ApsisIter` — thin wrapper over `EventIter` (event function: radial velocity `r·v`) |
+| `illumination.rs` | Cylindrical shadow model; `IlluminationIter` — thin wrapper over `WindowIter` |
 | `frames.rs` | Phantom marker types: `Teme`, `Ecef`, `Enu` |
 | `vectors.rs` | `StateVector<F>`, `Position<F>`, `Velocity<F>` generic over frame |
-| `roots.rs` | Newton-Raphson and Brent's method root-finding primitives |
+| `roots.rs` | `Refinement` — bracketed hybrid root-finding solver |
 | `time.rs` | `IntervalRange` trait; impls for `Range<DateTime<Utc>>`, `Transit`, `Illumination` |
 
 ---
@@ -99,13 +103,20 @@ Both `Range<DateTime<Utc>>` and event types (`Transit`, `Illumination`) implemen
 This allows a found transit to be passed directly as the time window for a downstream `prediction_iter` or
 `observation_iter` call, without manually extracting start/end times.
 
+### Generic detection layer
+
+Transit, apsis, and illumination detection all share one skeleton — step through time, evaluate a scalar
+function, watch for a sign change, refine the crossing — extracted into `detect.rs`. Users can detect
+their own event kinds (e.g. ascending-node equator crossings) by supplying a scalar function of time to
+`EventIter::builder()` / `WindowIter::builder()`, or implement the `Detector` trait directly for fully
+custom logic. The three built-in iterators are thin wrappers over this layer.
+
 ### Hybrid root-finding
 
-Event boundary crossing times (AoS, LoS, apsis, shadow boundary) are refined using a two-stage approach:
-
-1. **Newton-Raphson** — fast quadratic convergence when the initial estimate is close; uses the elevation
-   rate (or equivalent derivative) as the gradient.
-2. **Brent's method** — bracketed, guaranteed convergence fallback when Newton-Raphson diverges or overshoots.
-
-This gives typical single-digit millisecond timing precision on a known bracket without sacrificing robustness.
-See [event-detection.md](event-detection.md) for algorithm details.
+Event boundary crossing times (AoS, LoS, apsis, shadow boundary) are refined by a single bracketed
+hybrid solver (`Refinement`). Each iteration chooses its step from the sample it just evaluated: a
+**Newton-Raphson** step when the sample carries a derivative (e.g. elevation rate) and the step stays
+inside the bracket, a **secant** step through the bracket endpoints otherwise, with **bisection** as the
+safeguard — the bracket never widens, so convergence is guaranteed (cf. `rtsafe`, *Numerical Recipes*
+§9.4). Convergence is on the bracket width in seconds (`time_tolerance`), making precision independent
+of the event function's units. See [event-detection.md](event-detection.md) for algorithm details.

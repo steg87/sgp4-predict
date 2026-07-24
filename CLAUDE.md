@@ -15,6 +15,7 @@ make test                      # full test suite (preferred — matches CI and p
 make coverage                  # llvm-cov summary
 make validation                # cross-validate against pypredict/skyfield reference data
 make benchmark                 # Rust vs pypredict monte carlo benchmark
+make docs                      # build cargo docs and open in a browser
 ```
 
 **Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.
@@ -26,7 +27,7 @@ Run these from within `sgp4-predict-py/`:
 ```bash
 make dev    # compile the Rust extension in-place (maturin develop)
 make test   # compile + run pytest
-make lint   # ruff check + ruff format --check
+make lint   # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
 ```
 
 To regenerate stubs after Rust API changes (run from repo root):
@@ -54,6 +55,12 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 - `transits_iter(observer, interval, min_elevation)` → `TransitIter`
 - `apsis_iter(interval)` → `ApsisIter`
 
+`transits_iter`, `apsis_iter`, `illumination_iter`, `detect_transit`, and `max_elevation` each have a `_with_opts` sibling (`transits_iter_with_opts`, `apsis_iter_with_opts`, `illumination_iter_with_opts`, `detect_transit_with_opts`, `max_elevation_with_opts`) taking an additional `opts: TransitIterOpts` / `ApsisIterOpts` / `IlluminationIterOpts` / `MaxElevationOpts` (the iterator ones also take a trailing `refinement: Refinement` — opts before refinement; the two one-shot methods, `detect_transit`/`max_elevation`, take only `opts` and keep reading `self.refinement` implicitly). Each `XxxOpts` has a `Default` reproducing the entry point's prior hardcoded behavior (coarse-scan step, walk step where applicable, window/duration caps); step-like fields are floored to a minimum of 1 second (`MIN_POSITIVE_STEP` in each module) since a zero or negative step never advances the scan and would hang the iterator. Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at construction time (`.refinement(refinement)`), not mutated after the iterator is built — there is deliberately no post-construction `with_refinement` on these iterators (unlike `Predictor::with_refinement`, which configures the `Predictor` itself before any iterator is created from it; `Predictor::refinement()` reads it back).
+
+### Generic detection (`detect.rs`, opt-in `generics` feature)
+
+The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) power `ApsisIter`, `TransitIter`, and `IlluminationIter` internally, so the module always compiles — but its public re-exports at the crate root are gated behind the off-by-default `generics` Cargo feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
+
 ### Type-safe coordinate frames
 
 `frames.rs` uses phantom marker structs (`Teme`, `Ecef`, `Enu`) to make coordinate frame tracking a compile-time guarantee. `StateVector<F>`, `Position<F>`, and `Velocity<F>` in `vectors.rs` are all generic over frame. Conversion methods are implemented directly on the concrete instantiations:
@@ -70,7 +77,7 @@ This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide hig
 
 ### Apsis detection (`apsides.rs`)
 
-`ApsisIter` detects apogee and perigee events in the TEME frame with a fixed 60-second step. It monitors the sign of the radial velocity `r · v` (dot product of position and velocity vectors). A sign change brackets an event:
+`ApsisIter` detects apogee and perigee events in the TEME frame with a fixed step (60 seconds by default; see `ApsisIterOpts`). It monitors the sign of the radial velocity `r · v` (dot product of position and velocity vectors). A sign change brackets an event:
 - `r·v > 0 → < 0`: apogee (`ApsisEvent::Apogee`)
 - `r·v < 0 → > 0`: perigee (`ApsisEvent::Perigee`)
 
@@ -78,7 +85,7 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 
 ### Transit detection (`transits.rs`)
 
-`TransitIter` uses an adaptive step-size strategy: large steps when the satellite is descending or far from `min_elevation`, smaller steps when approaching. On detecting an Outside→Inside transition, it refines the exact crossing time using root finding (`roots.rs`):
+`TransitIter` uses an adaptive step-size strategy: large steps when the satellite is descending or far from `min_elevation`, smaller steps when approaching. Step bounds, the boundary-walk step, and the max transit duration are configurable via `TransitIterOpts`. On detecting an Outside→Inside transition, it refines the exact crossing time using root finding (`roots.rs`):
 1. Newton-Raphson (uses elevation rate as derivative, fast convergence)
 2. Falls back to Brent's method (bracketed, guaranteed convergence) if Newton-Raphson fails
 
@@ -86,11 +93,15 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
 
+## Conventions
+
+- **Code comments**: keep terse. State the non-obvious fact, not the reasoning behind it or alternatives considered.
+
 ## Repo infrastructure
 
 - **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.
 - **CI** (`.github/workflows/`):
-  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`. Also installs `uv` in the test job.
+  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`, and `cargo doc` (denying rustdoc warnings). Installs `uv` in the test and docs jobs.
   - `audit.yml` — weekly `cargo audit` for security advisories.
   - `labeler.yml` — auto-labels PRs based on changed files (config in `.github/labeler.yml`).
 - **Dependencies**: `serde_yaml` (not `serde_yml`) is used for YAML parsing in dev/tests.

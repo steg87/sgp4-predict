@@ -1,5 +1,12 @@
 # Event Detection
 
+All three built-in detectors (transits, apsides, illumination) are thin wrappers over the generic
+`detect` module: a user-supplied scalar **event function** `f(t)` is sampled over the search interval
+by a pluggable **step strategy**, sign changes between samples bracket a crossing, and the crossing is
+refined by the bracketed hybrid solver (`Refinement`). `EventIter` yields refined point crossings;
+`WindowIter` pairs them into windows. The same building blocks are public, so new event kinds (e.g.
+ascending-node equator crossings via TEME `z = 0`) need no bespoke iterator.
+
 ## Transit Detection
 
 A **transit** is a continuous interval during which a satellite's elevation above the observer's horizon
@@ -9,13 +16,14 @@ exceeds a configurable `min_elevation` threshold (Acquisition of Signal → Loss
 
 `TransitIter` avoids scanning every second of a multi-day window by using two step sizes:
 
-- **Large step** (~10 minutes): used when the satellite is well below `min_elevation` or descending away.
+- **Large step** (10 minutes by default): used when the satellite is well below `min_elevation` or descending away.
   Moves quickly through idle periods.
-- **Small step** (~10 seconds): used when the satellite is approaching or already above `min_elevation`.
+- **Small step** (10 seconds by default): used when the satellite is approaching or already above `min_elevation`.
   Provides enough resolution to bracket the exact crossing precisely.
 
 The step size is selected based on the current elevation and its rate of change, so the iterator
-automatically narrows its resolution only where it matters.
+automatically narrows its resolution only where it matters. These bounds, the boundary-walk step, and the
+max transit duration are all configurable via `TransitIterOpts` (`Predictor::transits_iter_with_opts`).
 
 ### State Machine
 
@@ -24,7 +32,7 @@ stateDiagram-v2
     [*] --> Outside
     Outside --> Outside : el < min_el (large step)
     Outside --> Refining : el ≥ min_el detected
-    Refining --> Inside : AoS refined (NR/Brent)
+    Refining --> Inside : AoS refined (hybrid solver)
     Inside --> Inside : el ≥ min_el (small step)
     Inside --> Refining2 : el < min_el detected
     Refining2 --> Outside : LoS refined → emit Transit
@@ -38,25 +46,38 @@ and refines the LoS crossing before emitting a completed `Transit` and returning
 ### Root-Finding for AoS / LoS
 
 Once a crossing is bracketed, the exact time is found by treating elevation as a scalar function of time
-and solving for the zero:
+and solving for the zero with the bracketed hybrid solver. Each iteration chooses its step from the
+sample it just evaluated:
 
 ```mermaid
 flowchart TD
-    A[Bracket crossing detected] --> B[Try Newton-Raphson\nwith elevation rate]
-    B --> C{Converged?}
-    C -- Yes --> D[Return refined time]
-    C -- No / diverged --> E[Brent's method\non bracket]
-    E --> D
+    A[Evaluate f at candidate time] --> B{Converged?\nbracket < time_tolerance}
+    B -- Yes --> C[Return refined time]
+    B -- No --> D{Sample carries\na derivative?}
+    D -- Yes, step in bracket --> E[Newton-Raphson step]
+    D -- No --> F[Secant step through\nbracket endpoints]
+    E --> G[Bisection safeguard if step\nescapes bracket or one side stalls]
+    F --> G
+    G --> A
 ```
 
-**Newton-Raphson** uses the elevation *rate* (already computed as part of the `Observation`) as the
-derivative. Near the crossing, elevation changes nearly linearly, so NR converges in one or two
-iterations in the common case.
+**Newton-Raphson steps** use the elevation *rate* (already computed alongside the elevation) as the
+derivative. Near the crossing, elevation changes nearly linearly, so a step or two usually suffices.
 
-**Brent's method** is the fallback. Because the bracket is always known (the step that detected the
-crossing provides both endpoints with opposite sign elevations), Brent's method is guaranteed to
-converge regardless of the function's shape. It combines bisection, secant, and inverse quadratic
-interpolation for efficiency.
+**The bracket never widens**: every evaluation replaces the endpoint with matching sign, and a
+bisection rule (forced whenever an interpolated step leaves the bracket, or the same side has been
+updated twice in a row) guarantees convergence regardless of the function's shape — the safeguarded
+`rtsafe` scheme of *Numerical Recipes* §9.4, extended with a secant step for derivative-free samples.
+
+Convergence is declared when the bracket is narrower than `Refinement::time_tolerance` (seconds), so
+timing precision is independent of the event function's units.
+
+### Peak Elevation
+
+`Predictor::max_elevation` finds the highest-elevation instant within an interval (typically a
+`Transit`) by scanning for falling zero crossings of the elevation *rate* — the same root-finding
+infrastructure, applied to a different event function. Its fixed scan step (10 seconds by default)
+is configurable via `MaxElevationOpts` (`Predictor::max_elevation_with_opts`).
 
 ---
 
@@ -66,7 +87,8 @@ interpolation for efficiency.
 
 ### Radial Velocity Sign Change
 
-`ApsisIter` monitors the **radial velocity** scalar at a fixed 60-second step:
+`ApsisIter` monitors the **radial velocity** scalar at a fixed step (60 seconds by default,
+configurable via `ApsisIterOpts` / `Predictor::apsis_iter_with_opts`):
 
 ```
 r·v = position · velocity   (dot product)
@@ -77,17 +99,18 @@ r·v = position · velocity   (dot product)
 - Sign change `+ → −`: apogee (`ApsisEvent::Apogee`)
 - Sign change `− → +`: perigee (`ApsisEvent::Perigee`)
 
-When a sign change is detected, the two adjacent time samples bracket the event. Brent's method
-is applied to the `r·v` function on that bracket to refine the crossing time. Newton-Raphson is
-not used here because the derivative of `r·v` (involving the jerk vector) is not readily available
-and Brent's method converges in very few iterations on a tight bracket.
+When a sign change is detected, the two adjacent time samples bracket the event, and the hybrid
+solver refines the crossing time. The derivative of `r·v` (involving the jerk vector) is not readily
+available, so samples carry no rate and the solver proceeds by secant/bisection steps — which
+converge in very few iterations on a tight bracket.
 
 ### Correctness Note
 
 The radial-velocity sign-change method is correct and efficient for **near-circular LEO orbits**
-(eccentricity ≲ 0.01). For highly elliptical orbits (HEO, Molniya), the 60-second fixed step may
-skip closely-spaced events near perigee where the satellite moves very fast. If using this library
-with non-LEO TLEs, consider whether apsis timing precision is critical to your use case.
+(eccentricity ≲ 0.01). For highly elliptical orbits (HEO, Molniya), the 60-second default step may
+skip closely-spaced events near perigee where the satellite moves very fast — pass a smaller `step`
+via `ApsisIterOpts` if needed. If using this library with non-LEO TLEs, consider whether apsis
+timing precision is critical to your use case.
 
 ---
 
@@ -104,9 +127,11 @@ a **shadow scalar** is computed that is:
 - **Negative** when the satellite is in sunlight.
 - **Positive** when the satellite is in Earth's shadow (eclipse).
 
-The sign change of this scalar is found using the same root-finding infrastructure as transit detection:
-Newton-Raphson first, Brent's method as fallback on the bracket. `IlluminationIter` yields
-`Illumination` events marking the start and end of each sunlit interval.
+The sign change of this scalar is found using the same root-finding infrastructure as transit
+detection (the shadow scalar has no cheap derivative, so refinement proceeds by secant/bisection
+steps). `IlluminationIter` yields `Illumination` events marking the start and end of each sunlit
+interval. The scan step, boundary-walk step, and window duration cap are configurable via
+`IlluminationIterOpts` (`Predictor::illumination_iter_with_opts`).
 
 ### Limitation
 
