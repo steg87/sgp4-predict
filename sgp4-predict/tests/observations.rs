@@ -38,8 +38,8 @@ fn test_observe_cross_validate_skyfield() {
     let t = common::datetime("2025-12-20T12:35:00Z");
     let obs = p.observe_at(t, &gs).unwrap();
 
-    let az_deg = obs.azimuth.to_degrees().to_f64().rem_euclid(360.0);
-    let el_deg = obs.elevation.to_degrees().to_f64();
+    let az_deg = obs.azimuth.normalized().degrees();
+    let el_deg = obs.elevation.degrees();
     let range_km = obs.range / 1_000.0;
 
     // skyfield reference (computed offline)

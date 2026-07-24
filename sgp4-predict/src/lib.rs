@@ -64,9 +64,11 @@
 //! the two can't be mixed up at a function boundary — construction is always
 //! explicit (`Degrees(51.5)`, `Radians(1.2)`) and conversion goes through
 //! `.to_radians()`/`.to_degrees()` or the corresponding `From` impls.
-//! [`Observer::latitude`]/[`longitude`](Observer::longitude) and
-//! `min_elevation` parameters take [`Degrees`]; [`Observation::azimuth`] and
-//! [`elevation`](Observation::elevation) are [`Radians`].
+//! [`Observer::latitude`]/[`longitude`](Observer::longitude) take
+//! [`Degrees`]; [`Observation::azimuth`] and
+//! [`elevation`](Observation::elevation) are [`Radians`]. `min_elevation`
+//! parameters (`transits_iter`, `detect_transit`, ...) take `impl
+//! Into<Radians>`, so either unit can be passed directly.
 //!
 //! # Cargo features
 //!

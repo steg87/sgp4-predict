@@ -328,10 +328,10 @@ fn validate_observations(
             .unwrap_or_else(|e| panic!("observe_at {} failed: {e}", sfo.time));
         stats
             .az_deg
-            .push(az_diff_deg(obs.azimuth.to_degrees().to_f64(), sfo.az_deg));
+            .push(az_diff_deg(obs.azimuth.degrees(), sfo.az_deg));
         stats
             .el_deg
-            .push((obs.elevation.to_degrees().to_f64() - sfo.el_deg).abs());
+            .push((obs.elevation.degrees() - sfo.el_deg).abs());
         stats
             .range_km
             .push((obs.range / 1_000.0 - sfo.range_km).abs());
@@ -718,8 +718,7 @@ fn validate() {
             let aos_obs: Observation = p
                 .observe_at(our.start, gs)
                 .unwrap_or_else(|e| panic!("{}: observe_at AOS failed: {e}", ctx()));
-            let aos_az_diff: f64 =
-                az_diff_deg(aos_obs.azimuth.to_degrees().to_f64(), sf.aos_az_deg);
+            let aos_az_diff: f64 = az_diff_deg(aos_obs.azimuth.degrees(), sf.aos_az_deg);
             transit_stats.aos_az_deg.push(aos_az_diff);
             if aos_az_diff >= tol.azimuth_deg {
                 errors.push(format!(
@@ -732,8 +731,7 @@ fn validate() {
             let los_obs: Observation = p
                 .observe_at(our.end, gs)
                 .unwrap_or_else(|e| panic!("{}: observe_at LOS failed: {e}", ctx()));
-            let los_az_diff: f64 =
-                az_diff_deg(los_obs.azimuth.to_degrees().to_f64(), sf.los_az_deg);
+            let los_az_diff: f64 = az_diff_deg(los_obs.azimuth.degrees(), sf.los_az_deg);
             transit_stats.los_az_deg.push(los_az_diff);
             if los_az_diff >= tol.azimuth_deg {
                 errors.push(format!(
@@ -746,7 +744,7 @@ fn validate() {
             let (_, tca_obs): (DateTime<Utc>, Observation) = p
                 .max_elevation(*our, gs)
                 .unwrap_or_else(|e| panic!("{}: max_elevation failed: {e}", ctx()));
-            let tca_el_diff: f64 = (tca_obs.elevation.to_degrees().to_f64() - sf.tca_el_deg).abs();
+            let tca_el_diff: f64 = (tca_obs.elevation.degrees() - sf.tca_el_deg).abs();
             transit_stats.tca_el_deg.push(tca_el_diff);
             if tca_el_diff >= tol.tca_elevation_deg {
                 errors.push(format!(
