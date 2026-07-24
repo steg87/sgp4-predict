@@ -379,13 +379,7 @@ impl Predictor {
         min_elevation_deg: f64,
     ) -> PyResult<Option<Transit>> {
         self.inner
-            .detect_transit(
-                t,
-                observer,
-                min_elevation_deg,
-                Duration::seconds(30),
-                Duration::hours(1),
-            )
+            .detect_transit(t, observer, min_elevation_deg)
             .map(|opt| {
                 opt.map(|t| Transit {
                     start: t.start,

@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{IlluminationState, Predictor};
+use sgp4_predict::{IlluminationIterOpts, IlluminationState, Predictor, Refinement};
 
 // Sentinel-2C orbital period is ~100 min.  Two orbits gives enough windows to
 // exercise both sunlit and eclipse states and several full boundary crossings.
@@ -162,6 +162,34 @@ fn test_illumination_eclipse_duration_plausible() {
             window.end,
         );
     }
+}
+
+#[test]
+fn test_illumination_opts_zero_step_does_not_hang() {
+    // A zero (or negative) step never advances the coarse scan or boundary
+    // walk on its own; IlluminationIterOpts values must be floored to a
+    // positive duration rather than stalling the iterator forever.
+    let p = predictor();
+    let start = common::datetime("2025-12-20T12:00:00Z");
+    let end = start + Duration::minutes(1);
+
+    let result = p
+        .illumination_iter_with_opts(
+            start..end,
+            IlluminationIterOpts {
+                step: Duration::zero(),
+                walk_step: Duration::zero(),
+                ..IlluminationIterOpts::default()
+            },
+            Refinement::default(),
+        )
+        .collect::<Result<Vec<_>, _>>();
+
+    assert!(
+        result.is_ok(),
+        "zero-step opts should not hang or error: {:?}",
+        result
+    );
 }
 
 #[test]

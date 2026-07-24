@@ -30,6 +30,10 @@ use crate::{
     time::IntervalRange,
 };
 
+/// Floor applied to [`TransitIterOpts`]'s step durations: a zero or negative
+/// step never advances the coarse scan or boundary walk, hanging the iterator.
+const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
+
 /// A satellite pass — the window during which the satellite is above
 /// `min_elevation` as seen from the observer.
 ///
@@ -156,6 +160,25 @@ impl Default for TransitIterOpts {
     }
 }
 
+/// Tuning knobs for [`Predictor::max_elevation`]'s scan.
+///
+/// The default reproduces the fixed behavior `max_elevation` used before
+/// this was configurable: a 10-second fixed step. Pass a customized value to
+/// [`Predictor::max_elevation_with_opts`](crate::Predictor::max_elevation_with_opts).
+#[derive(Debug, Clone, Copy)]
+pub struct MaxElevationOpts {
+    /// Fixed step used to scan for elevation-rate zero crossings.
+    pub scan_step: Duration,
+}
+
+impl Default for MaxElevationOpts {
+    fn default() -> Self {
+        Self {
+            scan_step: Duration::seconds(10),
+        }
+    }
+}
+
 /// Iterator over satellite passes visible to an observer within a time interval.
 ///
 /// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
@@ -180,10 +203,10 @@ impl<'a, O: Observer> TransitIter<'a, O> {
                 min_elevation,
             })
             .step(ThresholdStep {
-                min: opts.min_step,
-                max: opts.max_step,
+                min: opts.min_step.max(MIN_POSITIVE_STEP),
+                max: opts.max_step.max(MIN_POSITIVE_STEP),
             })
-            .walk_step(opts.walk_step)
+            .walk_step(opts.walk_step.max(MIN_POSITIVE_STEP))
             .max_window_duration(opts.max_transit_duration)
             .refinement(refinement);
         if !opts.skip_leading_partial {
@@ -257,27 +280,44 @@ impl Predictor {
     ///
     /// If the satellite is below `min_elevation_deg` at `t`, returns
     /// `Ok(None)`. Otherwise, walks backward and forward from `t` in
-    /// `walk_step` steps to find the AoS and LoS crossings, refining each
-    /// with the bracketed hybrid solver ([`Refinement`]) to millisecond
-    /// accuracy — see `detect_window`, the primitive this is a thin wrapper
-    /// over.
+    /// 30-second steps to find the AoS and LoS crossings, refining each with
+    /// the bracketed hybrid solver ([`Refinement`]) to millisecond accuracy —
+    /// see `detect_window`, the primitive this is a thin wrapper over.
     ///
     /// Returns [`Error::Detect`](crate::Error::Detect) if the transit is
-    /// longer than `max_duration`.
+    /// longer than 1 hour.
     pub fn detect_transit<O: Observer>(
         &self,
         t: DateTime<Utc>,
         observer: &O,
         min_elevation_deg: f64,
-        walk_step: Duration,
-        max_duration: Duration,
+    ) -> Result<Option<Transit>> {
+        self.detect_transit_with_opts(t, observer, min_elevation_deg, TransitIterOpts::default())
+    }
+
+    /// Like [`Predictor::detect_transit`], but with a customized walk step
+    /// and max transit duration. Only [`TransitIterOpts::walk_step`] and
+    /// [`TransitIterOpts::max_transit_duration`] are used — the other fields
+    /// don't apply to this single-point detection.
+    pub fn detect_transit_with_opts<O: Observer>(
+        &self,
+        t: DateTime<Utc>,
+        observer: &O,
+        min_elevation_deg: f64,
+        opts: TransitIterOpts,
     ) -> Result<Option<Transit>> {
         let mut f = ElevationAboveMin {
             predictor: self.clone(),
             observer,
             min_elevation: min_elevation_deg.to_radians(),
         };
-        let window = detect::detect_window(&mut f, t, walk_step, max_duration, &self.refinement)?;
+        let window = detect::detect_window(
+            &mut f,
+            t,
+            opts.walk_step.max(MIN_POSITIVE_STEP),
+            opts.max_transit_duration,
+            &self.refinement,
+        )?;
         Ok(window.map(|w| {
             let transit = Transit::new(w.start, w.end);
             tracing::debug!(aos = %transit.start, los = %transit.end, "transit detected");
@@ -299,7 +339,17 @@ impl Predictor {
         interval: impl IntervalRange,
         observer: &O,
     ) -> Result<(DateTime<Utc>, Observation)> {
-        const SCAN_STEP: Duration = Duration::seconds(10);
+        self.max_elevation_with_opts(interval, observer, MaxElevationOpts::default())
+    }
+
+    /// Like [`Predictor::max_elevation`], but with a customized scan step.
+    /// See [`MaxElevationOpts`].
+    pub fn max_elevation_with_opts<O: Observer>(
+        &self,
+        interval: impl IntervalRange,
+        observer: &O,
+        opts: MaxElevationOpts,
+    ) -> Result<(DateTime<Utc>, Observation)> {
         let start_t = interval.start();
         let end_t = interval.end();
 
@@ -314,7 +364,7 @@ impl Predictor {
                     .elevation_and_rate()
                     .1)
             })
-            .step(FixedStep(SCAN_STEP))
+            .step(FixedStep(opts.scan_step.max(MIN_POSITIVE_STEP)))
             .refinement(self.refinement)
             .build()
             .expect("interval is always supplied");

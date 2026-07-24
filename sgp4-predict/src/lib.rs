@@ -99,7 +99,7 @@ pub use crate::{
     predict::PredictionIter,
     roots::Refinement,
     time::{DateTimeIter, IntervalRange},
-    transits::{Transit, TransitIter, TransitIterOpts},
+    transits::{MaxElevationOpts, Transit, TransitIter, TransitIterOpts},
     types::{GroundObserver, Tle, TleParseError},
     vectors::{Position, StateVector, Velocity},
 };
@@ -224,6 +224,16 @@ impl Predictor {
     pub fn with_refinement(mut self, refinement: Refinement) -> Self {
         self.refinement = refinement;
         self
+    }
+
+    /// The root-finder configuration currently in effect.
+    ///
+    /// Useful when calling a `*_iter_with_opts` method: `refinement` there is
+    /// a separate argument from `opts`, so pass `predictor.refinement()` to
+    /// preserve whatever this `Predictor` was already configured with instead
+    /// of silently reverting to [`Refinement::default()`].
+    pub fn refinement(&self) -> Refinement {
+        self.refinement
     }
 
     /// Propagate the TLE to given time t.

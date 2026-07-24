@@ -18,6 +18,10 @@ use crate::{
     time,
 };
 
+/// Floor applied to [`ApsisIterOpts::step`]: a zero or negative step never
+/// advances the coarse scan, hanging the iterator.
+const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
+
 /// Tuning knobs for [`ApsisIter`]'s coarse scan.
 ///
 /// The default reproduces the fixed behavior `ApsisIter` used before this was
@@ -96,7 +100,7 @@ impl ApsisIter {
             RadialVelocity {
                 predictor: predictor.clone(),
             },
-            FixedStep(opts.step),
+            FixedStep(opts.step.max(MIN_POSITIVE_STEP)),
             refinement,
         );
         Self {

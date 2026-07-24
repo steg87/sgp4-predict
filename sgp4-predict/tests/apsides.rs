@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{ApsisEvent, Predictor};
+use sgp4_predict::{ApsisEvent, ApsisIterOpts, Predictor, Refinement};
 
 #[test]
 fn test_apsides() {
@@ -92,6 +92,34 @@ fn test_apsides() {
             perigee.altitude
         );
     }
+}
+
+#[test]
+fn test_apsis_opts_zero_step_does_not_hang() {
+    // A zero (or negative) step never advances the coarse scan on its own;
+    // ApsisIterOpts::step must be floored to a positive duration rather than
+    // stalling the iterator forever.
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+
+    let start = common::datetime("2025-12-20T12:00:00Z");
+    let end = start + Duration::minutes(1);
+
+    let result = p
+        .apsis_iter_with_opts(
+            start..end,
+            ApsisIterOpts {
+                step: Duration::zero(),
+            },
+            Refinement::default(),
+        )
+        .collect::<Result<Vec<_>, _>>();
+
+    assert!(
+        result.is_ok(),
+        "zero-step opts should not hang or error: {:?}",
+        result
+    );
 }
 
 #[test]

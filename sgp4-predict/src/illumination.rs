@@ -29,6 +29,11 @@ use crate::{
     time,
 };
 
+/// Floor applied to [`IlluminationIterOpts`]'s step durations: a zero or
+/// negative step never advances the coarse scan or boundary walk, hanging
+/// the iterator.
+const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
+
 /// Tuning knobs for [`IlluminationIter`]'s coarse scan and window walk.
 ///
 /// The defaults reproduce the fixed behavior `IlluminationIter` used before
@@ -42,8 +47,10 @@ pub struct IlluminationIterOpts {
     /// Fixed step used to walk outward from a coarse sample to pin down a
     /// window's true start and end.
     pub walk_step: Duration,
-    /// A sunlit or eclipse window longer than this is reported as
+    /// An eclipse window longer than this is reported as
     /// [`DetectError::WindowTooLong`](crate::DetectError::WindowTooLong).
+    /// Sunlit windows are the gaps between resolved eclipse windows and are
+    /// never bounded by this cap.
     pub max_window_duration: Duration,
 }
 
@@ -124,8 +131,8 @@ impl IlluminationIter {
         let inner = WindowIter::builder()
             .interval(interval)
             .event_function(ShadowFunction { predictor })
-            .step(FixedStep(opts.step))
-            .walk_step(opts.walk_step)
+            .step(FixedStep(opts.step.max(MIN_POSITIVE_STEP)))
+            .walk_step(opts.walk_step.max(MIN_POSITIVE_STEP))
             .max_window_duration(opts.max_window_duration)
             .include_negative_windows()
             .include_leading_partial()

@@ -79,10 +79,8 @@ match predictor.illumination_state(t)? {
 If you receive a signal mid-pass and need to recover the full window:
 
 ```rust
-use chrono::Duration;
-
 let transit = predictor
-    .detect_transit(now, &glasgow, 5.0, Duration::seconds(30), Duration::hours(1))?
+    .detect_transit(now, &glasgow, 5.0)?
     .expect("satellite is not overhead");
 ```
 

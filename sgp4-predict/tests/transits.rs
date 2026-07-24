@@ -1,7 +1,9 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{DetectError, Error, GroundObserver, Predictor, Refinement, TransitIterOpts};
+use sgp4_predict::{
+    DetectError, Error, GroundObserver, MaxElevationOpts, Predictor, Refinement, TransitIterOpts,
+};
 
 #[test]
 fn test_transits() {
@@ -55,6 +57,37 @@ fn test_transit_opts_max_duration_exceeded() {
         result,
         Err(Error::Detect(DetectError::WindowTooLong { .. }))
     ));
+}
+
+#[test]
+fn test_transit_opts_zero_step_does_not_hang() {
+    // A zero (or negative) step never advances the coarse scan or boundary
+    // walk on its own; opts values must be floored to a positive duration
+    // rather than stalling the iterator forever.
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+
+    let result = p
+        .transits_iter_with_opts(
+            &gs,
+            common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-20T12:01:00Z"),
+            0.0,
+            TransitIterOpts {
+                min_step: Duration::zero(),
+                max_step: Duration::zero(),
+                walk_step: Duration::zero(),
+                ..TransitIterOpts::default()
+            },
+            Refinement::default(),
+        )
+        .collect::<Result<Vec<_>, _>>();
+
+    assert!(
+        result.is_ok(),
+        "zero-step opts should not hang or error: {:?}",
+        result
+    );
 }
 
 #[test]
@@ -142,15 +175,7 @@ fn test_detect_transit() {
     let midpoint = reference.start + (reference.end - reference.start) / 2;
 
     // detect_transit at the midpoint must return Some and match the iterator result to ~1 s.
-    let detected = p
-        .detect_transit(
-            midpoint,
-            &gs,
-            0.0,
-            Duration::seconds(30),
-            Duration::hours(1),
-        )
-        .unwrap();
+    let detected = p.detect_transit(midpoint, &gs, 0.0).unwrap();
     let detected = detected.expect("expected Some(Transit) at midpoint of a known pass");
 
     let start_diff = (detected.start - reference.start).num_milliseconds().abs();
@@ -173,15 +198,7 @@ fn test_detect_transit() {
     // detect_transit at a time clearly outside any transit must return None.
     // Use a time 5 minutes before the first transit's AoS.
     let before_transit = reference.start - Duration::minutes(5);
-    let outside = p
-        .detect_transit(
-            before_transit,
-            &gs,
-            0.0,
-            Duration::seconds(30),
-            Duration::hours(1),
-        )
-        .unwrap();
+    let outside = p.detect_transit(before_transit, &gs, 0.0).unwrap();
     assert!(
         outside.is_none(),
         "expected None before any transit, got {:?}",
@@ -233,6 +250,33 @@ fn test_max_elevation_trimmed_interval_returns_higher_endpoint() {
     assert_eq!(t, after_peak.start);
     let end_obs = p.observe_at(after_peak.end, &gs).unwrap();
     assert!(obs.elevation > end_obs.elevation);
+}
+
+#[test]
+fn test_max_elevation_opts_zero_step_does_not_hang() {
+    // A zero (or negative) scan step never advances on its own;
+    // MaxElevationOpts::scan_step must be floored to a positive duration
+    // rather than stalling the scan forever.
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+    let gs = GroundObserver::new(55.8642, -4.2518, 40.0);
+
+    let start = common::datetime("2025-12-20T12:00:00Z");
+    let end = start + Duration::minutes(1);
+
+    let result = p.max_elevation_with_opts(
+        start..end,
+        &gs,
+        MaxElevationOpts {
+            scan_step: Duration::zero(),
+        },
+    );
+
+    assert!(
+        result.is_ok(),
+        "zero-step opts should not hang or error: {:?}",
+        result
+    );
 }
 
 #[test]
