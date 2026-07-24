@@ -170,7 +170,14 @@ impl StepStrategy for ThresholdStep {
     fn next_time(&mut self, current: DateTime<Utc>, sample: Option<&Sample>) -> DateTime<Utc> {
         let step = match sample.and_then(|s| s.rate.map(|rate| (s.value, rate))) {
             Some((value, rate)) if rate > 0.0 => {
-                Duration::seconds((-value / rate) as i64).clamp(self.min, self.max)
+                // Clamp as f64 seconds before constructing a Duration: for a
+                // tiny positive rate, -value / rate can exceed the range
+                // Duration::seconds can represent, and `as i64` saturates to
+                // i64::MAX instead of erroring, which panics on construction
+                // before Duration's own .clamp() would ever run.
+                let seconds = (-value / rate)
+                    .clamp(self.min.num_seconds() as f64, self.max.num_seconds() as f64);
+                Duration::seconds(seconds as i64)
             }
             _ => self.max,
         };
