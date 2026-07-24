@@ -26,7 +26,7 @@ Run these from within `sgp4-predict-py/`:
 ```bash
 make dev    # compile the Rust extension in-place (maturin develop)
 make test   # compile + run pytest
-make lint   # ruff check + ruff format --check
+make lint   # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
 ```
 
 To regenerate stubs after Rust API changes (run from repo root):

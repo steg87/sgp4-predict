@@ -26,7 +26,7 @@ jobs:
       - name: Create virtualenv and install deps
         run: |
           python -m venv .venv
-          .venv/bin/pip install "maturin>=1.0,<2.0" pytest ruff
+          .venv/bin/pip install "maturin>=1.0,<2.0" pytest ruff==0.15.21
         working-directory: sgp4-predict-py
       - name: Build and install bindings
         run: .venv/bin/maturin develop
