@@ -587,6 +587,32 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
         &mut self.refinement
     }
 
+    /// The very first sample already lies inside a positive window whose
+    /// start will be discarded ([`skip_leading_partial`](Self::skip_leading_partial)):
+    /// walk forward only to find where it ends, without wasting a backward
+    /// walk on a start nobody wants.
+    fn skip_leading_window(&mut self, t: DateTime<Utc>) -> Result<Option<Window>> {
+        let end_clamp = self.clamp_to_interval.then_some(self.interval.end);
+        let too_long = || Error::WindowTooLong {
+            at: t,
+            max_window_duration: self.max_window_duration,
+        };
+        let (end, resume_from) = walk_to_crossing(
+            &mut self.f,
+            t,
+            self.walk_step,
+            t + self.max_window_duration,
+            end_clamp,
+            &self.refinement,
+            too_long,
+        )?;
+        // Resume from an already-sampled point, never from the window's end
+        // itself — see walk_to_crossing's doc comment.
+        self.resume = Some(resume_from);
+        self.last_boundary = Some(end);
+        Ok(None)
+    }
+
     /// Resolve the positive window found at `t` (`s.value >= 0.0`), emitting
     /// the negative window ahead of it (unless this is the first window, or
     /// `positive_only` is set) and stashing the positive window as
@@ -606,13 +632,6 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
         // Resume from an already-sampled point, never from the window's end
         // itself — see walk_to_crossing's doc comment.
         self.resume = Some(resume_from);
-
-        if first && self.skip_leading_partial {
-            // Already open at the interval start with no desired start
-            // crossing: skip it, just resume the scan past its end.
-            self.last_boundary = Some(window.end);
-            return Ok(None);
-        }
 
         let gap_start = self.last_boundary;
         self.last_boundary = Some(window.end);
@@ -656,6 +675,9 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
             }
             self.prev = Some(s);
             return Ok(None);
+        }
+        if first && self.skip_leading_partial {
+            return self.skip_leading_window(t);
         }
         self.resolve_window(t, first)
     }
