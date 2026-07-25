@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Bump a crate's [package] version and roll its CHANGELOG Unreleased section
-# into a dated release section. Prints the new version to stdout.
+# into a dated release section. When the library crate (sgp4-predict) is bumped,
+# also update the version requirement of the workspace dependents that pin it, so
+# the workspace stays resolvable. Prints the new version to stdout.
 #
 # Usage: bump-version.sh <crate-dir> <patch|minor|major>
 set -euo pipefail
@@ -9,12 +11,21 @@ dir="${1:?usage: bump-version.sh <crate-dir> <patch|minor|major>}"
 kind="${2:?usage: bump-version.sh <crate-dir> <patch|minor|major>}"
 manifest="$dir/Cargo.toml"
 
-cur="$(awk '
-  /^\[/ { inpkg = ($0 == "[package]") }
-  inpkg && /^[[:space:]]*version[[:space:]]*=/ {
-    match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit
-  }' "$manifest")"
+# Read a [package] string field (version / name) from a manifest.
+pkg_field() {
+  awk -v f="$2" '
+    /^\[/ { inpkg = ($0 == "[package]") }
+    inpkg && $0 ~ ("^[[:space:]]*" f "[[:space:]]*=") {
+      match($0, /"[^"]*"/); print substr($0, RSTART + 1, RLENGTH - 2); exit
+    }' "$1"
+}
+
+cur="$(pkg_field "$manifest" version)"
 [ -n "$cur" ] || { echo "ERROR: no [package] version in $manifest" >&2; exit 1; }
+if ! [[ "$cur" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: version '$cur' is not plain MAJOR.MINOR.PATCH; pre-release/build metadata is not supported" >&2
+  exit 1
+fi
 
 IFS=. read -r maj min pat <<< "$cur"
 case "$kind" in
@@ -25,15 +36,34 @@ case "$kind" in
 esac
 new="${maj}.${min}.${pat}"
 
-# Rewrite only the [package] version line.
-tmp="$(mktemp)"
-awk -v new="$new" '
-  /^\[/ { inpkg = ($0 == "[package]") }
-  inpkg && !done && /^[[:space:]]*version[[:space:]]*=/ {
-    sub(/"[^"]*"/, "\"" new "\""); done = 1
-  }
-  { print }
-' "$manifest" > "$tmp" && mv "$tmp" "$manifest"
+# Rewrite only the first [package] version line of a manifest.
+set_pkg_version() {
+  local tmp; tmp="$(mktemp)"
+  awk -v new="$2" '
+    /^\[/ { inpkg = ($0 == "[package]") }
+    inpkg && !done && /^[[:space:]]*version[[:space:]]*=/ {
+      sub(/"[^"]*"/, "\"" new "\""); done = 1
+    }
+    { print }
+  ' "$1" > "$tmp" && mv "$tmp" "$1"
+}
+set_pkg_version "$manifest" "$new"
+
+# If the library crate was bumped, update dependents that pin its version
+# (`sgp4-predict = { path = "...", version = "X" }`) so the workspace resolves.
+if [ "$(pkg_field "$manifest" name)" = "sgp4-predict" ]; then
+  ws_root="$(dirname "$dir")"
+  for dep in "$ws_root/sgp4-predict-cli/Cargo.toml" "$ws_root/sgp4-predict-py/Cargo.toml"; do
+    [ -f "$dep" ] || continue
+    tmp="$(mktemp)"
+    awk -v v="$new" '
+      $1 == "sgp4-predict" && /version[[:space:]]*=/ {
+        sub(/version[[:space:]]*=[[:space:]]*"[^"]*"/, "version = \"" v "\"")
+      }
+      { print }
+    ' "$dep" > "$tmp" && mv "$tmp" "$dep"
+  done
+fi
 
 # Roll CHANGELOG: insert a new dated version heading directly under [Unreleased],
 # so the accumulated Unreleased notes become this release's notes.

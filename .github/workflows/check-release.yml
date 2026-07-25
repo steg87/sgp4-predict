@@ -117,10 +117,16 @@ jobs:
               owner, repo, issue_number, per_page: 100,
             });
             const existing = comments.find(c => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
-            } else if (process.env.HAS_RELEASES === 'true') {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body });
-            } else {
-              core.info('No release bump and no existing comment; nothing to post.');
+            try {
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              } else if (process.env.HAS_RELEASES === 'true') {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              } else {
+                core.info('No release bump and no existing comment; nothing to post.');
+              }
+            } catch (e) {
+              // Fork PRs get a read-only token; commenting 403s. The dry-run
+              // result is what matters, so warn instead of failing the job.
+              core.warning(`Could not post PR comment (likely a fork PR): ${e.message}`);
             }

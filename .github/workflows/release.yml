@@ -41,8 +41,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Commit to build/publish from. On dispatch this is main's HEAD (which includes
-  # the bump commit pushed by `prepare`); on push it is the triggering commit.
+  # Commit `detect` resolves the release from. On dispatch this is main's HEAD
+  # (which includes the bump commit pushed by `prepare`); on push it is the
+  # triggering commit. `detect` then pins the exact SHA for every publish job.
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.sha }}
 
 jobs:
@@ -57,15 +58,23 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Bump version + roll changelog, commit to main
+      - name: Bump version + roll changelog, verify, commit to main
         run: |
           new="$(.github/scripts/bump-version.sh "${{ inputs.crate }}" "${{ inputs.bump }}")"
           echo "Bumped ${{ inputs.crate }} to ${new}"
-          git add -A
+          # Fail before pushing if the bump left the workspace unresolvable
+          # (e.g. a lib bump whose dependents were not updated).
+          cargo metadata --format-version 1 >/dev/null
+          git add "${{ inputs.crate }}/Cargo.toml" "${{ inputs.crate }}/CHANGELOG.md"
+          # A lib bump also rewrites dependents' version requirements.
+          if [ "${{ inputs.crate }}" = "sgp4-predict" ]; then
+            git add sgp4-predict-cli/Cargo.toml sgp4-predict-py/Cargo.toml
+          fi
           git commit -m "release: ${{ inputs.crate }} v${new}"
           git push origin HEAD:main
 
@@ -83,12 +92,18 @@ jobs:
       cli_version: ${{ steps.detect.outputs.cli_version }}
       py_version: ${{ steps.detect.outputs.py_version }}
       any: ${{ steps.detect.outputs.any }}
+      # Exact commit every publish job checks out, so a commit landing on main
+      # mid-run cannot change what gets built/published.
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
           fetch-tags: true
+      - name: Resolve release commit
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Detect
         id: detect
         env:
@@ -111,7 +126,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ needs.detect.outputs.sha }}
           fetch-depth: 0
           fetch-tags: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -148,7 +163,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ needs.detect.outputs.sha }}
           fetch-depth: 0
           fetch-tags: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -173,7 +188,7 @@ jobs:
         run: .github/scripts/tag-and-release.sh sgp4-predict-cli sgp4-predict-cli "$VERSION"
 
   build-wheels:
-    name: Build wheels (${{ matrix.target }} / ${{ matrix.runner }})
+    name: Build wheels (${{ matrix.id }})
     needs: detect
     if: needs.detect.outputs.py == 'true'
     runs-on: ${{ matrix.runner }}
@@ -181,15 +196,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runner: ubuntu-latest, target: x86_64, manylinux: auto }
-          - { runner: ubuntu-latest, target: aarch64, manylinux: auto }
-          - { runner: macos-13, target: x86_64, manylinux: "" }
-          - { runner: macos-14, target: aarch64, manylinux: "" }
-          - { runner: windows-latest, target: x64, manylinux: "" }
+          - { runner: ubuntu-latest, target: x86_64, manylinux: auto, id: linux-x86_64 }
+          - { runner: ubuntu-latest, target: aarch64, manylinux: auto, id: linux-aarch64 }
+          - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2, id: musllinux-x86_64 }
+          - { runner: macos-14, target: x86_64, manylinux: "", id: macos-x86_64 }
+          - { runner: macos-14, target: aarch64, manylinux: "", id: macos-aarch64 }
+          - { runner: windows-latest, target: x64, manylinux: "", id: windows-x64 }
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ needs.detect.outputs.sha }}
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
@@ -199,23 +215,35 @@ jobs:
           args: --release --out dist -m sgp4-predict-py/Cargo.toml
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.runner }}-${{ matrix.target }}
+          name: wheels-${{ matrix.id }}
           path: dist
 
   sdist:
-    name: Build sdist
+    name: Build + verify sdist
     needs: detect
     if: needs.detect.outputs.py == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ needs.detect.outputs.sha }}
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist -m sgp4-predict-py/Cargo.toml
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Verify sdist builds from source and imports
+        # Confirms the ../sgp4-predict path dependency is vendored into the
+        # archive — the sdist is a permanent pip fallback and cannot be replaced.
+        run: |
+          python -m venv /tmp/sdistcheck
+          /tmp/sdistcheck/bin/pip install --upgrade pip
+          /tmp/sdistcheck/bin/pip install dist/*.tar.gz
+          /tmp/sdistcheck/bin/python -c "import sgp4_predict; print('sdist import OK')"
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-sdist
@@ -239,7 +267,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_REF }}
+          ref: ${{ needs.detect.outputs.sha }}
           fetch-depth: 0
           fetch-tags: true
       - name: Download built artifacts

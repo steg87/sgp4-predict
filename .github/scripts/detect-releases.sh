@@ -18,6 +18,7 @@ set -euo pipefail
 
 MODE="${1:?usage: detect-releases.sh <pr|merge>}"
 BASE_REF="${BASE_REF:-origin/main}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # name | dir | registry | output-key
 CRATES=(
@@ -68,6 +69,13 @@ for entry in "${CRATES[@]}"; do
         exit 1
       fi
       pending=true
+      # Catch a bump to an already-published version, which would silently no-op
+      # at merge (tag + release created, nothing published). crates.io only; a
+      # network failure returns "not published", which is the safe direction.
+      if [ "$registry" = crates ] && "$SCRIPT_DIR/crate-published.sh" "$name" "$cur" 2>/dev/null; then
+        echo "ERROR: $name $cur is already published on crates.io; bump to a new version" >&2
+        exit 1
+      fi
     fi
   elif [ "$MODE" = "merge" ]; then
     [ -z "$(git tag --list "$tag")" ] && pending=true
