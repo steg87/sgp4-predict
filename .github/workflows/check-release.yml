@@ -1,0 +1,126 @@
+name: Check release
+
+# On every PR to main, detect crates whose version was bumped vs main, dry-run
+# their publish, and post/update a summary comment. Nothing is published here.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: check-release-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dry-run:
+    name: Detect + dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch --no-tags origin "${{ github.base_ref }}"
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Detect version bumps
+        id: detect
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: .github/scripts/detect-releases.sh pr
+
+      - name: Dry-run publish — crates.io crates
+        # Coordinated dry-run: when both are bumped, cargo (>=1.90) packages the
+        # lib into a temp registry so the cli verifies against the to-be-published
+        # version instead of the stale crates.io one. Full verification, in order.
+        if: steps.detect.outputs.lib == 'true' || steps.detect.outputs.cli == 'true'
+        run: |
+          args=()
+          [ "${{ steps.detect.outputs.lib }}" = "true" ] && args+=(-p sgp4-predict)
+          [ "${{ steps.detect.outputs.cli }}" = "true" ] && args+=(-p sgp4-predict-cli)
+          echo "cargo publish --dry-run ${args[*]}"
+          cargo publish --dry-run "${args[@]}"
+
+      - uses: astral-sh/setup-uv@v7
+        if: steps.detect.outputs.py == 'true'
+        with:
+          enable-cache: false
+
+      - name: Dry-run build — sgp4-predict-py (single wheel smoke test)
+        if: steps.detect.outputs.py == 'true'
+        run: |
+          uvx --from 'maturin>=1.0,<2.0' maturin build \
+            --release --out dist -m sgp4-predict-py/Cargo.toml
+
+      - name: Build comment body
+        id: body
+        env:
+          SUMMARY_JSON: ${{ steps.detect.outputs.summary_json }}
+          ANY: ${{ steps.detect.outputs.any }}
+        run: |
+          {
+            echo '<!-- release-bot -->'
+            if [ "$ANY" = "true" ]; then
+              echo '## 🚀 Pending releases'
+              echo
+              echo 'Merging this PR will publish the following. Dry-run publish/build passed for each.'
+              echo
+              while read -r row; do
+                name=$(jq -r .name <<<"$row")
+                dir=$(jq -r .dir <<<"$row")
+                version=$(jq -r .version <<<"$row")
+                registry=$(jq -r .registry <<<"$row")
+                case "$registry" in
+                  crates) target='crates.io' ;;
+                  pypi)   target='PyPI' ;;
+                  *)      target="$registry" ;;
+                esac
+                echo "### \`${name}\` → ${version} (${target})"
+                echo
+                notes=$(.github/scripts/extract-changelog.sh "$dir" "$version")
+                if [ -n "$notes" ]; then
+                  printf '%s\n' "$notes"
+                else
+                  echo "> ⚠️ No \`## [${version}]\` section found in \`${dir}/CHANGELOG.md\` — please add release notes."
+                fi
+                echo
+              done < <(jq -c '.[]' <<<"$SUMMARY_JSON")
+            else
+              echo '## No pending releases'
+              echo
+              echo 'No crate version bumps detected in this PR versus `main`.'
+            fi
+          } > comment.md
+
+      - name: Post or update PR comment
+        uses: actions/github-script@v7
+        env:
+          HAS_RELEASES: ${{ steps.detect.outputs.any }}
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            const marker = '<!-- release-bot -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else if (process.env.HAS_RELEASES === 'true') {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            } else {
+              core.info('No release bump and no existing comment; nothing to post.');
+            }

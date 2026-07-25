@@ -1,10 +1,11 @@
 [project]
 name = "sgp4-predict"
-version = "0.1.0"
 description = "Python bindings for sgp4-predict satellite pass prediction"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
+# Version is sourced from Cargo.toml by maturin (single source of truth).
+dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/steg87/sgp4-predict"
