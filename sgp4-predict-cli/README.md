@@ -13,11 +13,11 @@ cargo install sgp4-predict-cli
 
 ## TLE input
 
-All subcommands accept a TLE via `--tle-file`. If omitted, the tool prompts interactively on stdin.
+All subcommands accept a TLE via `--tle-file`. If omitted, the TLE is read from stdin.
 
 Fresh TLEs can be obtained from [CelesTrak](https://celestrak.org). SGP4 accuracy degrades with TLE age — for LEO satellites, treat TLEs older than 3–7 days with caution. The tool will warn if the TLE epoch is stale.
 
-**File** (2-line or 3-line format):
+Either input takes the same 2-line or 3-line text. With three lines the first is the satellite name; with two, the name is derived from the NORAD id in line 1 (`NORAD-60989`). Blank lines and surrounding whitespace are ignored.
 
 ```
 SENTINEL-2C
@@ -25,21 +25,118 @@ SENTINEL-2C
 2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740
 ```
 
-**Interactive prompt:**
-
-```
-Satellite name (leave blank to skip): SENTINEL-2C
-TLE line 1: 1 60989U ...
-TLE line 2: 2 60989 ...
-```
-
-## Observer
-
-Subcommands that require a ground location accept `--observer "lat_deg,lon_deg,alt_m"`. If omitted, the tool prompts interactively.
+**From a file:**
 
 ```sh
---observer "55.86,-4.25,40"   # Glasgow, 40 m altitude
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow
 ```
+
+**Piped in** — anything that writes a TLE to stdout works, so TLEs can be fetched and predicted in one step:
+
+```sh
+cat sentinel.tle | sgp4-predict transits --gs glasgow
+curl -s 'https://celestrak.org/NORAD/elements/gp.php?CATNR=60989' | sgp4-predict transits --gs glasgow
+```
+
+**Typed in** — with no `--tle-file` and no pipe, the tool waits on stdin and prints a hint. Paste the TLE and press Ctrl-D (Ctrl-Z then Enter on Windows):
+
+```
+Paste TLE to stdin; Ctrl-D when done:
+```
+
+## Ground stations
+
+Subcommands that need a ground location (`transits`, `observations`) take it as `--gs <id>`, naming a ground station defined in the config file. It is required for those subcommands.
+
+```sh
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow --min-elevation 10
+sgp4-predict observations --tle-file sentinel.tle --gs svalbard --config ./stations.yaml
+```
+
+A missing or unknown id lists what is available:
+
+```
+Error: unknown ground station 'glasgo'; known ids: glasgow, svalbard
+```
+
+### Config file
+
+```yaml
+groundstations:
+  glasgow:
+    location:
+      latitude: 55.86
+      longitude: -4.25
+      altitude: 40
+  svalbard:
+    location:
+      latitude: 78.23
+      longitude: 15.39
+```
+
+| Field                  | Required | Description                              |
+|------------------------|----------|------------------------------------------|
+| `location.latitude`    | yes      | degrees, `[-90, 90]`                     |
+| `location.longitude`   | yes      | degrees, `[-180, 180]`                   |
+| `location.altitude`    | no       | metres above the ellipsoid (default: 0)  |
+
+Unrecognised fields are rejected, so typos surface as errors rather than being silently ignored.
+
+### Managing stations
+
+The file can be edited by hand, or through `sgp4-predict gs`. All three operate on `--config`, or the default path when it is omitted.
+
+| Command                          | Description                                        |
+|----------------------------------|----------------------------------------------------|
+| `gs add`                         | Add a station, prompting for each field            |
+| `gs list` (`gs ls`)              | List the configured stations                       |
+| `gs remove <id>` (`gs rm <id>`)  | Remove a station, after confirmation               |
+
+`gs add` prompts field by field. Altitude defaults to 0 if left blank:
+
+```
+$ sgp4-predict gs add
+Ground station id: svalbard
+Latitude (degrees): 78.23
+Longitude (degrees): 15.39
+Altitude (metres) [0]:
+added ground station 'svalbard' to /home/you/.sgp4-predict/config.yaml
+```
+
+`gs list` honours `--format`, so the configured stations can be scripted against:
+
+```sh
+sgp4-predict gs list --format json | jq -r 'select(.latitude > 70) | .id'
+```
+
+`gs remove` prints the station and asks before deleting. `-f` / `--force` skips the prompt; anything other than `y`/`yes` — including end-of-input — leaves the config untouched:
+
+```
+$ sgp4-predict gs rm svalbard
+svalbard: latitude 78.23, longitude 15.39, altitude 0 m
+Remove ground station 'svalbard'? [y/N]
+```
+
+Two things to know about the writing path. Saving re-serialises the file, so **YAML comments are not preserved** — hand-written notes are lost the next time `gs add` or `gs remove` runs. And a config that fails to parse is never overwritten: fix it by hand first.
+
+### Config file location
+
+`--config <path>` selects a config file explicitly. Otherwise the tool looks in `.sgp4-predict/config.yaml` under your home directory:
+
+| Platform      | Default path                                 |
+|---------------|----------------------------------------------|
+| Linux / macOS | `~/.sgp4-predict/config.yaml`                |
+| Windows       | `%USERPROFILE%\.sgp4-predict\config.yaml`    |
+
+On first run the *default* path is created and seeded with an example `glasgow` station. A `--config` path that does not exist is an error, since creating it would let a mistyped path quietly succeed against an empty config while your real stations sit unread:
+
+```
+$ sgp4-predict transits --config ~/stations.yml --gs svalbard
+Error: config file /home/you/stations.yml does not exist
+       create one with `sgp4-predict gs add --config /home/you/stations.yml`
+```
+
+`gs add` is the one command that will create a config, including any missing parent directories — that is what it is for.
 
 ## Time range
 
@@ -59,7 +156,7 @@ If `--start` is omitted, the current UTC time is used.
 Finds passes above a minimum elevation. Outputs AoS, LoS, azimuth at each horizon crossing, Time of Closest Approach (TCA), and duration.
 
 ```sh
-sgp4-predict transits --tle-file sentinel.tle --observer "55.86,-4.25,40" --min-elevation 10
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow --min-elevation 10
 ```
 
 ```
@@ -73,7 +170,7 @@ aos                      los                      aos_az [deg] los_az [deg] tca_
 Outputs azimuth, elevation, range, and range rate at each step.
 
 ```sh
-sgp4-predict observations --tle-file sentinel.tle --observer "55.86,-4.25,40" --step 30s
+sgp4-predict observations --tle-file sentinel.tle --gs glasgow --step 30s
 ```
 
 ```
@@ -124,13 +221,92 @@ start                    end                          state   duration
 
 ## Output options
 
-| Flag                         | Description                                                                  |
-|------------------------------|------------------------------------------------------------------------------|
-| `-o <path>` / `--out <path>` | Write output to a file instead of stdout                                     |
-| `--output-args`              | Prepend all input arguments as `# key: value` comment lines to the output    |
+| Flag                         | Description                                                               |
+|------------------------------|---------------------------------------------------------------------------|
+| `--format <text\|json\|csv>` | Output format (default: `text`)                                           |
+| `-o <path>` / `--out <path>` | Write output to a file instead of stdout                                  |
+| `--output-args`              | Prepend the resolved input arguments as `# key: value` lines (text only)  |
 
-`--output-args` is useful for self-documenting output files:
+### Formats
+
+Every subcommand supports all three formats and the same columns in each.
+
+`text` is fixed-width with a header, for reading:
+
+```
+aos                      los                      aos_az [deg] ...
+------------------------------------------------------------------
+2025-12-22T13:08:06Z     2025-12-22T13:21:33Z            11.54 ...
+```
+
+`json` is newline-delimited — one object per row, so it streams into `jq`:
 
 ```sh
-sgp4-predict transits --tle-file sentinel.tle --observer "55.86,-4.25,40" --output-args -o passes.txt
+sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
 ```
+
+```json
+{"aos":"2025-12-22T13:08:06Z","los":"2025-12-22T13:21:33Z","aos_az_deg":11.54, …}
+```
+
+`csv` is RFC 4180 with a header row, using the same field names as JSON:
+
+```
+aos,los,aos_az_deg,los_az_deg,tca_time,tca_el_deg,duration
+2025-12-22T13:08:06Z,2025-12-22T13:21:33Z,11.54,-115.90,2025-12-22T13:14:50Z,22.80,13m 26s
+```
+
+In `text` and `csv` the header is written even when there are no rows, so an empty result still identifies its columns. `json` writes nothing.
+
+### Self-documenting output
+
+`--output-args` records the resolved inputs — including the TLE source, the config file, and the coordinates `--gs` resolved to — so an output file explains how it was produced:
+
+```sh
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow --output-args -o passes.txt
+```
+
+```
+# command: transits
+# satellite: SENTINEL-2C
+# tle-source: sentinel.tle
+# start: 2025-12-22T12:00:00Z
+# duration: 4h
+# config: /home/you/.sgp4-predict/config.yaml
+# ground-station: glasgow
+# observer: 55.86,-4.25,40
+# min-elevation: 0
+# format: text
+```
+
+It is rejected with `--format json` or `--format csv`, since `#` lines would make that output unparseable.
+
+## Logging
+
+Warnings (such as a stale TLE) go to stderr, so they never mix into piped output.
+
+| Flag                    | Effect                                  |
+|-------------------------|-----------------------------------------|
+| `-q` / `--quiet`        | Errors only                             |
+| `-v` / `-vv` / `-vvv`   | info / debug / trace                    |
+
+`RUST_LOG` overrides both if set.
+
+## Shell completions and man page
+
+```sh
+sgp4-predict completions bash > /etc/bash_completion.d/sgp4-predict
+sgp4-predict completions zsh  > ~/.zfunc/_sgp4-predict
+sgp4-predict man > /usr/local/share/man/man1/sgp4-predict.1
+```
+
+Both are generated from the live argument definitions, so they cannot drift from the actual flags.
+
+## Exit codes
+
+| Code | Meaning                                                    |
+|------|------------------------------------------------------------|
+| 0    | Success                                                    |
+| 1    | Runtime error (bad TLE, unreadable config, unknown station)|
+| 2    | Invalid command-line usage (clap)                          |
+| 141  | Output pipe closed early, e.g. `… \| head` (128 + SIGPIPE) |

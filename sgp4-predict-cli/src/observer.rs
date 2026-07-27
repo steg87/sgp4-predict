@@ -1,73 +1,100 @@
-use anyhow::Context as _;
-use sgp4_predict::{Degrees, GroundObserver};
-use std::io::{BufRead as _, Write as _};
+use std::path::Path;
 
-fn validate_observer(lat_deg: f64, lon_deg: f64) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        (-90.0..=90.0).contains(&lat_deg),
-        "latitude must be in [-90, 90], got {lat_deg}"
-    );
-    anyhow::ensure!(
-        (-180.0..=180.0).contains(&lon_deg),
-        "longitude must be in [-180, 180], got {lon_deg}"
-    );
-    Ok(())
-}
+use crate::{
+    cli::ObserverArgs,
+    config::{self, GroundStation},
+};
 
-pub fn parse_observer(s: &str) -> anyhow::Result<GroundObserver> {
-    let parts: Vec<&str> = s.split(',').collect();
-    match parts.as_slice() {
-        [lat, lon, alt] => {
-            let lat_deg = lat
-                .trim()
-                .parse::<f64>()
-                .map_err(|_| anyhow::anyhow!("invalid latitude: {lat}"))?;
-            let lon_deg = lon
-                .trim()
-                .parse::<f64>()
-                .map_err(|_| anyhow::anyhow!("invalid longitude: {lon}"))?;
-            let alt_m = alt
-                .trim()
-                .parse::<f64>()
-                .map_err(|_| anyhow::anyhow!("invalid altitude: {alt}"))?;
-            validate_observer(lat_deg, lon_deg)?;
-            Ok(GroundObserver::new(
-                Degrees(lat_deg),
-                Degrees(lon_deg),
-                alt_m,
-            ))
-        }
-        _ => anyhow::bail!("observer must be 'lat,lon,alt' — got: {s}"),
+impl ObserverArgs {
+    /// Enforce that `--gs` is given and names a usable station in the config.
+    ///
+    /// Returns the resolved id, so callers do not have to unwrap it again.
+    pub fn validate<'a>(&'a self, config: &config::Config) -> anyhow::Result<&'a str> {
+        let id = self
+            .gs
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("--gs is required{}", config.ids_hint()))?;
+        config.groundstation(id)?;
+        Ok(id)
+    }
+
+    /// Validate the flags and take ownership of the named ground station.
+    pub fn resolve(&self, config_path: Option<&Path>) -> anyhow::Result<GroundStation> {
+        let mut config = config::load(config_path)?;
+        let id = self.validate(&config)?;
+        Ok(config
+            .groundstations
+            .remove(id)
+            .expect("validate checked the id"))
     }
 }
 
-pub fn prompt_observer() -> anyhow::Result<GroundObserver> {
-    let stdin = std::io::stdin();
-    let mut lines = stdin.lock().lines();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sgp4_predict::Observer as _;
 
-    let lat_deg = prompt_f64(&mut lines, "Observer latitude (degrees): ")?;
-    let lon_deg = prompt_f64(&mut lines, "Observer longitude (degrees): ")?;
-    let alt_m = prompt_f64(&mut lines, "Observer altitude (metres): ")?;
+    fn args(gs: Option<&str>) -> ObserverArgs {
+        ObserverArgs {
+            gs: gs.map(str::to_owned),
+        }
+    }
 
-    validate_observer(lat_deg, lon_deg)?;
-    Ok(GroundObserver::new(
-        Degrees(lat_deg),
-        Degrees(lon_deg),
-        alt_m,
-    ))
-}
+    fn config() -> config::Config {
+        serde_yaml::from_str(
+            r"
+groundstations:
+  glasgow:
+    location: { latitude: 55.86, longitude: -4.25, altitude: 40 }
+  svalbard:
+    location: { latitude: 78.23, longitude: 15.39 }
+",
+        )
+        .unwrap()
+    }
 
-fn prompt_f64(
-    lines: &mut impl Iterator<Item = std::io::Result<String>>,
-    prompt: &str,
-) -> anyhow::Result<f64> {
-    print!("{prompt}");
-    std::io::stdout().flush()?;
-    let s = lines
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("unexpected EOF"))?
-        .context("reading stdin")?;
-    s.trim()
-        .parse::<f64>()
-        .map_err(|e| anyhow::anyhow!("expected a number: {e}"))
+    #[test]
+    fn test_validate_accepts_known_id() {
+        assert_eq!(
+            args(Some("glasgow")).validate(&config()).unwrap(),
+            "glasgow"
+        );
+    }
+
+    #[test]
+    fn test_validate_rejects_missing_gs() {
+        let err = args(None).validate(&config()).unwrap_err().to_string();
+        assert!(err.contains("--gs is required"), "{err}");
+        assert!(err.contains("glasgow, svalbard"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_rejects_unknown_id() {
+        let err = args(Some("nowhere"))
+            .validate(&config())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown ground station 'nowhere'"), "{err}");
+        assert!(err.contains("glasgow, svalbard"), "{err}");
+    }
+
+    #[test]
+    fn test_validate_missing_gs_with_empty_config() {
+        let err = args(None)
+            .validate(&config::Config::default())
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err, "--gs is required");
+    }
+
+    #[test]
+    fn test_resolved_station_is_an_observer() {
+        let mut config = config();
+        let args = args(Some("glasgow"));
+        let id = args.validate(&config).unwrap();
+        let gs = config.groundstations.remove(id).unwrap();
+        assert_eq!(gs.latitude().to_f64(), 55.86);
+        assert_eq!(gs.longitude().to_f64(), -4.25);
+        assert_eq!(gs.altitude(), 40.0);
+    }
 }

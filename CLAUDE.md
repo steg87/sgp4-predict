@@ -16,6 +16,8 @@ make coverage                  # llvm-cov summary
 make validation                # cross-validate against pypredict/skyfield reference data
 make benchmark                 # Rust vs pypredict monte carlo benchmark
 make docs                      # build cargo docs and open in a browser
+
+cargo run --bin sgp4-predict -- <subcommand>  # run the CLI (see sgp4-predict-cli/README.md)
 ```
 
 **Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.
@@ -43,7 +45,7 @@ Note: `make stubs` inside `sgp4-predict-py/` fails when `VIRTUAL_ENV` points els
 
 ## Architecture
 
-This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has two crates: `sgp4-predict/` (the Rust library) and `sgp4-predict-py/` (the Python bindings).
+This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has three crates: `sgp4-predict/` (the Rust library), `sgp4-predict-py/` (the Python bindings), and `sgp4-predict-cli/` (the `sgp4-predict` binary).
 
 ### Entry point: `Predictor`
 
@@ -92,6 +94,36 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 ### `IntervalRange` trait (`time.rs`)
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
+
+`DateTimeIter` substitutes 1 s for a **non-positive** step only: a zero step never advances `next_time` and would yield the same instant forever, which previously hung `prediction_iter`/`observation_iter`. Any positive step is used as given, including sub-second ones — this is a *sampling* iterator, so `Duration::milliseconds(100)` is a legitimate request, unlike for the coarse detection scans that clamp everything below `MIN_POSITIVE_STEP`. Do not "make it consistent" with those: the two have genuinely different requirements, and flooring here silently decimates a caller's sample rate.
+
+### CLI (`sgp4-predict-cli/`)
+
+The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/format/output-args), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. `--config`, `--verbose` and `--quiet` are `global = true` on the top-level `Args`, so they may appear on either side of the subcommand; `main.rs` passes the config path down to the two commands that need it. Errors are `anyhow`.
+
+`commands::prepare()` builds the shared `Context` (interval, TLE, predictor, writer, format) that every subcommand needs — add new subcommands through it rather than repeating the sequence. Ordering inside it is deliberate: `--output-args`/format compatibility is checked first, then the TLE is loaded *before* the writer is opened, so a bad TLE leaves no empty `--out` file behind.
+
+`output.rs` is column-driven: each `write_*` declares a `&[Column]` (header, JSON/CSV key, width, alignment) and emits `Cell::Str`/`Cell::Num` rows, which `RowWriter` renders as text, NDJSON, or CSV. Adding a format means adding a `Format` variant and a match arm, not touching the five commands. The text underline is derived from the rendered header (`"-".repeat(header.chars().count())`), so column widths can change without desyncing it — do not reintroduce hand-computed widths. `--output-args` is rejected for JSON/CSV because `#` lines would make that output unparseable.
+
+`main.rs` returns `ExitCode`, not `anyhow::Result`: a broken pipe (`… | head`) exits 141 silently instead of printing an error, so piping is not reported as failure. Warnings go through `tracing` to **stderr** and never to stdout.
+
+Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag — it was removed.
+
+`commands/gs.rs` implements `gs add|remove|list` (aliases `rm`, `ls`) over `open_for_edit`/`save`. Its prompts and confirmations go to **stderr**, so `gs list` stays pipeable and prompts stay visible when stdout is redirected. `confirm()` treats EOF and anything other than `y`/`yes` as no, so a non-interactive caller that forgot `--force` cannot delete a station. `gs list` reuses the `output.rs` column machinery, so it honours `--format` like every other table.
+
+Note the asymmetry with the data-input paths below: `gs add` prompts deliberately because it is interactive config management, whereas TLE and observer input prompts were removed so they could be piped. Do not "restore consistency" by removing this one.
+
+Neither *data* input prompts line-by-line any more; both were removed in favour of non-interactive paths. `--tle-file` reads a file, and omitting it reads *all* of stdin so a TLE can be piped in. `tle.rs` funnels both through one `parse_tle(&str)`, so file and pipe accept exactly the same 2-or-3-line text — keep it that way rather than adding a parser per source. When stdin is a terminal, `read_tle_stdin` prints a Ctrl-D hint to **stderr**, not stdout, so it cannot contaminate piped output. Note that the observer-taking commands resolve `--gs` *before* calling `load_tle`, so a bad station id fails immediately instead of after the user has typed a TLE.
+
+`config.rs` deserializes the YAML (`groundstations: {id: {location: {latitude, longitude, altitude}}}`; `altitude` defaults to 0, and every struct is `deny_unknown_fields` so typos error rather than being silently dropped). The path comes from `--config`, else `dirs::home_dir().join(".sgp4-predict").join("config.yaml")` — one expression covering `~/.sgp4-predict/config.yaml` and `%USERPROFILE%\.sgp4-predict\config.yaml`, so keep new path handling `PathBuf`-based rather than string-formatted. Creation is deliberately asymmetric between the default path and `--config`. A missing file at the *default* path is created and seeded with `TEMPLATE` — the user never named it, so it cannot be a typo. A missing `--config` path is an **error** everywhere except `gs add`: creating it would let a mistyped path succeed against a fresh empty config while the real stations sit unread, and the resulting `unknown ground station` error points at the wrong file. Do not "simplify" this into one rule; the two cases differ in whether the user typed the path.
+
+There are two entry points. `load()` is for the prediction commands and behaves as above. `open_for_edit(path, Missing)` is for the `gs` commands and never seeds — `gs add` passes `Missing::Create` and starts from an empty config, `gs list`/`gs remove` pass `Missing::Reject`. The reject applies only to an *explicit* path; a missing default path is still just an empty station list. Both entry points propagate parse errors, so a broken config is never silently overwritten. `Config::save()` writes to a sibling `.yaml.tmp` and renames, so a failed write cannot truncate an existing config; it re-emits a fixed header because **serialising drops YAML comments**, which is the known cost of `gs add`/`gs remove` on a hand-annotated file.
+
+`GroundStation` implements the library's `Observer` trait directly, so the CLI never constructs a `GroundObserver` — it hands `&GroundStation` straight to `observation_iter` / `transits_iter` / `observe_at`, which are all generic over `O: Observer`. This is the "implement the trait on your own type" path the library README documents; don't reintroduce a conversion. `GroundObserver` remains the library's built-in type for users who lack one of their own, and the Python bindings define a separate pyclass of the same name.
+
+Coordinate range checks live in `Location::validate()` and run in `Config::groundstation()`, the only way to get a `&GroundStation` — deserialization itself does not validate, so a `GroundStation` obtained by any other route (e.g. indexing `groundstations` directly) is unchecked. Validation is per-lookup, not per-load, so one malformed entry does not block using the others.
+
+`ObserverArgs` is the mixin that carries this: `validate(&Config)` enforces that `--gs` is present and names a usable station (returning the id), and `resolve(config_path)` loads the config and `remove`s the named station to return it owned — owned rather than borrowed because the `Config` is local to `resolve`. Errors list the ids the config actually defines, via `Config::ids_hint()` / `Config::groundstation()` — preserve that when touching these messages, and note that `tests/config.rs` asserts on the wording. Both commands then `.expect()` on `args.observer.gs` when writing the `--output-args` header, which is sound only because `resolve` ran first.
 
 ## Conventions
 

@@ -3,6 +3,8 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
+use crate::detect::MIN_POSITIVE_STEP;
+
 /// A half-open time interval `[start, end)`.
 ///
 /// Implemented for `Range<DateTime<Utc>>` and for [`Transit`] and
@@ -76,6 +78,11 @@ impl IntervalRange for Range<DateTime<Utc>> {
 /// Yields times `[start, start + step, start + 2·step, …)` up to but not
 /// including `end`. Call `include_end` to append the exact end time as a final
 /// sample.
+///
+/// Only a **non-positive** `step` is adjusted, to 1 second: it would never
+/// advance and would iterate forever. Any positive step is used as given —
+/// this is a sampling iterator, so sub-second steps are meaningful here even
+/// though they are not for the coarse detection scans.
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,
@@ -88,7 +95,11 @@ impl DateTimeIter {
         Self {
             interval: interval.start()..interval.end(),
             next_time: interval.start(),
-            step,
+            step: if step > Duration::zero() {
+                step
+            } else {
+                MIN_POSITIVE_STEP
+            },
             pending_end: None,
         }
     }
@@ -181,5 +192,39 @@ mod tests {
                 end,
             ]
         );
+    }
+
+    #[test]
+    fn test_sub_second_step_is_used_as_given() {
+        // Sampling at 100 ms must yield 10 samples per second, not be rounded
+        // up to the 1 s floor the detection scans use.
+        let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let end = start + Duration::seconds(1);
+
+        let times: Vec<_> = DateTimeIter::new(start..end, Duration::milliseconds(100)).collect();
+        assert_eq!(times.len(), 10);
+        assert_eq!(times[1], start + Duration::milliseconds(100));
+    }
+
+    #[test]
+    fn test_non_positive_step_terminates() {
+        // A zero step never advances next_time and would iterate forever, so
+        // it falls back to 1 s — unlike a positive sub-second step, which is
+        // used as given.
+        let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let end = start + Duration::seconds(3);
+
+        for step in [Duration::zero(), Duration::seconds(-10)] {
+            let times: Vec<_> = DateTimeIter::new(start..end, step).collect();
+            assert_eq!(
+                times,
+                vec![
+                    start,
+                    start + Duration::seconds(1),
+                    start + Duration::seconds(2)
+                ],
+                "step {step} did not fall back to 1s"
+            );
+        }
     }
 }
