@@ -11,10 +11,10 @@ use crate::{
 pub fn run(args: StateVectorsArgs) -> anyhow::Result<()> {
     let (start, interval) = resolve_interval(&args.common)?;
     let step = Duration::from_std(args.step).context("step out of range")?;
-    let tle = load_tle(&args.common)?;
+    let tle = load_tle(args.common.tle_file.as_deref())?;
     let predictor = Predictor::from_tle(&tle)?;
     warn_stale_tle(&predictor, start);
-    let mut writer = open_writer(&args.common.out)?;
+    let mut writer = open_writer(args.common.out.as_deref())?;
 
     if args.common.output_args {
         let start_str = start.format("%Y-%m-%dT%H:%M:%SZ").to_string();

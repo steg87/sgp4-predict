@@ -18,9 +18,7 @@ pub fn read_tle_stdin() -> anyhow::Result<Tle> {
             "Ctrl-D"
         };
         // Hint goes to stderr so it never contaminates piped output.
-        eprintln!(
-            "Paste TLE to stdin; {eof} when done:"
-        );
+        eprintln!("Paste TLE to stdin; {eof} when done:");
     }
 
     let mut content = String::new();

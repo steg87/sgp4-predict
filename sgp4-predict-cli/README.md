@@ -41,7 +41,7 @@ curl -s 'https://celestrak.org/NORAD/elements/gp.php?CATNR=60989' | sgp4-predict
 **Typed in** — with no `--tle-file` and no pipe, the tool waits on stdin and prints a hint. Paste the TLE and press Ctrl-D (Ctrl-Z then Enter on Windows):
 
 ```
-Reading TLE from stdin (optional name line + line 1 + line 2); Ctrl-D when done:
+Paste TLE to stdin; Ctrl-D when done:
 ```
 
 ## Ground stations

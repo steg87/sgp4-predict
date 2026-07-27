@@ -10,7 +10,7 @@ use sgp4_predict::Predictor;
 use std::{
     io::{BufWriter, Write},
     ops::Range,
-    path::PathBuf,
+    path::Path,
 };
 
 use crate::{cli::CommonArgs, tle};
@@ -26,8 +26,8 @@ pub fn resolve_interval(
 }
 
 /// Load a TLE from `--tle-file`, or from stdin when the flag is omitted.
-pub fn load_tle(common: &CommonArgs) -> anyhow::Result<Tle> {
-    match &common.tle_file {
+pub fn load_tle(tle_file: Option<&Path>) -> anyhow::Result<Tle> {
+    match tle_file {
         Some(p) => tle::parse_tle_file(p),
         None => tle::read_tle_stdin(),
     }
@@ -44,7 +44,7 @@ pub fn warn_stale_tle(predictor: &Predictor, start: DateTime<Utc>) {
 }
 
 /// Open a buffered writer to a file, or to stdout if no path is given.
-pub fn open_writer(out: &Option<PathBuf>) -> anyhow::Result<Box<dyn Write>> {
+pub fn open_writer(out: Option<&Path>) -> anyhow::Result<Box<dyn Write>> {
     match out {
         Some(path) => Ok(Box::new(BufWriter::new(
             std::fs::File::create(path)
