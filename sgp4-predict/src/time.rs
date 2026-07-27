@@ -208,8 +208,9 @@ mod tests {
 
     #[test]
     fn test_non_positive_step_terminates() {
-        // A zero step never advances next_time and would iterate forever;
-        // it is floored to MIN_POSITIVE_STEP like the detection scan steps.
+        // A zero step never advances next_time and would iterate forever, so
+        // it falls back to 1 s — unlike a positive sub-second step, which is
+        // used as given.
         let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let end = start + Duration::seconds(3);
 

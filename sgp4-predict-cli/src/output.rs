@@ -19,12 +19,16 @@ use crate::cli::Format;
 enum Cell {
     Str(String),
     Num(String),
+    /// A value with no representation in the output. JSON emits `null`; text
+    /// and CSV leave the field empty, which is the convention there.
+    Null,
 }
 
 impl Cell {
     fn text(&self) -> &str {
         match self {
             Cell::Str(s) | Cell::Num(s) => s,
+            Cell::Null => "",
         }
     }
 }
@@ -34,12 +38,12 @@ fn time(t: DateTime<Utc>) -> Cell {
 }
 
 fn num(value: f64, precision: usize) -> Cell {
-    // NaN and infinity have no JSON representation; emit null rather than a
-    // bare `NaN` that would make the output unparseable.
+    // NaN and infinity have no JSON representation; a bare `NaN` would make
+    // the output unparseable.
     if value.is_finite() {
         Cell::Num(format!("{value:.precision$}"))
     } else {
-        Cell::Num("null".to_string())
+        Cell::Null
     }
 }
 
@@ -143,6 +147,7 @@ impl<'a, W: Write> RowWriter<'a, W> {
                     .zip(cells)
                     .map(|(column, cell)| match cell {
                         Cell::Num(v) => format!("\"{}\":{}", column.key, v),
+                        Cell::Null => format!("\"{}\":null", column.key),
                         Cell::Str(v) => format!("\"{}\":\"{}\"", column.key, json_escape(v)),
                     })
                     .collect();
@@ -505,6 +510,21 @@ mod tests {
         assert_eq!(out, "{\"name\":\"a\",\"value_km\":null}\n");
         let out = render(Format::Json, &[&[text("a"), num(f64::INFINITY, 2)]]);
         assert!(out.contains("\"value_km\":null"), "{out}");
+    }
+
+    /// Only JSON spells it `null`; text and CSV leave the field empty rather
+    /// than printing the literal word.
+    #[test]
+    fn test_non_finite_numbers_are_blank_in_text_and_csv() {
+        let row: &[Cell] = &[text("a"), num(f64::NAN, 2)];
+
+        let csv = render(Format::Csv, &[row]);
+        assert_eq!(csv.lines().nth(1).unwrap(), "a,");
+
+        let out = render(Format::Text, &[row]);
+        let data = out.lines().nth(2).unwrap();
+        assert!(!data.contains("null"), "{data:?}");
+        assert_eq!(data.trim(), "a");
     }
 
     #[test]

@@ -189,9 +189,9 @@ impl Config {
 
     /// Look up a ground station by id, without checking its coordinates.
     ///
-    /// `gs remove` and `gs list` use this: a hand-edited station with an
-    /// out-of-range latitude must still be listable and removable, or the only
-    /// way to get rid of it is to edit the YAML by hand.
+    /// `gs remove` uses this: a hand-edited station with an out-of-range
+    /// latitude is still listed by `gs list`, so it must be removable too, or
+    /// the only way to get rid of it is to edit the YAML by hand.
     pub fn find(&self, id: &str) -> anyhow::Result<&GroundStation> {
         self.groundstations.get(id).ok_or_else(|| {
             if self.groundstations.is_empty() {
