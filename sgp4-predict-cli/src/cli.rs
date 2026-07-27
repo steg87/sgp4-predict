@@ -11,6 +11,33 @@ use std::{path::PathBuf, time::Duration};
 pub struct Args {
     #[command(subcommand)]
     pub command: Command,
+
+    /// Path to the config file (default: ~/.sgp4-predict/config.yaml)
+    #[arg(long, global = true, value_name = "PATH", long_help = CONFIG_LONG_HELP)]
+    pub config: Option<PathBuf>,
+
+    /// Increase log verbosity (-v info, -vv debug, -vvv trace)
+    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
+    pub verbose: u8,
+
+    /// Suppress warnings on stderr
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    pub quiet: bool,
+}
+
+impl Args {
+    /// Log filter implied by `--verbose` / `--quiet`, unless `RUST_LOG` overrides it.
+    pub fn log_level(&self) -> &'static str {
+        if self.quiet {
+            return "error";
+        }
+        match self.verbose {
+            0 => "warn",
+            1 => "info",
+            2 => "debug",
+            _ => "trace",
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -30,29 +57,25 @@ pub enum Command {
 /// Arguments shared by all subcommands.
 #[derive(clap::Args)]
 pub struct CommonArgs {
-    /// Start time, e.g. "2026-03-25 10:00:00" or "2026-03-25T10:00:00Z" (default: now; always interpreted as UTC)
+    /// Start time, e.g. "2026-03-25 10:00:00" or "2026-03-25T10:00:00Z" (default: now, always UTC)
     #[arg(long, value_parser = parse_start_time)]
     pub start: Option<DateTime<Utc>>,
 
-    /// Duration, e.g. "3d", "1h30m", "90s" (default: 1d)
+    /// Duration, e.g. "3d", "1h30m", "90s"
     #[arg(long, value_parser = parse_duration, default_value = "1d")]
     pub duration: Duration,
 
     /// Path to TLE file (optional name line + line1 + line2); read from stdin if omitted
-    #[arg(long, long_help = TLE_FILE_LONG_HELP)]
+    #[arg(long, value_name = "PATH", long_help = TLE_FILE_LONG_HELP)]
     pub tle_file: Option<PathBuf>,
 
     /// Output file path (default: stdout)
-    #[arg(short = 'o', long)]
+    #[arg(short = 'o', long, value_name = "PATH")]
     pub out: Option<PathBuf>,
 
-    /// Prepend all CLI arguments as # comment lines to the output
+    /// Prepend the resolved input arguments as # comment lines to the output
     #[arg(long)]
     pub output_args: bool,
-
-    /// Path to the config file (default: ~/.sgp4-predict/config.yaml)
-    #[arg(long, value_name = "PATH", long_help = CONFIG_LONG_HELP)]
-    pub config: Option<PathBuf>,
 }
 
 const TLE_FILE_LONG_HELP: &str = "\
@@ -136,12 +159,12 @@ pub struct StateVectorsArgs {
     #[arg(long, value_parser = parse_step, default_value = "60s")]
     pub step: Duration,
 
-    /// Coordinate frame for output (default: teme)
-    #[arg(long, default_value = "teme")]
+    /// Coordinate frame for output
+    #[arg(long, value_enum, default_value_t = Frame::Teme)]
     pub frame: Frame,
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Clone, Copy, ValueEnum)]
 pub enum Frame {
     Teme,
     Ecef,

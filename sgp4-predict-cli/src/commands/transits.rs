@@ -6,8 +6,8 @@ use super::{
 };
 use crate::{cli::TransitsArgs, output};
 
-pub fn run(args: TransitsArgs) -> anyhow::Result<()> {
-    let observer = args.observer.resolve(args.common.config.as_deref())?;
+pub fn run(args: TransitsArgs, config_path: Option<&std::path::Path>) -> anyhow::Result<()> {
+    let observer = args.observer.resolve(config_path)?;
     let (start, interval) = resolve_interval(&args.common)?;
     let tle = load_tle(args.common.tle_file.as_deref())?;
     let predictor = Predictor::from_tle(&tle)?;

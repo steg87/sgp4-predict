@@ -39,7 +39,7 @@ pub fn warn_stale_tle(predictor: &Predictor, start: DateTime<Utc>) {
     let age_days = age.num_days();
     tracing::info!(tle_age_days = age_days, "predictor ready");
     if age.num_hours() > 7 * 24 {
-        eprintln!("warning: TLE is {age_days} days old; SGP4 accuracy may be degraded");
+        tracing::warn!("TLE is {age_days} days old; SGP4 accuracy may be degraded");
     }
 }
 

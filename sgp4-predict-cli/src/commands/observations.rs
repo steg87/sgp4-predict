@@ -7,8 +7,8 @@ use super::{
 };
 use crate::{cli::ObservationsArgs, output};
 
-pub fn run(args: ObservationsArgs) -> anyhow::Result<()> {
-    let observer = args.observer.resolve(args.common.config.as_deref())?;
+pub fn run(args: ObservationsArgs, config_path: Option<&std::path::Path>) -> anyhow::Result<()> {
+    let observer = args.observer.resolve(config_path)?;
     let (start, interval) = resolve_interval(&args.common)?;
     let step = Duration::from_std(args.step).context("step out of range")?;
     let tle = load_tle(args.common.tle_file.as_deref())?;
