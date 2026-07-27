@@ -99,7 +99,13 @@ Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Trans
 
 ### CLI (`sgp4-predict-cli/`)
 
-The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/output-args/config), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. Errors are `anyhow`.
+The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/format/output-args), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. `--config`, `--verbose` and `--quiet` are `global = true` on the top-level `Args`, so they may appear on either side of the subcommand; `main.rs` passes the config path down to the two commands that need it. Errors are `anyhow`.
+
+`commands::prepare()` builds the shared `Context` (interval, TLE, predictor, writer, format) that every subcommand needs — add new subcommands through it rather than repeating the sequence. Ordering inside it is deliberate: `--output-args`/format compatibility is checked first, then the TLE is loaded *before* the writer is opened, so a bad TLE leaves no empty `--out` file behind.
+
+`output.rs` is column-driven: each `write_*` declares a `&[Column]` (header, JSON/CSV key, width, alignment) and emits `Cell::Str`/`Cell::Num` rows, which `RowWriter` renders as text, NDJSON, or CSV. Adding a format means adding a `Format` variant and a match arm, not touching the five commands. The text underline is derived from the rendered header (`"-".repeat(header.chars().count())`), so column widths can change without desyncing it — do not reintroduce hand-computed widths. `--output-args` is rejected for JSON/CSV because `#` lines would make that output unparseable.
+
+`main.rs` returns `ExitCode`, not `anyhow::Result`: a broken pipe (`… | head`) exits 141 silently instead of printing an error, so piping is not reported as failure. Warnings go through `tracing` to **stderr** and never to stdout.
 
 Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag — it was removed.
 

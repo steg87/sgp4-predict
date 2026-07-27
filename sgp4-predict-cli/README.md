@@ -176,13 +176,92 @@ start                    end                          state   duration
 
 ## Output options
 
-| Flag                         | Description                                                                  |
-|------------------------------|------------------------------------------------------------------------------|
-| `-o <path>` / `--out <path>` | Write output to a file instead of stdout                                     |
-| `--output-args`              | Prepend all input arguments as `# key: value` comment lines to the output    |
+| Flag                         | Description                                                               |
+|------------------------------|---------------------------------------------------------------------------|
+| `--format <text\|json\|csv>` | Output format (default: `text`)                                           |
+| `-o <path>` / `--out <path>` | Write output to a file instead of stdout                                  |
+| `--output-args`              | Prepend the resolved input arguments as `# key: value` lines (text only)  |
 
-`--output-args` is useful for self-documenting output files. For the observer-based subcommands it records both the id and the coordinates it resolved to, as `# ground-station: <id>` and `# observer: lat,lon,alt`.
+### Formats
+
+Every subcommand supports all three formats and the same columns in each.
+
+`text` is fixed-width with a header, for reading:
+
+```
+aos                      los                      aos_az [deg] ...
+------------------------------------------------------------------
+2025-12-22T13:08:06Z     2025-12-22T13:21:33Z            11.54 ...
+```
+
+`json` is newline-delimited — one object per row, so it streams into `jq`:
+
+```sh
+sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
+```
+
+```json
+{"aos":"2025-12-22T13:08:06Z","los":"2025-12-22T13:21:33Z","aos_az_deg":11.54, …}
+```
+
+`csv` is RFC 4180 with a header row, using the same field names as JSON:
+
+```
+aos,los,aos_az_deg,los_az_deg,tca_time,tca_el_deg,duration
+2025-12-22T13:08:06Z,2025-12-22T13:21:33Z,11.54,-115.90,2025-12-22T13:14:50Z,22.80,13m 26s
+```
+
+In `text` and `csv` the header is written even when there are no rows, so an empty result still identifies its columns. `json` writes nothing.
+
+### Self-documenting output
+
+`--output-args` records the resolved inputs — including the TLE source, the config file, and the coordinates `--gs` resolved to — so an output file explains how it was produced:
 
 ```sh
 sgp4-predict transits --tle-file sentinel.tle --gs glasgow --output-args -o passes.txt
 ```
+
+```
+# command: transits
+# satellite: SENTINEL-2C
+# tle-source: sentinel.tle
+# start: 2025-12-22T12:00:00Z
+# duration: 4h
+# config: /home/you/.sgp4-predict/config.yaml
+# ground-station: glasgow
+# observer: 55.86,-4.25,40
+# min-elevation: 0
+# format: text
+```
+
+It is rejected with `--format json` or `--format csv`, since `#` lines would make that output unparseable.
+
+## Logging
+
+Warnings (such as a stale TLE) go to stderr, so they never mix into piped output.
+
+| Flag                    | Effect                                  |
+|-------------------------|-----------------------------------------|
+| `-q` / `--quiet`        | Errors only                             |
+| `-v` / `-vv` / `-vvv`   | info / debug / trace                    |
+
+`RUST_LOG` overrides both if set.
+
+## Shell completions and man page
+
+```sh
+sgp4-predict completions bash > /etc/bash_completion.d/sgp4-predict
+sgp4-predict completions zsh  > ~/.zfunc/_sgp4-predict
+sgp4-predict man > /usr/local/share/man/man1/sgp4-predict.1
+```
+
+Both are generated from the live argument definitions, so they cannot drift from the actual flags.
+
+## Exit codes
+
+| Code | Meaning                                                    |
+|------|------------------------------------------------------------|
+| 0    | Success                                                    |
+| 1    | Runtime error (bad TLE, unreadable config, unknown station)|
+| 2    | Invalid command-line usage (clap)                          |
+| 141  | Output pipe closed early, e.g. `… \| head` (128 + SIGPIPE) |
