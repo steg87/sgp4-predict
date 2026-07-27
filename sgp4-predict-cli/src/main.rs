@@ -5,8 +5,9 @@ mod observer;
 mod output;
 mod tle;
 
-use clap::Parser as _;
-use std::io::ErrorKind;
+use anyhow::Context as _;
+use clap::{CommandFactory as _, Parser as _};
+use std::io::{ErrorKind, Write as _};
 
 /// Exit code for a command terminated by a closed pipe, per shell convention
 /// (128 + SIGPIPE).
@@ -19,7 +20,7 @@ fn main() -> std::process::ExitCode {
     match run(args) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         // `cmd | head` closes the pipe early; that is normal use, not a failure
-        // worth printing an error for.
+        // worth printing a backtrace-style error for.
         Err(e) if is_broken_pipe(&e) => std::process::ExitCode::from(EXIT_SIGPIPE as u8),
         Err(e) => {
             eprintln!("Error: {e:?}");
@@ -36,6 +37,25 @@ fn run(args: cli::Args) -> anyhow::Result<()> {
         cli::Command::StateVectors(a) => commands::state_vectors::run(a),
         cli::Command::Apsides(a) => commands::apsides::run(a),
         cli::Command::Illumination(a) => commands::illumination::run(a),
+        cli::Command::Completions(a) => {
+            // clap_complete panics on write errors instead of returning them,
+            // so render into memory and do the writing here.
+            let mut script = Vec::new();
+            clap_complete::generate(
+                a.shell,
+                &mut cli::Args::command(),
+                "sgp4-predict",
+                &mut script,
+            );
+            std::io::stdout()
+                .write_all(&script)
+                .context("failed to write completions")
+        }
+        // Generated from the live clap Command rather than a build script, so
+        // it cannot drift from the actual flags.
+        cli::Command::Man => clap_mangen::Man::new(cli::Args::command())
+            .render(&mut std::io::stdout())
+            .context("failed to render man page"),
     }
 }
 

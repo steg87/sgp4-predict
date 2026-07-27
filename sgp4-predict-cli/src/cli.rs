@@ -13,7 +13,7 @@ pub struct Args {
     pub command: Command,
 
     /// Path to the config file (default: ~/.sgp4-predict/config.yaml)
-    #[arg(long, global = true, value_name = "PATH", long_help = CONFIG_LONG_HELP)]
+    #[arg(long, global = true, value_name = "PATH", value_parser = parse_path, long_help = CONFIG_LONG_HELP)]
     pub config: Option<PathBuf>,
 
     /// Increase log verbosity (-v info, -vv debug, -vvv trace)
@@ -52,6 +52,17 @@ pub enum Command {
     Apsides(ApsidesArgs),
     /// Find illumination windows (sunlit/eclipse) over a time interval
     Illumination(IlluminationArgs),
+    /// Generate a shell completion script on stdout
+    Completions(CompletionsArgs),
+    /// Generate a roff man page on stdout
+    Man,
+}
+
+#[derive(clap::Args)]
+pub struct CompletionsArgs {
+    /// Shell to generate completions for
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }
 
 /// Arguments shared by all subcommands.
@@ -66,11 +77,11 @@ pub struct CommonArgs {
     pub duration: Duration,
 
     /// Path to TLE file (optional name line + line1 + line2); read from stdin if omitted
-    #[arg(long, value_name = "PATH", long_help = TLE_FILE_LONG_HELP)]
+    #[arg(long, value_name = "PATH", value_parser = parse_path, long_help = TLE_FILE_LONG_HELP)]
     pub tle_file: Option<PathBuf>,
 
     /// Output file path (default: stdout)
-    #[arg(short = 'o', long, value_name = "PATH")]
+    #[arg(short = 'o', long, value_name = "PATH", value_parser = parse_path)]
     pub out: Option<PathBuf>,
 
     /// Output format
@@ -205,6 +216,17 @@ pub struct ApsidesArgs {
 pub struct IlluminationArgs {
     #[command(flatten)]
     pub common: CommonArgs,
+}
+
+/// Expand a leading `~/`, so a quoted path behaves like an unquoted one.
+fn parse_path(s: &str) -> Result<PathBuf, String> {
+    match s.strip_prefix("~/") {
+        Some(rest) => match dirs::home_dir() {
+            Some(home) => Ok(home.join(rest)),
+            None => Err("cannot expand '~': no home directory".to_string()),
+        },
+        None => Ok(PathBuf::from(s)),
+    }
 }
 
 fn parse_start_time(s: &str) -> Result<DateTime<Utc>, String> {
