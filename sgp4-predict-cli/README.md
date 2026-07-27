@@ -33,13 +33,54 @@ TLE line 1: 1 60989U ...
 TLE line 2: 2 60989 ...
 ```
 
-## Observer
+## Ground stations
 
-Subcommands that require a ground location accept `--observer "lat_deg,lon_deg,alt_m"`. If omitted, the tool prompts interactively.
+Subcommands that need a ground location (`transits`, `observations`) take it as `--gs <id>`, naming a ground station defined in the config file. It is required for those subcommands.
 
 ```sh
---observer "55.86,-4.25,40"   # Glasgow, 40 m altitude
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow --min-elevation 10
+sgp4-predict observations --tle-file sentinel.tle --gs svalbard --config ./stations.yaml
 ```
+
+A missing or unknown id lists what is available:
+
+```
+Error: unknown ground station 'glasgo'; known ids: glasgow, svalbard
+```
+
+### Config file
+
+```yaml
+groundstations:
+  glasgow:
+    location:
+      latitude: 55.86
+      longitude: -4.25
+      altitude: 40
+  svalbard:
+    location:
+      latitude: 78.23
+      longitude: 15.39
+```
+
+| Field                  | Required | Description                              |
+|------------------------|----------|------------------------------------------|
+| `location.latitude`    | yes      | degrees, `[-90, 90]`                     |
+| `location.longitude`   | yes      | degrees, `[-180, 180]`                   |
+| `location.altitude`    | no       | metres above the ellipsoid (default: 0)  |
+
+Unrecognised fields are rejected, so typos surface as errors rather than being silently ignored.
+
+### Config file location
+
+`--config <path>` selects a config file explicitly. Otherwise the tool looks in `.sgp4-predict/config.yaml` under your home directory:
+
+| Platform      | Default path                                 |
+|---------------|----------------------------------------------|
+| Linux / macOS | `~/.sgp4-predict/config.yaml`                |
+| Windows       | `%USERPROFILE%\.sgp4-predict\config.yaml`    |
+
+A missing file at the default path is not an error — it just means no ground stations are defined. A `--config` path that does not exist *is* an error.
 
 ## Time range
 
@@ -59,7 +100,7 @@ If `--start` is omitted, the current UTC time is used.
 Finds passes above a minimum elevation. Outputs AoS, LoS, azimuth at each horizon crossing, Time of Closest Approach (TCA), and duration.
 
 ```sh
-sgp4-predict transits --tle-file sentinel.tle --observer "55.86,-4.25,40" --min-elevation 10
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow --min-elevation 10
 ```
 
 ```
@@ -73,7 +114,7 @@ aos                      los                      aos_az [deg] los_az [deg] tca_
 Outputs azimuth, elevation, range, and range rate at each step.
 
 ```sh
-sgp4-predict observations --tle-file sentinel.tle --observer "55.86,-4.25,40" --step 30s
+sgp4-predict observations --tle-file sentinel.tle --gs glasgow --step 30s
 ```
 
 ```
@@ -129,8 +170,8 @@ start                    end                          state   duration
 | `-o <path>` / `--out <path>` | Write output to a file instead of stdout                                     |
 | `--output-args`              | Prepend all input arguments as `# key: value` comment lines to the output    |
 
-`--output-args` is useful for self-documenting output files:
+`--output-args` is useful for self-documenting output files. For the observer-based subcommands it records both the id and the coordinates it resolved to, as `# ground-station: <id>` and `# observer: lat,lon,alt`.
 
 ```sh
-sgp4-predict transits --tle-file sentinel.tle --observer "55.86,-4.25,40" --output-args -o passes.txt
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow --output-args -o passes.txt
 ```

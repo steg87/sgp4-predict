@@ -1,0 +1,10 @@
+groundstations:
+  glasgow:
+    location:
+      latitude: 55.86
+      longitude: -4.25
+      altitude: 10
+  svalbard:
+    location:
+      latitude: 78.23
+      longitude: 15.39

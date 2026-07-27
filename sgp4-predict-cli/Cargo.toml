@@ -22,3 +22,6 @@ humantime          = "2.1"
 chrono             = "0.4"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde              = { version = "1", features = ["derive"] }
+serde_yaml         = "0.9"
+dirs               = "6"

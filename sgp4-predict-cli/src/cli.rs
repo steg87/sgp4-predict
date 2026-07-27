@@ -49,15 +49,44 @@ pub struct CommonArgs {
     /// Prepend all CLI arguments as # comment lines to the output
     #[arg(long)]
     pub output_args: bool,
+
+    /// Path to the config file (default: ~/.sgp4-predict/config.yaml)
+    #[arg(long, value_name = "PATH", long_help = CONFIG_LONG_HELP)]
+    pub config: Option<PathBuf>,
 }
 
+const CONFIG_LONG_HELP: &str = "\
+Path to the config file.
+
+Defaults to .sgp4-predict/config.yaml under your home directory
+(~/.sgp4-predict/config.yaml on Linux and macOS,
+%USERPROFILE%\\.sgp4-predict\\config.yaml on Windows). A missing file at the
+default path is not an error; a missing --config path is.
+
+    groundstations:
+      glasgow:
+        location:
+          latitude: 55.86
+          longitude: -4.25
+          altitude: 40";
+
 /// Observer location arguments, shared by observations and transits.
+///
+/// `ObserverArgs::validate` enforces that `--gs` is present and names a station
+/// the config defines; `ObserverArgs::resolve` turns it into a ground location.
 #[derive(clap::Args)]
 pub struct ObserverArgs {
-    /// Observer as "lat_deg,lon_deg,alt_m" (e.g. "51.5,-0.1,0")
-    #[arg(long)]
-    pub observer: Option<String>,
+    /// Ground station id from the config file
+    #[arg(long, value_name = "ID", long_help = GS_LONG_HELP)]
+    pub gs: Option<String>,
 }
+
+const GS_LONG_HELP: &str = "\
+Ground station id, looked up in the `groundstations` map of the config file
+(see --config).
+
+Required. If the id is missing or unknown, the error lists the ids the config
+does define.";
 
 #[derive(clap::Args)]
 pub struct ObservationsArgs {

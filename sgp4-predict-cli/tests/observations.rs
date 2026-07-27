@@ -3,6 +3,7 @@ use std::process::Command;
 #[test]
 fn test_observations_cli() {
     let tle_file = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/sentinel-2c.tle");
+    let config_file = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/config.yaml");
 
     let status = Command::new(env!("CARGO_BIN_EXE_sgp4-predict"))
         .args([
@@ -13,8 +14,10 @@ fn test_observations_cli() {
             "1h",
             "--step",
             "60s",
-            "--observer",
-            "55.86,-4.25,10",
+            "--config",
+            config_file,
+            "--gs",
+            "glasgow",
             "--tle-file",
             tle_file,
         ])

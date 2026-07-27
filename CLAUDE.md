@@ -16,6 +16,8 @@ make coverage                  # llvm-cov summary
 make validation                # cross-validate against pypredict/skyfield reference data
 make benchmark                 # Rust vs pypredict monte carlo benchmark
 make docs                      # build cargo docs and open in a browser
+
+cargo run --bin sgp4-predict -- <subcommand>  # run the CLI (see sgp4-predict-cli/README.md)
 ```
 
 **Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.
@@ -43,7 +45,7 @@ Note: `make stubs` inside `sgp4-predict-py/` fails when `VIRTUAL_ENV` points els
 
 ## Architecture
 
-This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has two crates: `sgp4-predict/` (the Rust library) and `sgp4-predict-py/` (the Python bindings).
+This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has three crates: `sgp4-predict/` (the Rust library), `sgp4-predict-py/` (the Python bindings), and `sgp4-predict-cli/` (the `sgp4-predict` binary).
 
 ### Entry point: `Predictor`
 
@@ -92,6 +94,20 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 ### `IntervalRange` trait (`time.rs`)
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
+
+### CLI (`sgp4-predict-cli/`)
+
+The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/output-args/config), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. Errors are `anyhow`.
+
+Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag and no interactive location prompt — both were removed. TLE input still prompts on stdin when `--tle-file` is omitted.
+
+`config.rs` deserializes the YAML (`groundstations: {id: {location: {latitude, longitude, altitude}}}`; `altitude` defaults to 0, and every struct is `deny_unknown_fields` so typos error rather than being silently dropped). The path comes from `--config`, else `dirs::home_dir().join(".sgp4-predict").join("config.yaml")` — one expression covering `~/.sgp4-predict/config.yaml` and `%USERPROFILE%\.sgp4-predict\config.yaml`, so keep new path handling `PathBuf`-based rather than string-formatted. A missing file at the *default* path yields an empty config; a missing `--config` path is an error.
+
+`GroundStation` implements the library's `Observer` trait directly, so the CLI never constructs a `GroundObserver` — it hands `&GroundStation` straight to `observation_iter` / `transits_iter` / `observe_at`, which are all generic over `O: Observer`. This is the "implement the trait on your own type" path the library README documents; don't reintroduce a conversion. `GroundObserver` remains the library's built-in type for users who lack one of their own, and the Python bindings define a separate pyclass of the same name.
+
+Coordinate range checks live in `Location::validate()` and run in `Config::groundstation()`, the only way to get a `&GroundStation` — deserialization itself does not validate, so a `GroundStation` obtained by any other route (e.g. indexing `groundstations` directly) is unchecked. Validation is per-lookup, not per-load, so one malformed entry does not block using the others.
+
+`ObserverArgs` is the mixin that carries this: `validate(&Config)` enforces that `--gs` is present and names a usable station (returning the id), and `resolve(config_path)` loads the config and `remove`s the named station to return it owned — owned rather than borrowed because the `Config` is local to `resolve`. Errors list the ids the config actually defines, via `Config::ids_hint()` / `Config::groundstation()` — preserve that when touching these messages, and note that `tests/config.rs` asserts on the wording. Both commands then `.expect()` on `args.observer.gs` when writing the `--output-args` header, which is sound only because `resolve` ran first.
 
 ## Conventions
 
