@@ -200,6 +200,51 @@ fn test_completions_and_man_generate() {
     assert!(page.contains(".TH"), "not a roff man page");
 }
 
+/// A closed output pipe is normal use (`… | head`), not a failure: exit 141
+/// with nothing on stderr.
+#[test]
+fn test_closed_pipe_exits_141_quietly() {
+    use std::process::Stdio;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_sgp4-predict"))
+        .args(["state-vectors", "--tle-file", TLE_FILE])
+        .args(["--start", "2025-12-22T12:00:00Z", "--duration", "30d"])
+        .args(["--step", "1s"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run sgp4-predict");
+
+    // Close the read end immediately; the child is writing far more than one
+    // buffer's worth, so the next write fails with EPIPE.
+    drop(child.stdout.take());
+    let out = child.wait_with_output().expect("failed to collect output");
+
+    assert_eq!(out.status.code(), Some(141), "expected 128 + SIGPIPE");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("Error"), "{stderr}");
+    assert!(!stderr.contains("Broken pipe"), "{stderr}");
+}
+
+/// A failed write must not be swallowed: BufWriter's Drop flushes but discards
+/// the error, which would truncate the output and still exit 0.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_unwritable_output_is_an_error() {
+    if !std::path::Path::new("/dev/full").exists() {
+        return;
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_sgp4-predict"))
+        .args(["apsides", "--tle-file", TLE_FILE, "--out", "/dev/full"])
+        .args(["--start", "2025-12-22T12:00:00Z", "--duration", "1d"])
+        .output()
+        .expect("failed to run sgp4-predict");
+
+    assert!(!out.status.success(), "silent data loss: exited 0");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("failed to write output"), "{stderr}");
+}
+
 /// clap_complete panics on write errors, so the script must be buffered before
 /// it reaches a possibly-closed stdout.
 #[test]

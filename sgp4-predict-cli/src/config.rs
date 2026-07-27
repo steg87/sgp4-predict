@@ -170,17 +170,30 @@ impl Config {
         }
 
         let body = serde_yaml::to_string(self).context("failed to serialise config")?;
-        let temp = path.with_extension("yaml.tmp");
-        std::fs::write(&temp, format!("{SAVED_HEADER}{body}"))
-            .with_context(|| format!("failed to write {}", temp.display()))?;
-        std::fs::rename(&temp, path)
-            .with_context(|| format!("failed to replace {}", path.display()))?;
-        Ok(())
+        // Process-unique, so two concurrent runs cannot clobber each other's
+        // temporary file.
+        let temp = path.with_extension(format!("yaml.{}.tmp", std::process::id()));
+
+        let written = std::fs::write(&temp, format!("{SAVED_HEADER}{body}"))
+            .with_context(|| format!("failed to write {}", temp.display()))
+            .and_then(|()| {
+                std::fs::rename(&temp, path)
+                    .with_context(|| format!("failed to replace {}", path.display()))
+            });
+        if written.is_err() {
+            // Do not leave the partial file next to the real config.
+            let _ = std::fs::remove_file(&temp);
+        }
+        written
     }
 
-    /// Look up a ground station by the id given to `--gs`, checking its coordinates.
-    pub fn groundstation(&self, id: &str) -> anyhow::Result<&GroundStation> {
-        let station = self.groundstations.get(id).ok_or_else(|| {
+    /// Look up a ground station by id, without checking its coordinates.
+    ///
+    /// `gs remove` and `gs list` use this: a hand-edited station with an
+    /// out-of-range latitude must still be listable and removable, or the only
+    /// way to get rid of it is to edit the YAML by hand.
+    pub fn find(&self, id: &str) -> anyhow::Result<&GroundStation> {
+        self.groundstations.get(id).ok_or_else(|| {
             if self.groundstations.is_empty() {
                 anyhow::anyhow!("unknown ground station '{id}'; the config defines none")
             } else {
@@ -189,7 +202,15 @@ impl Config {
                     self.ids().join(", ")
                 )
             }
-        })?;
+        })
+    }
+
+    /// Look up a ground station by the id given to `--gs`, checking its coordinates.
+    ///
+    /// Used by the prediction commands, where propagating from a nonsensical
+    /// location would produce silently wrong results.
+    pub fn groundstation(&self, id: &str) -> anyhow::Result<&GroundStation> {
+        let station = self.find(id)?;
         station
             .location
             .validate()
@@ -421,8 +442,37 @@ groundstations:
         assert_eq!(reloaded.groundstation("svalbard").unwrap().altitude(), 0.0);
 
         // No stray temp file is left next to it.
-        assert!(!path.with_extension("yaml.tmp").exists());
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .filter(|n| n.to_string_lossy().contains("tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn test_find_skips_validation_but_groundstation_does_not() {
+        let config = parse(
+            r"
+groundstations:
+  bad:
+    location: { latitude: 91.0, longitude: 0.0 }
+",
+        )
+        .unwrap();
+        // find() must succeed so `gs remove` can delete a bad entry.
+        assert!(config.find("bad").is_ok());
+        assert!(config.groundstation("bad").is_err());
+        // Both still report an unknown id the same way.
+        assert!(
+            config
+                .find("nope")
+                .unwrap_err()
+                .to_string()
+                .contains("known ids: bad"),
+            "find lost the known-ids hint"
+        );
     }
 
     #[test]

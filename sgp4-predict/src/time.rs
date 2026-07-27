@@ -79,8 +79,10 @@ impl IntervalRange for Range<DateTime<Utc>> {
 /// including `end`. Call `include_end` to append the exact end time as a final
 /// sample.
 ///
-/// `step` is floored at 1 second, matching the detection scan steps: a zero or
-/// negative step would never advance and would iterate forever.
+/// Only a **non-positive** `step` is adjusted, to 1 second: it would never
+/// advance and would iterate forever. Any positive step is used as given —
+/// this is a sampling iterator, so sub-second steps are meaningful here even
+/// though they are not for the coarse detection scans.
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,
@@ -93,7 +95,11 @@ impl DateTimeIter {
         Self {
             interval: interval.start()..interval.end(),
             next_time: interval.start(),
-            step: step.max(MIN_POSITIVE_STEP),
+            step: if step > Duration::zero() {
+                step
+            } else {
+                MIN_POSITIVE_STEP
+            },
             pending_end: None,
         }
     }
@@ -186,6 +192,18 @@ mod tests {
                 end,
             ]
         );
+    }
+
+    #[test]
+    fn test_sub_second_step_is_used_as_given() {
+        // Sampling at 100 ms must yield 10 samples per second, not be rounded
+        // up to the 1 s floor the detection scans use.
+        let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let end = start + Duration::seconds(1);
+
+        let times: Vec<_> = DateTimeIter::new(start..end, Duration::milliseconds(100)).collect();
+        assert_eq!(times.len(), 10);
+        assert_eq!(times[1], start + Duration::milliseconds(100));
     }
 
     #[test]

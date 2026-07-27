@@ -256,9 +256,14 @@ pub struct IlluminationArgs {
     pub common: CommonArgs,
 }
 
-/// Expand a leading `~/`, so a quoted path behaves like an unquoted one.
+/// Expand a leading `~` or `~/`, so a quoted path behaves like an unquoted one.
+/// `~user/` is not supported and is left alone.
 fn parse_path(s: &str) -> Result<PathBuf, String> {
-    match s.strip_prefix("~/") {
+    let rest = match s {
+        "~" => Some(""),
+        _ => s.strip_prefix("~/"),
+    };
+    match rest {
         Some(rest) => match dirs::home_dir() {
             Some(home) => Ok(home.join(rest)),
             None => Err("cannot expand '~': no home directory".to_string()),

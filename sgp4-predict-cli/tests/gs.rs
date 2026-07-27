@@ -20,12 +20,14 @@ fn gs(config: &Path, args: &[&str], stdin: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("failed to run sgp4-predict");
-    child
+    // Ignore the write result: a command that rejects an early answer exits
+    // without draining stdin, and losing that race would panic the test with
+    // EPIPE instead of letting the assertion run.
+    let _ = child
         .stdin
         .take()
         .expect("stdin was piped")
-        .write_all(stdin.as_bytes())
-        .expect("failed to write stdin");
+        .write_all(stdin.as_bytes());
     child.wait_with_output().expect("failed to collect output")
 }
 
@@ -223,6 +225,30 @@ fn test_remove_force_skips_the_prompt() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
     assert!(!stderr.contains("Remove ground station"), "{stderr}");
+}
+
+/// A hand-edited station with out-of-range coordinates must still be
+/// removable, or the only way to get rid of it is to edit the YAML.
+#[test]
+fn test_remove_works_on_an_invalid_station() {
+    let config = fresh_config("gs_rm_invalid");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(
+        &config,
+        "groundstations:\n  bad:\n    location: { latitude: 91.0, longitude: 0.0 }\n",
+    )
+    .unwrap();
+
+    // It is listable, so it must also be removable.
+    assert!(ok(&gs(&config, &["list"], "")).contains("bad"));
+
+    let out = gs(&config, &["remove", "bad", "--force"], "");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!std::fs::read_to_string(&config).unwrap().contains("bad"));
 }
 
 #[test]

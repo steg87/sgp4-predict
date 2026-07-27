@@ -34,7 +34,13 @@ fn time(t: DateTime<Utc>) -> Cell {
 }
 
 fn num(value: f64, precision: usize) -> Cell {
-    Cell::Num(format!("{value:.precision$}"))
+    // NaN and infinity have no JSON representation; emit null rather than a
+    // bare `NaN` that would make the output unparseable.
+    if value.is_finite() {
+        Cell::Num(format!("{value:.precision$}"))
+    } else {
+        Cell::Num("null".to_string())
+    }
 }
 
 fn text(s: impl Into<String>) -> Cell {
@@ -148,11 +154,16 @@ impl<'a, W: Write> RowWriter<'a, W> {
 
     /// Emit the header even when no rows followed, so an empty result still
     /// identifies its columns. JSON stays empty — a header would not be valid.
+    ///
+    /// Flushes before returning: `BufWriter`'s `Drop` also flushes but discards
+    /// the error, which would let a full disk or a closed pipe truncate the
+    /// output while the command still exited 0.
     fn finish(&mut self) -> anyhow::Result<()> {
         if !self.header_written {
             self.write_header()?;
             self.header_written = true;
         }
+        self.w.flush().context("failed to write output")?;
         Ok(())
     }
 }
@@ -165,6 +176,15 @@ fn text_row<'v>(columns: &[Column], values: impl Iterator<Item = &'v str>) -> St
         if i > 0 {
             out.push(' ');
         }
+        // A value wider than its column would push the rest of the row past the
+        // header underline, so truncate with an ellipsis. Only ids are
+        // user-supplied and long enough for this to bite.
+        let value = if value.chars().count() > column.width {
+            let keep: String = value.chars().take(column.width.saturating_sub(1)).collect();
+            format!("{keep}…")
+        } else {
+            value.to_string()
+        };
         if column.right {
             out.push_str(&format!("{value:>width$}", width = column.width));
         } else {
@@ -458,6 +478,33 @@ mod tests {
     fn test_empty_result_still_writes_csv_header() {
         let out = render(Format::Csv, &[]);
         assert_eq!(out, "name,value_km\n");
+    }
+
+    #[test]
+    fn test_text_truncates_over_wide_cells_to_keep_alignment() {
+        let out = render(
+            Format::Text,
+            &[&[text("a-very-long-identifier"), num(1.0, 2)]],
+        );
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[1].chars().count(), lines[2].chars().count());
+        assert!(lines[2].starts_with("a-very-lo…"), "{:?}", lines[2]);
+    }
+
+    /// CSV and JSON carry the full value; only the fixed-width table truncates.
+    #[test]
+    fn test_other_formats_do_not_truncate() {
+        let row: &[Cell] = &[text("a-very-long-identifier"), num(1.0, 2)];
+        assert!(render(Format::Csv, &[row]).contains("a-very-long-identifier"));
+        assert!(render(Format::Json, &[row]).contains("a-very-long-identifier"));
+    }
+
+    #[test]
+    fn test_non_finite_numbers_render_as_json_null() {
+        let out = render(Format::Json, &[&[text("a"), num(f64::NAN, 2)]]);
+        assert_eq!(out, "{\"name\":\"a\",\"value_km\":null}\n");
+        let out = render(Format::Json, &[&[text("a"), num(f64::INFINITY, 2)]]);
+        assert!(out.contains("\"value_km\":null"), "{out}");
     }
 
     #[test]

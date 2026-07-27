@@ -139,6 +139,10 @@ pub fn warn_stale_tle(predictor: &Predictor, start: DateTime<Utc>) {
 }
 
 /// Open a buffered writer to a file, or to stdout if no path is given.
+///
+/// The buffer is flushed by `output::RowWriter` when it finishes, so a failed
+/// final write surfaces as an error rather than being dropped by `BufWriter`'s
+/// `Drop` impl.
 pub fn open_writer(out: Option<&Path>) -> anyhow::Result<Box<dyn Write>> {
     match out {
         Some(path) => Ok(Box::new(BufWriter::new(

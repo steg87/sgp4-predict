@@ -23,7 +23,7 @@ pub fn run(command: GsCommand, config_path: Option<&Path>) -> anyhow::Result<()>
     match command {
         GsCommand::Add => add(config, &path),
         GsCommand::Remove(args) => remove(config, &path, args),
-        GsCommand::List(args) => list(&config, args),
+        GsCommand::List(args) => list(&config, &path, args),
     }
 }
 
@@ -60,8 +60,9 @@ fn add(mut config: Config, path: &Path) -> anyhow::Result<()> {
 }
 
 fn remove(mut config: Config, path: &Path, args: GsRemoveArgs) -> anyhow::Result<()> {
-    // Report an unknown id with the usual "known ids" hint before prompting.
-    let station = config.groundstation(&args.id)?;
+    // find(), not groundstation(): removal must not require valid coordinates,
+    // or a hand-edited bad entry could only be deleted by editing the YAML.
+    let station = config.find(&args.id)?;
 
     if !args.force {
         eprintln!("{}", describe(&args.id, station));
@@ -82,7 +83,7 @@ fn remove(mut config: Config, path: &Path, args: GsRemoveArgs) -> anyhow::Result
     Ok(())
 }
 
-fn list(config: &Config, args: GsListArgs) -> anyhow::Result<()> {
+fn list(config: &Config, path: &Path, args: GsListArgs) -> anyhow::Result<()> {
     let stdout = std::io::stdout();
     output::write_ground_stations(
         stdout.lock(),
@@ -91,7 +92,17 @@ fn list(config: &Config, args: GsListArgs) -> anyhow::Result<()> {
             .groundstations
             .iter()
             .map(|(id, station)| (id.as_str(), station)),
-    )
+    )?;
+
+    // An empty table on a machine with no config looks like "you have no
+    // stations" when the file simply is not there yet. Say which it is.
+    if config.groundstations.is_empty() && !path.is_file() {
+        eprintln!(
+            "no config at {}; add a ground station with `sgp4-predict gs add`",
+            path.display()
+        );
+    }
+    Ok(())
 }
 
 fn describe(id: &str, station: &GroundStation) -> String {
