@@ -103,8 +103,8 @@ pub struct ObservationsArgs {
     #[command(flatten)]
     pub observer: ObserverArgs,
 
-    /// Observation step (default: 60s)
-    #[arg(long, value_parser = parse_duration, default_value = "60s")]
+    /// Observation step, e.g. "30s", "5m"
+    #[arg(long, value_parser = parse_step, default_value = "60s")]
     pub step: Duration,
 }
 
@@ -116,8 +116,14 @@ pub struct TransitsArgs {
     #[command(flatten)]
     pub observer: ObserverArgs,
 
-    /// Minimum elevation above horizon in degrees (default: 0)
-    #[arg(long = "min-elevation", default_value = "0")]
+    /// Minimum elevation above the horizon, in degrees [-90, 90]
+    #[arg(
+        long = "min-elevation",
+        value_name = "DEG",
+        value_parser = parse_elevation,
+        default_value = "0",
+        allow_negative_numbers = true
+    )]
     pub min_elevation_deg: f64,
 }
 
@@ -126,8 +132,8 @@ pub struct StateVectorsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
 
-    /// Propagation step (default: 60s)
-    #[arg(long, value_parser = parse_duration, default_value = "60s")]
+    /// Propagation step, e.g. "30s", "5m"
+    #[arg(long, value_parser = parse_step, default_value = "60s")]
     pub step: Duration,
 
     /// Coordinate frame for output (default: teme)
@@ -161,4 +167,22 @@ fn parse_start_time(s: &str) -> Result<DateTime<Utc>, String> {
 
 fn parse_duration(s: &str) -> Result<Duration, String> {
     humantime::parse_duration(s).map_err(|e| e.to_string())
+}
+
+/// A step of zero never advances the scan, so reject it rather than hang.
+fn parse_step(s: &str) -> Result<Duration, String> {
+    let step = parse_duration(s)?;
+    if step.is_zero() {
+        return Err("step must be greater than zero".to_string());
+    }
+    Ok(step)
+}
+
+/// Elevation angles outside the horizon-to-zenith range can never be crossed.
+fn parse_elevation(s: &str) -> Result<f64, String> {
+    let deg: f64 = s.parse().map_err(|_| format!("invalid number: {s}"))?;
+    if !(-90.0..=90.0).contains(&deg) {
+        return Err(format!("elevation must be in [-90, 90] degrees, got {deg}"));
+    }
+    Ok(deg)
 }
