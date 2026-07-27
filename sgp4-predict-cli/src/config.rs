@@ -1,7 +1,7 @@
 //! Config file (`~/.sgp4-predict/config.yaml` by default) holding named ground stations.
 
 use anyhow::Context as _;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sgp4_predict::{Degrees, Observer};
 use std::{
     collections::BTreeMap,
@@ -12,7 +12,7 @@ use std::{
 const CONFIG_DIR: &str = ".sgp4-predict";
 const CONFIG_FILE: &str = "config.yaml";
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Ground stations keyed by the id passed to `--gs`.
@@ -20,13 +20,13 @@ pub struct Config {
     pub groundstations: BTreeMap<String, GroundStation>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GroundStation {
     pub location: Location,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Location {
     pub latitude: f64,
@@ -56,17 +56,29 @@ groundstations:
 
 /// Load the config from `path`, or from [`default_path`] when `path` is `None`.
 ///
-/// An explicit `--config` path that does not exist is an error. A missing config
-/// at the default path is not — it is seeded with [`TEMPLATE`] and read back.
+/// A missing file at the *default* path is seeded with [`TEMPLATE`] — you did
+/// not name it, so it cannot be a typo. A missing `--config` path is an error:
+/// creating it would let a mistyped path succeed against a fresh empty config
+/// while the real stations sit unread somewhere else. Use `gs add` to create
+/// one deliberately.
 pub fn load(path: Option<&Path>) -> anyhow::Result<Config> {
     match path {
-        Some(p) => read(p),
+        Some(p) if p.is_file() => read(p),
+        Some(p) => Err(missing_config_error(p)),
         None => match default_path() {
             Some(p) if p.is_file() => read(&p),
             Some(p) => create_default(&p),
             None => Ok(Config::default()),
         },
     }
+}
+
+fn missing_config_error(path: &Path) -> anyhow::Error {
+    anyhow::anyhow!(
+        "config file {} does not exist\n       create one with `sgp4-predict gs add --config {}`",
+        path.display(),
+        path.display()
+    )
 }
 
 fn read(path: &Path) -> anyhow::Result<Config> {
@@ -104,7 +116,68 @@ fn write_template(path: &Path) -> anyhow::Result<()> {
     std::fs::write(path, TEMPLATE).with_context(|| format!("failed to write {}", path.display()))
 }
 
+/// Header re-emitted on every save, since serialising drops YAML comments.
+const SAVED_HEADER: &str = "\
+# sgp4-predict ground stations. Select one with `--gs <id>`.
+# Managed by `sgp4-predict gs add|remove|list`; hand edits are preserved,
+# but comments are not.
+";
+
+/// Whether a `gs` subcommand may create the config it was pointed at.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Missing {
+    /// `gs add` — a missing file is the empty starting point to write to.
+    Create,
+    /// `gs list` / `gs remove` — a missing file means the wrong path, not an
+    /// empty station list, so say so rather than printing nothing.
+    Reject,
+}
+
+/// Open the config for editing by the `gs` subcommands, with the path to save to.
+///
+/// Unlike [`load`], a missing file is never seeded with the example station:
+/// `gs add` starts from empty. Parse errors always fail, so a broken config is
+/// not silently overwritten.
+pub fn open_for_edit(path: Option<&Path>, missing: Missing) -> anyhow::Result<(Config, PathBuf)> {
+    match path {
+        Some(p) if p.is_file() => Ok((read(p)?, p.to_path_buf())),
+        // An explicit path that does not exist: only `gs add` may create it.
+        Some(p) if missing == Missing::Create => Ok((Config::default(), p.to_path_buf())),
+        Some(p) => Err(missing_config_error(p)),
+        None => {
+            let p = default_path().context("cannot locate a home directory for the config file")?;
+            // The default path cannot be mistyped, so a missing file is just
+            // an empty station list rather than an error.
+            let config = if p.is_file() {
+                read(&p)?
+            } else {
+                Config::default()
+            };
+            Ok((config, p))
+        }
+    }
+}
+
 impl Config {
+    /// Write the config back, creating parent directories as needed.
+    ///
+    /// Writes to a sibling temporary file and renames, so an interrupted or
+    /// failed write cannot truncate an existing config.
+    pub fn save(&self, path: &Path) -> anyhow::Result<()> {
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)
+                .with_context(|| format!("failed to create {}", dir.display()))?;
+        }
+
+        let body = serde_yaml::to_string(self).context("failed to serialise config")?;
+        let temp = path.with_extension("yaml.tmp");
+        std::fs::write(&temp, format!("{SAVED_HEADER}{body}"))
+            .with_context(|| format!("failed to write {}", temp.display()))?;
+        std::fs::rename(&temp, path)
+            .with_context(|| format!("failed to replace {}", path.display()))?;
+        Ok(())
+    }
+
     /// Look up a ground station by the id given to `--gs`, checking its coordinates.
     pub fn groundstation(&self, id: &str) -> anyhow::Result<&GroundStation> {
         let station = self.groundstations.get(id).ok_or_else(|| {
@@ -156,7 +229,7 @@ impl Observer for GroundStation {
 }
 
 impl Location {
-    fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(
             (-90.0..=90.0).contains(&self.latitude),
             "latitude must be in [-90, 90], got {}",
@@ -293,8 +366,63 @@ groundstations:
 
     #[test]
     fn test_explicit_missing_path_is_an_error() {
-        // Only the default path is seeded; --config must point at a real file.
-        assert!(load(Some(Path::new("/nonexistent/sgp4-predict.yaml"))).is_err());
+        // Creating it would let a typo'd --config succeed against a fresh
+        // empty config while the real stations sit unread elsewhere.
+        let err = load(Some(Path::new("/nonexistent/sgp4-predict.yaml")))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("does not exist"), "{err}");
+        assert!(err.contains("gs add"), "{err}");
+        assert!(!Path::new("/nonexistent/sgp4-predict.yaml").exists());
+    }
+
+    #[test]
+    fn test_open_for_edit_creates_only_for_add() {
+        let dir = std::env::temp_dir().join("sgp4-predict-open-edit-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("nested").join("stations.yaml");
+
+        // Reject: a missing explicit path is the wrong path, not an empty list.
+        assert!(open_for_edit(Some(&path), Missing::Reject).is_err());
+
+        // Create: editing starts from empty, not from the example station, and
+        // touches nothing on disk until save.
+        let (config, resolved) = open_for_edit(Some(&path), Missing::Create).unwrap();
+        assert!(config.groundstations.is_empty());
+        assert_eq!(resolved, path);
+        assert!(!path.exists());
+
+        config.save(&path).unwrap();
+        assert!(path.is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_save_round_trips() {
+        let dir = std::env::temp_dir().join("sgp4-predict-save-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("stations.yaml");
+
+        let original = parse(
+            r"
+groundstations:
+  glasgow:
+    location: { latitude: 55.86, longitude: -4.25, altitude: 40 }
+  svalbard:
+    location: { latitude: 78.23, longitude: 15.39 }
+",
+        )
+        .unwrap();
+        original.save(&path).unwrap();
+
+        let reloaded = read(&path).unwrap();
+        assert_eq!(reloaded.ids(), ["glasgow", "svalbard"]);
+        assert_eq!(reloaded.groundstation("glasgow").unwrap().altitude(), 40.0);
+        assert_eq!(reloaded.groundstation("svalbard").unwrap().altitude(), 0.0);
+
+        // No stray temp file is left next to it.
+        assert!(!path.with_extension("yaml.tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

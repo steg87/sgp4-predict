@@ -82,6 +82,43 @@ groundstations:
 
 Unrecognised fields are rejected, so typos surface as errors rather than being silently ignored.
 
+### Managing stations
+
+The file can be edited by hand, or through `sgp4-predict gs`. All three operate on `--config`, or the default path when it is omitted.
+
+| Command                          | Description                                        |
+|----------------------------------|----------------------------------------------------|
+| `gs add`                         | Add a station, prompting for each field            |
+| `gs list` (`gs ls`)              | List the configured stations                       |
+| `gs remove <id>` (`gs rm <id>`)  | Remove a station, after confirmation               |
+
+`gs add` prompts field by field. Altitude defaults to 0 if left blank:
+
+```
+$ sgp4-predict gs add
+Ground station id: svalbard
+Latitude (degrees): 78.23
+Longitude (degrees): 15.39
+Altitude (metres) [0]:
+added ground station 'svalbard' to /home/you/.sgp4-predict/config.yaml
+```
+
+`gs list` honours `--format`, so the configured stations can be scripted against:
+
+```sh
+sgp4-predict gs list --format json | jq -r 'select(.latitude > 70) | .id'
+```
+
+`gs remove` prints the station and asks before deleting. `-f` / `--force` skips the prompt; anything other than `y`/`yes` — including end-of-input — leaves the config untouched:
+
+```
+$ sgp4-predict gs rm svalbard
+svalbard: latitude 78.23, longitude 15.39, altitude 0 m
+Remove ground station 'svalbard'? [y/N]
+```
+
+Two things to know about the writing path. Saving re-serialises the file, so **YAML comments are not preserved** — hand-written notes are lost the next time `gs add` or `gs remove` runs. And a config that fails to parse is never overwritten: fix it by hand first.
+
 ### Config file location
 
 `--config <path>` selects a config file explicitly. Otherwise the tool looks in `.sgp4-predict/config.yaml` under your home directory:
@@ -91,7 +128,15 @@ Unrecognised fields are rejected, so typos surface as errors rather than being s
 | Linux / macOS | `~/.sgp4-predict/config.yaml`                |
 | Windows       | `%USERPROFILE%\.sgp4-predict\config.yaml`    |
 
-A missing file at the default path is not an error — it just means no ground stations are defined. A `--config` path that does not exist *is* an error.
+On first run the *default* path is created and seeded with an example `glasgow` station. A `--config` path that does not exist is an error, since creating it would let a mistyped path quietly succeed against an empty config while your real stations sit unread:
+
+```
+$ sgp4-predict transits --config ~/stations.yml --gs svalbard
+Error: config file /home/you/stations.yml does not exist
+       create one with `sgp4-predict gs add --config /home/you/stations.yml`
+```
+
+`gs add` is the one command that will create a config, including any missing parent directories — that is what it is for.
 
 ## Time range
 

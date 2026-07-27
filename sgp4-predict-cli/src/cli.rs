@@ -52,10 +52,48 @@ pub enum Command {
     Apsides(ApsidesArgs),
     /// Find illumination windows (sunlit/eclipse) over a time interval
     Illumination(IlluminationArgs),
+    /// Manage the ground stations in the config file
+    Gs(GsArgs),
     /// Generate a shell completion script on stdout
     Completions(CompletionsArgs),
     /// Generate a roff man page on stdout
     Man,
+}
+
+#[derive(clap::Args)]
+pub struct GsArgs {
+    #[command(subcommand)]
+    pub command: GsCommand,
+}
+
+#[derive(Subcommand)]
+pub enum GsCommand {
+    /// Add a ground station, prompting for each field
+    Add,
+    /// Remove a ground station
+    #[command(alias = "rm")]
+    Remove(GsRemoveArgs),
+    /// List the ground stations in the config file
+    #[command(alias = "ls")]
+    List(GsListArgs),
+}
+
+#[derive(clap::Args)]
+pub struct GsRemoveArgs {
+    /// Ground station id to remove
+    #[arg(value_name = "ID")]
+    pub id: String,
+
+    /// Remove without asking for confirmation
+    #[arg(short, long)]
+    pub force: bool,
+}
+
+#[derive(clap::Args)]
+pub struct GsListArgs {
+    /// Output format
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
 }
 
 #[derive(clap::Args)]

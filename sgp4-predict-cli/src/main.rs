@@ -37,6 +37,7 @@ fn run(args: cli::Args) -> anyhow::Result<()> {
         cli::Command::StateVectors(a) => commands::state_vectors::run(a),
         cli::Command::Apsides(a) => commands::apsides::run(a),
         cli::Command::Illumination(a) => commands::illumination::run(a),
+        cli::Command::Gs(a) => commands::gs::run(a.command, config_path),
         cli::Command::Completions(a) => {
             // clap_complete panics on write errors instead of returning them,
             // so render into memory and do the writing here.

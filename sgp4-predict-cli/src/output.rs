@@ -352,6 +352,31 @@ where
     out.finish()
 }
 
+const GROUND_STATION_COLUMNS: &[Column] = &[
+    left("id", "id", 16),
+    right("latitude [deg]", "latitude", 14),
+    right("longitude [deg]", "longitude", 15),
+    right("altitude [m]", "altitude", 12),
+];
+
+/// Render the config's ground stations, in id order.
+pub fn write_ground_stations<'a, W, I>(w: W, format: Format, stations: I) -> anyhow::Result<()>
+where
+    W: Write,
+    I: Iterator<Item = (&'a str, &'a crate::config::GroundStation)>,
+{
+    let mut out = RowWriter::new(w, format, GROUND_STATION_COLUMNS);
+    for (id, station) in stations {
+        out.write_row(&[
+            text(id),
+            num(station.location.latitude, 4),
+            num(station.location.longitude, 4),
+            num(station.location.altitude, 1),
+        ])?;
+    }
+    out.finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

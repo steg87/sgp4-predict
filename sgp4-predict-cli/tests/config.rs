@@ -75,16 +75,18 @@ fn test_unknown_gs_id_lists_known_ids() {
 }
 
 #[test]
-fn test_missing_explicit_config_errors() {
-    let out = transits(&[
-        "--config",
-        "/nonexistent/sgp4-predict.yaml",
-        "--gs",
-        "glasgow",
-    ]);
+fn test_missing_explicit_config_errors_without_creating_it() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("missing_explicit_config");
+    let _ = std::fs::remove_dir_all(&dir);
+    let path = dir.join("nested").join("stations.yaml");
+
+    let out = transits(&["--config", path.to_str().unwrap(), "--gs", "glasgow"]);
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("failed to read config file"), "{stderr}");
+    assert!(stderr.contains("does not exist"), "{stderr}");
+    // The message must point at the way to create one deliberately.
+    assert!(stderr.contains("gs add"), "{stderr}");
+    assert!(!path.exists(), "a read must not create the config");
 }
 
 #[test]
