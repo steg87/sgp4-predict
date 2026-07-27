@@ -13,11 +13,11 @@ cargo install sgp4-predict-cli
 
 ## TLE input
 
-All subcommands accept a TLE via `--tle-file`. If omitted, the tool prompts interactively on stdin.
+All subcommands accept a TLE via `--tle-file`. If omitted, the TLE is read from stdin.
 
 Fresh TLEs can be obtained from [CelesTrak](https://celestrak.org). SGP4 accuracy degrades with TLE age — for LEO satellites, treat TLEs older than 3–7 days with caution. The tool will warn if the TLE epoch is stale.
 
-**File** (2-line or 3-line format):
+Either input takes the same 2-line or 3-line text. With three lines the first is the satellite name; with two, the name is derived from the NORAD id in line 1 (`NORAD-60989`). Blank lines and surrounding whitespace are ignored.
 
 ```
 SENTINEL-2C
@@ -25,12 +25,23 @@ SENTINEL-2C
 2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740
 ```
 
-**Interactive prompt:**
+**From a file:**
+
+```sh
+sgp4-predict transits --tle-file sentinel.tle --gs glasgow
+```
+
+**Piped in** — anything that writes a TLE to stdout works, so TLEs can be fetched and predicted in one step:
+
+```sh
+cat sentinel.tle | sgp4-predict transits --gs glasgow
+curl -s 'https://celestrak.org/NORAD/elements/gp.php?CATNR=60989' | sgp4-predict transits --gs glasgow
+```
+
+**Typed in** — with no `--tle-file` and no pipe, the tool waits on stdin and prints a hint. Paste the TLE and press Ctrl-D (Ctrl-Z then Enter on Windows):
 
 ```
-Satellite name (leave blank to skip): SENTINEL-2C
-TLE line 1: 1 60989U ...
-TLE line 2: 2 60989 ...
+Reading TLE from stdin (optional name line + line 1 + line 2); Ctrl-D when done:
 ```
 
 ## Ground stations

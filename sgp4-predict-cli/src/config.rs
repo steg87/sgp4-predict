@@ -101,8 +101,7 @@ fn write_template(path: &Path) -> anyhow::Result<()> {
         std::fs::create_dir_all(dir)
             .with_context(|| format!("failed to create {}", dir.display()))?;
     }
-    std::fs::write(path, TEMPLATE)
-        .with_context(|| format!("failed to write {}", path.display()))
+    std::fs::write(path, TEMPLATE).with_context(|| format!("failed to write {}", path.display()))
 }
 
 impl Config {

@@ -38,8 +38,8 @@ pub struct CommonArgs {
     #[arg(long, value_parser = parse_duration, default_value = "1d")]
     pub duration: Duration,
 
-    /// Path to TLE file (optional name line + line1 + line2)
-    #[arg(long)]
+    /// Path to TLE file (optional name line + line1 + line2); read from stdin if omitted
+    #[arg(long, long_help = TLE_FILE_LONG_HELP)]
     pub tle_file: Option<PathBuf>,
 
     /// Output file path (default: stdout)
@@ -54,6 +54,13 @@ pub struct CommonArgs {
     #[arg(long, value_name = "PATH", long_help = CONFIG_LONG_HELP)]
     pub config: Option<PathBuf>,
 }
+
+const TLE_FILE_LONG_HELP: &str = "\
+Path to a TLE file: an optional name line followed by line 1 and line 2.
+
+If omitted, the TLE is read from stdin, so it can be piped in:
+
+    cat sentinel.tle | sgp4-predict transits --gs glasgow";
 
 const CONFIG_LONG_HELP: &str = "\
 Path to the config file.

@@ -25,11 +25,11 @@ pub fn resolve_interval(
     Ok((start, start..start + dur))
 }
 
-/// Load a TLE from file or prompt interactively.
+/// Load a TLE from `--tle-file`, or from stdin when the flag is omitted.
 pub fn load_tle(common: &CommonArgs) -> anyhow::Result<Tle> {
     match &common.tle_file {
         Some(p) => tle::parse_tle_file(p),
-        None => tle::prompt_tle(),
+        None => tle::read_tle_stdin(),
     }
 }
 

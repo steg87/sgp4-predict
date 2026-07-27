@@ -99,7 +99,9 @@ Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Trans
 
 The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/output-args/config), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. Errors are `anyhow`.
 
-Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag and no interactive location prompt — both were removed. TLE input still prompts on stdin when `--tle-file` is omitted.
+Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag — it was removed.
+
+Neither input prompts line-by-line any more; both were removed in favour of non-interactive paths. `--tle-file` reads a file, and omitting it reads *all* of stdin so a TLE can be piped in. `tle.rs` funnels both through one `parse_tle(&str)`, so file and pipe accept exactly the same 2-or-3-line text — keep it that way rather than adding a parser per source. When stdin is a terminal, `read_tle_stdin` prints a Ctrl-D hint to **stderr**, not stdout, so it cannot contaminate piped output. Note that the observer-taking commands resolve `--gs` *before* calling `load_tle`, so a bad station id fails immediately instead of after the user has typed a TLE.
 
 `config.rs` deserializes the YAML (`groundstations: {id: {location: {latitude, longitude, altitude}}}`; `altitude` defaults to 0, and every struct is `deny_unknown_fields` so typos error rather than being silently dropped). The path comes from `--config`, else `dirs::home_dir().join(".sgp4-predict").join("config.yaml")` — one expression covering `~/.sgp4-predict/config.yaml` and `%USERPROFILE%\.sgp4-predict\config.yaml`, so keep new path handling `PathBuf`-based rather than string-formatted. A missing file at the *default* path yields an empty config; a missing `--config` path is an error.
 
