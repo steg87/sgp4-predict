@@ -6,23 +6,117 @@ pub mod transits;
 
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
-use sgp4_predict::Predictor;
 use std::{
     io::{BufWriter, Write},
     ops::Range,
     path::Path,
 };
 
-use crate::{cli::CommonArgs, tle};
-use sgp4_predict::{Observer, Tle};
+use crate::{
+    cli::{CommonArgs, Format},
+    config, tle,
+};
+use sgp4_predict::{Observer, Predictor, Tle};
 
-/// Resolve the start time and interval from common args.
-pub fn resolve_interval(
-    common: &CommonArgs,
-) -> anyhow::Result<(DateTime<Utc>, Range<DateTime<Utc>>)> {
+/// Everything the subcommands share: the resolved interval, the TLE and the
+/// predictor built from it, and the writer to emit rows to.
+///
+/// Built by [`prepare`] so the five subcommands do not each repeat the
+/// resolve-interval → load-TLE → build-predictor → open-writer sequence.
+pub struct Context {
+    pub start: DateTime<Utc>,
+    pub interval: Range<DateTime<Utc>>,
+    pub tle: Tle,
+    pub predictor: Predictor,
+    pub writer: Box<dyn Write>,
+    pub format: Format,
+}
+
+impl Context {
+    /// Write the `--output-args` header, if requested.
+    ///
+    /// `extra` carries the subcommand's own arguments; the shared ones are
+    /// added here so every subcommand reports them identically.
+    pub fn write_args_header(
+        &mut self,
+        command: &str,
+        common: &CommonArgs,
+        config_path: Option<&Path>,
+        extra: &[(&str, &str)],
+    ) -> anyhow::Result<()> {
+        if !common.output_args {
+            return Ok(());
+        }
+
+        let start = self.start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let duration = humantime::format_duration(common.duration).to_string();
+        let format = crate::cli::value_name(self.format);
+        let tle_source = common
+            .tle_file
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "stdin".to_string());
+
+        let mut pairs: Vec<(&str, &str)> = vec![
+            ("command", command),
+            ("satellite", &self.tle.satellite_name),
+            ("tle-line1", &self.tle.line_1),
+            ("tle-line2", &self.tle.line_2),
+            ("tle-source", &tle_source),
+            ("start", &start),
+            ("duration", &duration),
+        ];
+
+        let config_display = config_path.map(|p| p.display().to_string());
+        if let Some(path) = &config_display {
+            pairs.push(("config", path));
+        }
+        pairs.extend_from_slice(extra);
+        pairs.push(("format", &format));
+
+        let out_display = common.out.as_ref().map(|p| p.display().to_string());
+        if let Some(path) = &out_display {
+            pairs.push(("out", path));
+        }
+
+        for (key, value) in &pairs {
+            writeln!(self.writer, "# {key}: {value}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Resolve the shared inputs for a subcommand.
+///
+/// Ordering matters: the TLE is loaded before the writer is opened so a bad
+/// TLE does not leave an empty `--out` file behind. Callers that take an
+/// observer resolve it before calling this, so an unknown `--gs` fails before
+/// the user is asked for a TLE on stdin.
+pub fn prepare(common: &CommonArgs) -> anyhow::Result<Context> {
+    // `#` comment lines are not valid JSON and break strict CSV readers.
+    // Checked before anything is opened so no partial --out file is left.
+    anyhow::ensure!(
+        !common.output_args || common.format == Format::Text,
+        "--output-args is only supported with --format text"
+    );
+
     let start = common.start.unwrap_or_else(Utc::now);
     let dur = chrono::Duration::from_std(common.duration).context("duration out of range")?;
-    Ok((start, start..start + dur))
+    let interval = start..start + dur;
+
+    let tle = load_tle(common.tle_file.as_deref())?;
+    let predictor = Predictor::from_tle(&tle)?;
+    warn_stale_tle(&predictor, start);
+    let writer = open_writer(common.out.as_deref())?;
+
+    Ok(Context {
+        start,
+        interval,
+        tle,
+        predictor,
+        writer,
+        format: common.format,
+    })
 }
 
 /// Load a TLE from `--tle-file`, or from stdin when the flag is omitted.
@@ -64,10 +158,9 @@ pub fn format_observer_str(obs: &impl Observer) -> String {
     )
 }
 
-/// Write CLI argument pairs as `# key: value` comment lines.
-pub fn write_args_header(w: &mut dyn Write, pairs: &[(&str, &str)]) -> anyhow::Result<()> {
-    for (key, value) in pairs {
-        writeln!(w, "# {key}: {value}")?;
-    }
-    Ok(())
+/// Resolve the config path actually in use, for `--output-args`.
+pub fn effective_config_path(explicit: Option<&Path>) -> Option<std::path::PathBuf> {
+    explicit
+        .map(Path::to_path_buf)
+        .or_else(config::default_path)
 }

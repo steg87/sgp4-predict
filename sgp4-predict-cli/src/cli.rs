@@ -73,9 +73,24 @@ pub struct CommonArgs {
     #[arg(short = 'o', long, value_name = "PATH")]
     pub out: Option<PathBuf>,
 
+    /// Output format
+    #[arg(long, value_enum, default_value_t = Format::Text)]
+    pub format: Format,
+
     /// Prepend the resolved input arguments as # comment lines to the output
     #[arg(long)]
     pub output_args: bool,
+}
+
+/// Tabular output format.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Format {
+    /// Fixed-width columns with a header, for reading
+    Text,
+    /// One JSON object per row, newline-delimited
+    Json,
+    /// RFC 4180 comma-separated values with a header row
+    Csv,
 }
 
 const TLE_FILE_LONG_HELP: &str = "\
@@ -168,6 +183,16 @@ pub struct StateVectorsArgs {
 pub enum Frame {
     Teme,
     Ecef,
+}
+
+/// The CLI token that selects `value`, for `--output-args` headers.
+/// Derived from the `ValueEnum` so it cannot drift from what clap accepts.
+pub fn value_name(value: impl ValueEnum) -> String {
+    value
+        .to_possible_value()
+        .expect("no variant is skipped")
+        .get_name()
+        .to_string()
 }
 
 #[derive(clap::Args)]
