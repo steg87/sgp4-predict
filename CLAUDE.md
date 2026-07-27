@@ -95,6 +95,8 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
 
+`DateTimeIter` floors its step at `MIN_POSITIVE_STEP` (1 s). A zero step never advances `next_time` and would yield the same instant forever — this previously hung `prediction_iter`/`observation_iter`. The detection paths already clamped; this brings the stepping iterator in line. Keep the two consistent.
+
 ### CLI (`sgp4-predict-cli/`)
 
 The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/output-args/config), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. Errors are `anyhow`.

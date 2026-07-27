@@ -3,6 +3,8 @@
 use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 
+use crate::detect::MIN_POSITIVE_STEP;
+
 /// A half-open time interval `[start, end)`.
 ///
 /// Implemented for `Range<DateTime<Utc>>` and for [`Transit`] and
@@ -76,6 +78,9 @@ impl IntervalRange for Range<DateTime<Utc>> {
 /// Yields times `[start, start + step, start + 2·step, …)` up to but not
 /// including `end`. Call `include_end` to append the exact end time as a final
 /// sample.
+///
+/// `step` is floored at 1 second, matching the detection scan steps: a zero or
+/// negative step would never advance and would iterate forever.
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,
@@ -88,7 +93,7 @@ impl DateTimeIter {
         Self {
             interval: interval.start()..interval.end(),
             next_time: interval.start(),
-            step,
+            step: step.max(MIN_POSITIVE_STEP),
             pending_end: None,
         }
     }
@@ -181,5 +186,26 @@ mod tests {
                 end,
             ]
         );
+    }
+
+    #[test]
+    fn test_non_positive_step_terminates() {
+        // A zero step never advances next_time and would iterate forever;
+        // it is floored to MIN_POSITIVE_STEP like the detection scan steps.
+        let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let end = start + Duration::seconds(3);
+
+        for step in [Duration::zero(), Duration::seconds(-10)] {
+            let times: Vec<_> = DateTimeIter::new(start..end, step).collect();
+            assert_eq!(
+                times,
+                vec![
+                    start,
+                    start + Duration::seconds(1),
+                    start + Duration::seconds(2)
+                ],
+                "step {step} did not fall back to 1s"
+            );
+        }
     }
 }
