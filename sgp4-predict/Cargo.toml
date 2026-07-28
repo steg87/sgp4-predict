@@ -1,6 +1,6 @@
 [package]
 name = "sgp4-predict"
-version = "0.0.1-rc.1"       # never released; see docs/RELEASING.md
+version = "0.1.0"       # never released; see docs/RELEASING.md
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
