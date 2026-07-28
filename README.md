@@ -4,7 +4,7 @@
 [![Coverage](https://github.com/steg87/sgp4-predict/actions/workflows/coverage.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/coverage.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)](LICENSE-MIT)
 
-A Rust workspace for SGP4 satellite pass prediction, from low-level propagation to a ready-to-use command-line tool.
+A Rust workspace for SGP4 satellite pass prediction, from low-level propagation to a ready-to-use command-line tool. Given a TLE or OMM it finds ground-station passes, apogee and perigee events, and sunlit and eclipse windows over any time range.
 
 ## Crates
 

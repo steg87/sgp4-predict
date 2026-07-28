@@ -31,9 +31,7 @@ use crate::{
 
 /// Tuning knobs for [`IlluminationIter`]'s coarse scan and window walk.
 ///
-/// The defaults reproduce the fixed behavior `IlluminationIter` used before
-/// these were configurable: a 60-second fixed step, a 30-second walk step,
-/// and a 1-hour cap on window duration. Pass a customized value to
+/// Pass a customised value to
 /// [`Predictor::illumination_iter_with_opts`](crate::Predictor::illumination_iter_with_opts).
 #[derive(Debug, Clone, Copy)]
 pub struct IlluminationIterOpts {

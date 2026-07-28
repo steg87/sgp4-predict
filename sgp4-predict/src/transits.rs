@@ -117,10 +117,7 @@ impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
 
 /// Tuning knobs for [`TransitIter`]'s coarse scan and window walk.
 ///
-/// The defaults reproduce the fixed behavior `TransitIter` used before these
-/// were configurable: a [`ThresholdStep`] between 10 seconds and 10 minutes,
-/// a 30-second walk step, and a 1-hour transit duration cap. Pass a
-/// customized value to
+/// Pass a customised value to
 /// [`Predictor::transits_iter_with_opts`](crate::Predictor::transits_iter_with_opts).
 #[derive(Debug, Clone, Copy)]
 pub struct TransitIterOpts {
@@ -160,8 +157,7 @@ impl Default for TransitIterOpts {
 
 /// Tuning knobs for [`Predictor::max_elevation`]'s scan.
 ///
-/// The default reproduces the fixed behavior `max_elevation` used before
-/// this was configurable: a 10-second fixed step. Pass a customized value to
+/// Pass a customised value to
 /// [`Predictor::max_elevation_with_opts`](crate::Predictor::max_elevation_with_opts).
 #[derive(Debug, Clone, Copy)]
 pub struct MaxElevationOpts {

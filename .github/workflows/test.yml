@@ -21,6 +21,8 @@ jobs:
         with:
           enable-cache: false
       - run: cargo test --all-targets --all-features
+      # --all-targets skips doctests, which is where the README examples live.
+      - run: cargo test --doc --all-features
 
   fmt:
     name: Format

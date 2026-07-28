@@ -12,6 +12,7 @@ init:
 .PHONY: test
 test:
 	cargo test --all-targets --all-features
+	cargo test --doc --all-features   # --all-targets skips doctests
 
 .PHONY: lint
 lint:

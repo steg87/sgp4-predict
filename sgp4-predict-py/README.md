@@ -3,9 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
 [![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](../LICENSE-MIT)
 
-Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library, providing typed satellite pass prediction from Two-Line Element (TLE) data.
-
-## Installation
+Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library:
+satellite pass prediction from TLE or OMM data, with type stubs and native `datetime` support.
 
 ```sh
 pip install sgp4-predict
@@ -15,290 +14,139 @@ Requires Python 3.10+.
 
 ## Quick start
 
+Find the passes over a ground station and sample each one:
+
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import Tle, GroundObserver, Predictor, Interval
+from sgp4_predict import GroundObserver, Interval, Predictor, Tle
 
-# Sentinel-2C TLE
 tle = Tle(
     "SENTINEL-2C",
     "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",
     "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740",
 )
-
 predictor = Predictor.from_tle(tle)
 
-# Ground station: Glasgow
 glasgow = GroundObserver(latitude_deg=55.86, longitude_deg=-4.25, altitude=40.0)
 
-# Find passes over the next 24 hours
-window = Interval(
-    start=datetime(2025, 12, 22, tzinfo=timezone.utc),
-    end=datetime(2025, 12, 23, tzinfo=timezone.utc),
-)
+start = datetime(2025, 12, 22, tzinfo=timezone.utc)
+window = Interval(start=start, end=start + timedelta(days=1))
 
 for transit in predictor.transits_iter(glasgow, window, min_elevation_deg=5.0):
-    print(f"Pass: {transit.start} → {transit.end} ({transit.duration_seconds:.0f}s)")
+    print(f"AoS {transit.start} → LoS {transit.end} ({transit.duration_seconds:.0f}s)")
 
-    # Iterate observations over just this transit — pass it directly as an interval
-    step = timedelta(seconds=10)
-    for t, obs in predictor.observation_iter(glasgow, transit, step):
-        print(f"  {t}: az={obs.azimuth_deg:.1f}° el={obs.elevation_deg:.1f}°")
+    # A Transit is itself an interval, so it can be passed straight back in.
+    for t, obs in predictor.observation_iter(glasgow, transit, timedelta(seconds=10)):
+        print(f"  {t}  az={obs.azimuth_deg:.1f}°  el={obs.elevation_deg:.1f}°")
 ```
 
-## Core concepts
+## `Predictor`
 
-### TLE data
-
-TLEs are the standard input format for SGP4 propagation. Fresh TLEs can be obtained from sources such as [CelesTrak](https://celestrak.org). SGP4 accuracy degrades with TLE age — for LEO satellites, TLEs older than 3–7 days should be treated with caution. Use `predictor.tle_age_seconds(now)` to check.
-
-### Units
-
-All values are in SI units unless noted otherwise:
-
-| Quantity                  | Unit                                        |
-| ------------------------- | ------------------------------------------- |
-| Position                  | metres                                      |
-| Velocity                  | m/s                                         |
-| Range                     | metres                                      |
-| Range rate                | m/s (positive = receding)                   |
-| Azimuth / elevation       | radians (use `_deg` properties for degrees) |
-| Altitude (apsis)          | metres above WGS-84 equatorial radius       |
-| `GroundObserver` lat/lon input  | degrees                                     |
-| `GroundObserver` altitude input | metres                                      |
-
-## API reference
-
-### `Interval` and `IntervalRange`
-
-All iterator methods and `max_elevation` accept any object that exposes `.start` and `.end` `datetime` properties — the `IntervalRange` protocol. `Transit` and `Illumination` satisfy this protocol automatically, so they can be passed directly wherever an interval is expected.
-
-`Interval` is a concrete helper for constructing a plain datetime interval:
+Construct from a `Tle`, or from `Elements` parsed from OMM JSON:
 
 ```python
-from sgp4_predict import Interval, IntervalRange
+from sgp4_predict import Elements
 
-window = Interval(start=datetime(..., tzinfo=timezone.utc), end=datetime(..., tzinfo=timezone.utc))
+predictor = Predictor.from_tle(tle)                  # raises ValueError if malformed
+predictor = Predictor(Elements.from_json(omm_json))  # CCSDS OMM (Celestrak, Space-Track)
 
-# isinstance check works at runtime
-assert isinstance(window, IntervalRange)   # True
-assert isinstance(transit, IntervalRange)  # True — Transit satisfies the protocol
+predictor.epoch                  # datetime (UTC) — element epoch
+predictor.tle_age_seconds(now)   # float — positive means the epoch is in the past
 ```
 
-### `Tle`
+SGP4 accuracy degrades with element age; treat LEO TLEs older than 3–7 days with caution. Fresh
+TLEs are available from [CelesTrak](https://celestrak.org).
 
-Holds the raw TLE strings. No parsing happens here.
+### Point queries
 
 ```python
-tle = Tle(satellite_name="ISS", line_1="1 25544U ...", line_2="2 25544 ...")
+sv    = predictor.propagate(t)               # StateVectorTeme
+obs   = predictor.observe_at(t, observer)    # Observation
+state = predictor.illumination_state(t)      # IlluminationState.Sunlit or .Eclipse
 
-tle.satellite_name  # str
-tle.line_1  # str
-tle.line_2  # str
+# The pass in progress at t, or None
+transit = predictor.detect_transit(t, observer, min_elevation_deg=5.0)
+
+# Peak elevation within an interval; raises RuntimeError if there is no peak
+t_peak, obs_peak = predictor.max_elevation(observer, window)
 ```
 
-### `GroundObserver`
+### Iterators
 
-A fixed point on Earth's surface. Lat/lon are accepted in degrees.
+All iterators are lazy. Every method taking a time range accepts any object with `.start` and
+`.end` datetime properties — an `Interval`, a `Transit`, an `Illumination`, or your own type.
 
 ```python
-gs = GroundObserver(latitude_deg=51.5, longitude_deg=-0.1, altitude=10.0)
-
-gs.latitude_deg   # float — geodetic latitude (degrees, positive north)
-gs.longitude_deg  # float — geodetic longitude (degrees, positive east)
-gs.altitude  # float — metres above WGS-84 ellipsoid
+for t, sv in predictor.prediction_iter(window, step): ...           # StateVectorTeme
+for t, obs in predictor.observation_iter(observer, window, step): ...  # Observation
+for transit in predictor.transits_iter(observer, window, min_elevation_deg=5.0): ...
+for apsis in predictor.apsis_iter(window): ...                      # Apsis
+for illumination in predictor.illumination_iter(window): ...        # Illumination
 ```
 
-### `Predictor`
+`Predictor.with_refinement(Refinement(...))` returns a copy with a different root-finder
+configuration for event times; `Refinement` exposes `time_tolerance` (seconds, default `1e-3`) and
+`max_iter` (default `100`).
 
-The main entry point. Pre-computes SGP4 constants.
+## Return types
 
 ```python
-p = Predictor.from_tle(tle)  # from a Tle object — raises ValueError on malformed TLE
-p = Predictor(elements)      # from a pre-parsed Elements (OMM JSON) object
-p.epoch                      # datetime (UTC) — element epoch
-p.tle_age_seconds(now)       # float — seconds since epoch (positive = past)
+transit.start / .end          # datetime (UTC) — AoS / LoS
+transit.duration_seconds      # float
+
+obs.azimuth_deg               # float — degrees from north, clockwise, in (-180, 180]
+obs.elevation_deg             # float — degrees above the horizon
+obs.range                     # float — metres
+obs.range_rate                # float — m/s, positive = receding
+
+apsis.time                    # datetime (UTC)
+apsis.event                   # ApsisEvent.Apogee or .Perigee
+apsis.altitude                # float — metres above the WGS-84 equatorial radius
+
+illumination.start / .end     # datetime (UTC)
+illumination.state            # IlluminationState.Sunlit or .Eclipse
+illumination.duration_seconds # float
 ```
 
-#### Propagation
+`Transit` and `Illumination` are themselves intervals — `isinstance(transit, IntervalRange)` is
+`True`, and either can be passed wherever a window is expected.
+
+## Coordinate frames
+
+`propagate()` returns a `StateVectorTeme`. The frame chain is available step by step if you need an
+intermediate:
 
 ```python
-sv = p.propagate(t)          # StateVectorTeme — satellite state at UTC datetime t
+sv_teme = predictor.propagate(t)   # StateVectorTeme
+sv_ecef = sv_teme.to_ecef(t)       # StateVectorEcef  (GMST rotation)
+sv_enu  = sv_ecef.to_enu(gs)       # StateVectorEnu   (geodetic to local ENU)
+obs     = sv_enu.to_observation()  # equivalent to predictor.observe_at(t, gs)
 ```
 
-#### Point observation
+All three expose `.position` and `.velocity` as `Vec3(x, y, z)`.
 
-```python
-obs = p.observe_at(t, observer)  # Observation — az/el/range from observer at time t
-```
+## Units
 
-#### Iterators
+SI throughout: positions in metres, velocities and range rate in m/s, apsis altitude in metres above
+the WGS-84 equatorial radius. Angles are plain floats in degrees — every angular name is suffixed
+`_deg`.
 
-All iterators are lazy and implement the Python iterator protocol. Every method that takes a time range accepts any `IntervalRange` — an `Interval`, a `Transit`, an `Illumination`, or any object with `.start` and `.end`.
+Azimuth is measured clockwise from north over `(-180, 180]`, so a southwesterly bearing is negative
+rather than the `[0, 360)` most tracking software reports.
 
-```python
-window = Interval(start, end)
-
-# State vectors at regular intervals
-for t, sv in p.prediction_iter(window, step):
-    ...  # t: datetime, sv: StateVectorTeme
-
-# Observations at regular intervals
-for t, obs in p.observation_iter(observer, window, step):
-    ...  # t: datetime, obs: Observation
-
-# Visible passes
-for transit in p.transits_iter(observer, window, min_elevation_deg=5.0):
-    ...  # Transit
-
-# Apogee / perigee events
-for apsis in p.apsis_iter(window):
-    ...  # Apsis
-
-# Sunlit / eclipse windows
-for illumination in p.illumination_iter(window):
-    ...  # Illumination
-```
-
-Because `Transit` and `Illumination` satisfy `IntervalRange`, you can pass them directly:
-
-```python
-# Iterate observations over exactly one transit
-for t, obs in p.observation_iter(observer, transit, step):
-    ...
-
-# Predict over a sunlit window only
-for t, sv in p.prediction_iter(illumination, step):
-    ...
-```
-
-#### Transit detection and peak elevation
-
-```python
-# Detect whether a transit is in progress at time t
-# Returns Transit or None
-transit = p.detect_transit(t, observer, min_elevation_deg=5.0)
-
-# Find the peak elevation moment within an interval
-# Returns (datetime, Observation) — raises RuntimeError if no peak found
-t_peak, obs_peak = p.max_elevation(observer, window)
-```
-
-#### Illumination state
-
-```python
-from sgp4_predict import IlluminationState
-
-state = p.illumination_state(t)  # IlluminationState.Sunlit or .Eclipse
-```
-
-### Return types
-
-#### `Transit`
-
-A window during which the satellite is above the minimum elevation. Satisfies `IntervalRange`.
-
-```python
-transit.start             # datetime (UTC) — Acquisition of Signal (AoS)
-transit.end               # datetime (UTC) — Loss of Signal (LoS)
-transit.duration_seconds  # float
-```
-
-#### `Observation`
-
-Point observation from a ground station.
-
-```python
-obs.azimuth_deg   # float — degrees, 0 = North, clockwise
-obs.elevation_deg # float — degrees above horizon
-obs.range         # float — metres
-obs.range_rate    # float — m/s, positive = receding
-```
-
-#### `Apsis` and `ApsisEvent`
-
-```python
-from sgp4_predict import ApsisEvent
-
-apsis.time      # datetime (UTC)
-apsis.event     # ApsisEvent.Apogee or ApsisEvent.Perigee
-apsis.altitude  # float — metres above WGS-84 equatorial radius
-```
-
-#### `Illumination` and `IlluminationState`
-
-A contiguous sunlit or eclipse window. Satisfies `IntervalRange`.
-
-```python
-from sgp4_predict import IlluminationState
-
-window.start             # datetime (UTC)
-window.end               # datetime (UTC)
-window.state             # IlluminationState.Sunlit or .Eclipse
-window.duration_seconds  # float
-```
-
-### Coordinate frames
-
-`propagate()` returns a `StateVectorTeme`. You can walk the full frame chain manually:
-
-```python
-sv_teme = p.propagate(t)          # StateVectorTeme
-sv_ecef = sv_teme.to_ecef(t)      # StateVectorEcef  (GMST rotation)
-sv_enu  = sv_ecef.to_enu(gs)      # StateVectorEnu   (geodetic to local ENU)
-obs     = sv_enu.to_observation() # Observation
-
-# Equivalent shorthand:
-obs = p.observe_at(t, gs)
-```
-
-All three state vector types expose `.position` and `.velocity` as `Vec3(x, y, z)` in metres / m/s.
-
-### Advanced: `Refinement`
-
-Root-finder configuration used to refine detected event times (transit
-boundaries, apsides, shadow crossings, peak elevation). A bracketed hybrid
-solver: Newton-Raphson steps when a derivative is available, secant/bisection
-otherwise, converging once the crossing time is pinned down to
-`time_tolerance` seconds.
-
-```python
-from sgp4_predict import Refinement
-
-ref = Refinement()
-ref.time_tolerance = 1e-3  # seconds (default)
-ref.max_iter       = 100   # (default)
-
-p2 = p.with_refinement(ref)
-```
-
-## Local development
-
-### Setup
+## Development
 
 ```sh
 cd sgp4-predict-py/
-uv sync --extra dev
+uv sync --extra dev   # create .venv and install dev dependencies
+make dev              # compile the Rust extension in-place (maturin develop)
+make test             # compile + run pytest
+make lint             # ruff check --fix + ruff format
 ```
 
-### Commands
+`make` targets use `uv run`, so no venv activation is needed.
 
-```sh
-make dev    # compile the Rust extension in-place (maturin develop)
-make test   # compile + run pytest
-make stubs  # regenerate _sgp4_predict/__init__.pyi stub file
-make lint   # ruff check + ruff format --check
-```
-
-No venv activation needed — `make` targets use `uv run` and resolve the local `.venv` automatically.
-
-### Stub files
-
-Type stubs live in two files with different ownership:
-
-| File                                             | Ownership                                                                               |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `python/sgp4_predict/_sgp4_predict/__init__.pyi` | Auto-generated — run `make stubs` to update after Rust changes                          |
-| `python/sgp4_predict/__init__.pyi`               | Hand-maintained — owns `IntervalRange`, `Interval`, and the typed `Predictor` overrides |
-
-The hand-maintained stub is committed to the repository. The auto-generated one is not committed and must be built with `make stubs`.
+Type stubs live in two files: `python/sgp4_predict/_sgp4_predict/__init__.pyi` is generated by
+`make stubs` after Rust API changes and is not committed, while
+`python/sgp4_predict/__init__.pyi` is hand-maintained and owns `IntervalRange`, `Interval`, and the
+typed `Predictor` overrides.

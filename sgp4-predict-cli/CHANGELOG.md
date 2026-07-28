@@ -13,8 +13,11 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 Initial release — a command-line front-end to `sgp4-predict`.
 
-- Five subcommands: `observations`, `transits`, `state-vectors`, `apsides`, and
+- Five prediction subcommands: `observations`, `transits`, `state-vectors`, `apsides`, and
   `illumination`, over a configurable start time and duration.
-- TLE input from a file (2- or 3-line) or an interactive prompt; ground location given as
-  `--observer "lat,lon,alt"` or prompted.
-- Tabular output to stdout or a file, with optional argument echoing and stale-TLE warnings.
+- TLE input from a file (2- or 3-line) or stdin, so TLEs can be piped straight in.
+- Ground stations defined in a YAML config file and selected with `--gs <id>`, managed by hand or
+  through `gs add` / `gs list` / `gs remove`.
+- Text, newline-delimited JSON, and CSV output to stdout or a file, with optional `--output-args`
+  echoing of the resolved inputs and stale-TLE warnings on stderr.
+- Shell completions and a man page generated from the argument definitions.

@@ -30,7 +30,7 @@ impl Observation {
 #[gen_stub_pymethods]
 #[pymethods]
 impl Observation {
-    /// Azimuth in degrees (0 = North, clockwise).
+    /// Azimuth in degrees from north, measured clockwise, in `(-180, 180]`.
     #[getter]
     fn azimuth_deg(&self) -> f64 {
         self.azimuth.to_degrees()

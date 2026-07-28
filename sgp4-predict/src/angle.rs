@@ -1,19 +1,10 @@
 //! Type-safe angle newtypes.
 //!
 //! [`Degrees`] and [`Radians`] tag a plain `f64` with its unit so the two
-//! can't be silently mixed up at a function boundary. There is deliberately
-//! no `From<f64>` for either: that would let a bare number become "the right
-//! unit" with no visible tag at the call site, which is exactly the mistake
-//! these types exist to prevent. Construction is always explicit —
-//! `Degrees(51.5)` or `Radians(1.2)` — and conversion between the two goes
-//! through [`Degrees::to_radians`]/[`Radians::to_degrees`] (or the
-//! corresponding `From` impls).
-//!
-//! The `.0` field is `pub` for ergonomic construction and pattern matching,
-//! not as an enforced boundary — `Degrees(r.to_f64())` compiles just fine.
-//! The safety this module buys is against *accidental* unit mixups (passing
-//! a raw f64 where a specific unit was expected), not against a caller
-//! deliberately reaching past the type.
+//! can't be silently mixed up at a function boundary. Construction is always
+//! explicit — `Degrees(51.5)` or `Radians(1.2)` — and conversion between the
+//! two goes through [`Degrees::to_radians`]/[`Radians::to_degrees`] or the
+//! corresponding `From` impls.
 
 use std::{cmp::Ordering, fmt};
 
