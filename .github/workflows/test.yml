@@ -55,26 +55,18 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
-      - run: cargo doc --all-features --no-deps
-
-  docsrs:
-    name: Docs (docs.rs)
-    runs-on: ubuntu-latest
-    # The stable `docs` job above builds without `--cfg docsrs`, so it never
-    # compiles the `cfg_attr(docsrs, ...)` block and cannot catch a nightly
-    # rustdoc feature being renamed or removed under it. Mirror what docs.rs
-    # actually runs, or the first warning is a failed build after publishing.
-    env:
-      RUSTDOCFLAGS: --cfg docsrs -D warnings
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: false
-      - run: cargo doc -p sgp4-predict --all-features --no-deps
+      - name: Build the docs a contributor gets
+        run: cargo doc --all-features --no-deps
+      - name: Build the docs docs.rs gets
+        # Only this step compiles the `cfg_attr(docsrs, ...)` block, because
+        # only this one passes --cfg docsrs — and docs.rs builds on nightly, so
+        # a nightly rustdoc feature can be removed under us. Without it the
+        # first sign of that is a failed build after publishing.
+        env:
+          RUSTDOCFLAGS: --cfg docsrs -D warnings
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo +nightly doc -p sgp4-predict --all-features --no-deps
 
   msrv:
     name: MSRV
@@ -89,13 +81,18 @@ jobs:
         # Read the floor from Cargo.toml rather than repeating it here, so the
         # declaration stays the single source of truth. Without this a
         # dependency raising its own floor only surfaces in a user's report.
+        #
+        # No --locked: Cargo.lock is deliberately not committed for a library
+        # workspace, so there is nothing to lock to. Resolving fresh is also
+        # the more honest check — it is what a user installing on the declared
+        # MSRV actually gets, and the MSRV-aware resolver picks accordingly.
         run: |
           cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.rust_version) | "\(.name) \(.rust_version)"' \
             | while read -r name msrv; do
                 echo "::group::$name (rust $msrv)"
                 rustup toolchain install "$msrv" --profile minimal
-                cargo +"$msrv" check -p "$name" --all-features --locked || exit 1
+                cargo +"$msrv" check -p "$name" --all-features || exit 1
                 echo "::endgroup::"
               done
 
