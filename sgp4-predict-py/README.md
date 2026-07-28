@@ -2,6 +2,7 @@
 
 [![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
+[![Python versions](https://img.shields.io/pypi/pyversions/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
 ![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)
 
 Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library:

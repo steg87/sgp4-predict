@@ -6,6 +6,20 @@ readme = "README.md"
 requires-python = ">=3.10"
 # Version is sourced from Cargo.toml by maturin (single source of truth).
 dynamic = ["version"]
+# PyPI reads supported versions from these, not from requires-python. The
+# wheel is abi3-py310, so one build covers every version listed.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Typing :: Typed",
+]
 
 [project.urls]
 Repository = "https://github.com/steg87/sgp4-predict"

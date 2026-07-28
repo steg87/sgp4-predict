@@ -55,6 +55,9 @@ PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
 - **Don't break the public API** without saying so clearly in the PR description.
 - **Keep units SI** inside the library — metres, m/s. Conversions belong at the boundary.
 - **Add a changelog entry** under `## [Unreleased]` in the affected crate's `CHANGELOG.md`.
+- **Mind the MSRV.** Each crate declares `rust-version` in its `Cargo.toml` — 1.85 for the library
+  and CLI, 1.88 for the Python bindings, whose dependency tree sets a higher floor. CI checks each
+  crate against its own declaration, so raising one is a deliberate edit rather than a surprise.
 
 ## Reporting bugs
 

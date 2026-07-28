@@ -3,6 +3,7 @@
 [![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict)](https://crates.io/crates/sgp4-predict)
 [![docs.rs](https://img.shields.io/docsrs/sgp4-predict)](https://docs.rs/sgp4-predict)
+[![MSRV](https://img.shields.io/crates/msrv/sgp4-predict)](https://github.com/steg87/sgp4-predict/blob/main/sgp4-predict/Cargo.toml)
 ![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)
 
 Higher-level satellite prediction on top of the [`sgp4`](https://crates.io/crates/sgp4) crate.

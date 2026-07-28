@@ -76,6 +76,29 @@ jobs:
           enable-cache: false
       - run: cargo doc -p sgp4-predict --all-features --no-deps
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - name: Check each crate against its declared rust-version
+        # Read the floor from Cargo.toml rather than repeating it here, so the
+        # declaration stays the single source of truth. Without this a
+        # dependency raising its own floor only surfaces in a user's report.
+        run: |
+          cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.rust_version) | "\(.name) \(.rust_version)"' \
+            | while read -r name msrv; do
+                echo "::group::$name (rust $msrv)"
+                rustup toolchain install "$msrv" --profile minimal
+                cargo +"$msrv" check -p "$name" --all-features --locked || exit 1
+                echo "::endgroup::"
+              done
+
   versions:
     name: Version alignment
     runs-on: ubuntu-latest
