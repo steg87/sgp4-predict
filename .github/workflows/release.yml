@@ -158,8 +158,10 @@ jobs:
           - { runner: ubuntu-latest, target: x86_64, manylinux: auto, id: linux-x86_64 }
           - { runner: ubuntu-latest, target: aarch64, manylinux: auto, id: linux-aarch64 }
           - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2, id: musllinux-x86_64 }
-          - { runner: macos-14, target: x86_64, manylinux: "", id: macos-x86_64 }
-          - { runner: macos-14, target: aarch64, manylinux: "", id: macos-aarch64 }
+          # Both native; macos-14 is deprecated. A dead leg blocks publish-pypi
+          # entirely, so keep these on supported labels.
+          - { runner: macos-15-intel, target: x86_64, manylinux: "", id: macos-x86_64 }
+          - { runner: macos-15, target: aarch64, manylinux: "", id: macos-aarch64 }
           - { runner: windows-latest, target: x64, manylinux: "", id: windows-x64 }
     steps:
       - uses: actions/checkout@v7

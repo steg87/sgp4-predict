@@ -229,4 +229,9 @@ jobs:
           title: ${{ steps.bump.outputs.title }}
           body-path: /tmp/body.md
           commit-message: ${{ steps.bump.outputs.title }}
+          # Commit only what the bump touches, rather than whatever the verify
+          # steps left behind. Add Cargo.lock here if it ever becomes tracked.
+          add-paths: |
+            */Cargo.toml
+            */CHANGELOG.md
           # The `release` label comes from .github/labeler.yml's head-branch rule.
