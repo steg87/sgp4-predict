@@ -85,9 +85,15 @@ publish a release PR branch the moment it was pushed, before anyone reviewed it.
 Required once:
 
 - A **`release` label**, which *Prepare release* attaches to the PR it opens.
-- **`cargo` environment** with a `CARGO_TOKEN` secret (a crates.io API token).
-- **`pypi` environment** — no secret; PyPI uses OIDC trusted publishing, so
-  configure `sgp4-predict` on PyPI to trust this repo's `release.yml`.
+- **`cargo.io` environment** with a `CARGO_TOKEN` secret (a crates.io API
+  token). The environment name must match `release.yml` exactly — a mismatch
+  makes GitHub create an empty environment, and `cargo publish` then fails
+  authentication with no obvious cause.
+- **`pypi` environment** — no secret; PyPI uses OIDC trusted publishing.
+  Configure a publisher on PyPI for `sgp4-predict` with owner `steg87`,
+  repository `sgp4-predict`, workflow `release.yml`, environment `pypi`. For a
+  project that does not exist on PyPI yet this is a *pending* publisher, and it
+  must exist **before** the first publish.
 - Adding **required reviewers** to either environment makes publishing pause for
   an explicit approval even after the release PR merges.
 

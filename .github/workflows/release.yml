@@ -89,7 +89,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.lib == 'true' || needs.plan.outputs.cli == 'true'
     runs-on: ubuntu-latest
-    environment: cargo
+    environment: cargo.io   # holds the CARGO_TOKEN secret
     permissions:
       contents: write
     env:
