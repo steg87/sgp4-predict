@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, "*.x"]
   pull_request:
-    branches: [main]
+    branches: [main, "*.x"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -48,9 +48,27 @@ jobs:
     env:
       RUSTDOCFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - run: cargo doc --all-features --no-deps
+
+  versions:
+    name: Version alignment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: All crates share major.minor
+        # The release pipeline assumes this invariant; see release.toml. Catching
+        # a hand-edited manifest here beats discovering it mid-release.
+        run: |
+          cargo metadata --no-deps --format-version 1 > /tmp/meta.json
+          if [ "$(jq -r '[.packages[] | .version | split("-")[0] | split(".")[0:2] | join(".")] | unique | length' /tmp/meta.json)" != 1 ]; then
+            jq -r '.packages[] | "  \(.name) \(.version)"' /tmp/meta.json
+            echo "::error::Crate versions do not share major.minor."
+            exit 1
+          fi
+          jq -r '.packages[] | "\(.name) \(.version)"' /tmp/meta.json

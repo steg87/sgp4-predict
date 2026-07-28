@@ -1,36 +1,30 @@
 name: Release
 
-# On merge to main, publish any crate whose <name>-v<version> tag does not yet
-# exist, in dependency order (lib -> cli -> py), then tag + create a GitHub
-# Release per crate. Idempotent: re-running skips crates already tagged/published.
+# Publishes any crate whose `<name>-v<version>` tag does not yet exist, then
+# tags it and opens a GitHub Release carrying that version's changelog section.
 #
-# Also runnable manually via workflow_dispatch: pick a crate + bump type; the
-# `prepare` job bumps the version and rolls the changelog, commits to main, and
-# the same run publishes just that crate. (A GITHUB_TOKEN push does not re-trigger
-# workflows, so the bump commit does not spawn a second release run.)
+# Normally triggered by merging a release PR from `Prepare release`, but tag
+# absence — not the commit — is the release signal, so a re-run after a partial
+# failure resumes rather than duplicating. Dispatch with dry_run to rehearse the
+# whole path without publishing. See docs/RELEASING.md.
 
 on:
   push:
-    branches: [main]
+    # `main` plus maintenance branches, so a backport patch can ship from an
+    # older line (e.g. 1.1.2 after 1.2.0 is out).
+    #
+    # Do NOT add `release/**` here: that is the namespace `Prepare release` opens
+    # its PR branches in, so matching it would publish before the PR is merged.
+    # Name maintenance branches `<major>.<minor>.x`.
+    branches:
+      - main
+      - "*.x" # e.g. 1.1.x
   workflow_dispatch:
     inputs:
-      crate:
-        description: Crate to release
-        type: choice
-        default: sgp4-predict
-        options:
-          - sgp4-predict
-          - sgp4-predict-cli
-          - sgp4-predict-py
-      bump:
-        description: "Version bump (none = release the current version as-is)"
-        type: choice
-        default: patch
-        options:
-          - patch
-          - minor
-          - major
-          - none
+      dry_run:
+        description: Rehearse without publishing, tagging, or releasing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -41,80 +35,59 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Commit `detect` resolves the release from. On dispatch this is main's HEAD
-  # (which includes the bump commit pushed by `prepare`); on push it is the
-  # triggering commit. `detect` then pins the exact SHA for every publish job.
-  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.sha }}
+  # `true` for a dispatch that requested it; always `false` for a push to main.
+  DRY_RUN: ${{ inputs.dry_run || false }}
 
 jobs:
-  prepare:
-    name: Bump version (manual dispatch)
-    if: github.event_name == 'workflow_dispatch' && inputs.bump != 'none'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: main
-          fetch-depth: 0
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Bump version + roll changelog, verify, commit to main
-        run: |
-          new="$(.github/scripts/bump-version.sh "${{ inputs.crate }}" "${{ inputs.bump }}")"
-          echo "Bumped ${{ inputs.crate }} to ${new}"
-          # Fail before pushing if the bump left the workspace unresolvable
-          # (e.g. a lib bump whose dependents were not updated).
-          cargo metadata --format-version 1 >/dev/null
-          git add "${{ inputs.crate }}/Cargo.toml" "${{ inputs.crate }}/CHANGELOG.md"
-          # A lib bump also rewrites dependents' version requirements.
-          if [ "${{ inputs.crate }}" = "sgp4-predict" ]; then
-            git add sgp4-predict-cli/Cargo.toml sgp4-predict-py/Cargo.toml
-          fi
-          git commit -m "release: ${{ inputs.crate }} v${new}"
-          git push origin HEAD:main
-
-  detect:
+  plan:
     name: Detect pending releases
-    needs: [prepare]
-    # Runs for push (prepare skipped) and dispatch; aborts if the bump failed.
-    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
-      lib: ${{ steps.detect.outputs.lib }}
-      cli: ${{ steps.detect.outputs.cli }}
-      py: ${{ steps.detect.outputs.py }}
-      lib_version: ${{ steps.detect.outputs.lib_version }}
-      cli_version: ${{ steps.detect.outputs.cli_version }}
-      py_version: ${{ steps.detect.outputs.py_version }}
-      any: ${{ steps.detect.outputs.any }}
-      # Exact commit every publish job checks out, so a commit landing on main
-      # mid-run cannot change what gets built/published.
-      sha: ${{ steps.sha.outputs.sha }}
+      lib: ${{ steps.plan.outputs.lib }}
+      cli: ${{ steps.plan.outputs.cli }}
+      py: ${{ steps.plan.outputs.py }}
+      lib_version: ${{ steps.plan.outputs.lib_version }}
+      cli_version: ${{ steps.plan.outputs.cli_version }}
+      py_version: ${{ steps.plan.outputs.py_version }}
+      any: ${{ steps.plan.outputs.any }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
           fetch-tags: true
-      - name: Resolve release commit
-        id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Detect
-        id: detect
-        env:
-          # On manual dispatch, scope the release to just the selected crate.
-          ONLY_CRATE: ${{ github.event_name == 'workflow_dispatch' && inputs.crate || '' }}
-        run: .github/scripts/detect-releases.sh merge
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
 
-  publish-lib:
-    name: Publish sgp4-predict (crates.io)
-    needs: detect
-    if: needs.detect.outputs.lib == 'true'
+      - name: Plan
+        id: plan
+        run: |
+          cargo metadata --no-deps --format-version 1 > /tmp/meta.json
+
+          # All three crates must share major.minor; see release.toml.
+          if [ "$(jq -r '[.packages[] | .version | split("-")[0] | split(".")[0:2] | join(".")] | unique | length' /tmp/meta.json)" != 1 ]; then
+            jq -r '.packages[] | "  \(.name) \(.version)"' /tmp/meta.json
+            echo "::error::Crate versions do not share major.minor."
+            exit 1
+          fi
+
+          any=false
+          for entry in lib:sgp4-predict cli:sgp4-predict-cli py:sgp4-predict-py; do
+            key="${entry%%:*}"; name="${entry#*:}"
+            version="$(jq -r --arg n "$name" '.packages[] | select(.name == $n) | .version' /tmp/meta.json)"
+            if git rev-parse -q --verify "refs/tags/${name}-v${version}" >/dev/null; then
+              pending=false
+            else
+              pending=true; any=true
+            fi
+            echo "${key}=${pending}" >> "$GITHUB_OUTPUT"
+            echo "${key}_version=${version}" >> "$GITHUB_OUTPUT"
+            echo "${name} ${version}: pending=${pending}" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "any=${any}" >> "$GITHUB_OUTPUT"
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: plan
+    if: needs.plan.outputs.lib == 'true' || needs.plan.outputs.cli == 'true'
     runs-on: ubuntu-latest
     environment: cargo
     permissions:
@@ -122,75 +95,55 @@ jobs:
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
       GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ needs.detect.outputs.lib_version }}
+      LIB: ${{ needs.plan.outputs.lib }}
+      CLI: ${{ needs.plan.outputs.cli }}
+      LIB_VERSION: ${{ needs.plan.outputs.lib_version }}
+      CLI_VERSION: ${{ needs.plan.outputs.cli_version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.detect.outputs.sha }}
           fetch-depth: 0
           fetch-tags: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Publish
-        run: |
-          if .github/scripts/crate-published.sh sgp4-predict "$VERSION"; then
-            echo "sgp4-predict@$VERSION already on crates.io; skipping publish."
-          else
-            cargo publish -p sgp4-predict
-          fi
-      - name: Tag + GitHub Release
-        run: .github/scripts/tag-and-release.sh sgp4-predict sgp4-predict "$VERSION"
 
-  publish-cli:
-    name: Publish sgp4-predict-cli (crates.io)
-    needs: [detect, publish-lib]
-    # Runs after the lib job (or when the lib is not part of this release).
-    if: >-
-      always() && needs.detect.outputs.cli == 'true'
-      && needs.publish-lib.result != 'failure'
-      && needs.publish-lib.result != 'cancelled'
-    runs-on: ubuntu-latest
-    environment: cargo
-    permissions:
-      contents: write
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
-      GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ needs.detect.outputs.cli_version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.detect.outputs.sha }}
-          fetch-depth: 0
-          fetch-tags: true
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Publish
+        run: |
+          # `cargo info <name>@<version>` is the recovery path: a previous run
+          # may have published but failed before tagging.
+          args=()
+          if [ "$LIB" = true ] && ! cargo info "sgp4-predict@${LIB_VERSION}" >/dev/null 2>&1; then
+            args+=(-p sgp4-predict)
+          fi
+          if [ "$CLI" = true ] && ! cargo info "sgp4-predict-cli@${CLI_VERSION}" >/dev/null 2>&1; then
+            args+=(-p sgp4-predict-cli)
+          fi
+          if [ ${#args[@]} -eq 0 ]; then
+            echo "Both versions are already on crates.io; nothing to publish."
+            exit 0
+          fi
+          # A single invocation publishes in dependency order and waits for the
+          # index itself, so no retry loop is needed for propagation lag.
+          if [ "$DRY_RUN" = true ]; then
+            cargo publish --dry-run "${args[@]}"
+          else
+            cargo publish "${args[@]}"
+          fi
+
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Publish
-        # Retry to absorb crates.io index propagation lag for the just-published lib.
-        run: |
-          if .github/scripts/crate-published.sh sgp4-predict-cli "$VERSION"; then
-            echo "sgp4-predict-cli@$VERSION already on crates.io; skipping publish."
-          else
-            ok=
-            for i in 1 2 3 4 5; do
-              if cargo publish -p sgp4-predict-cli; then ok=1; break; fi
-              echo "publish attempt $i failed; retrying in 15s..."; sleep 15
-            done
-            [ -n "$ok" ]
-          fi
+
       - name: Tag + GitHub Release
-        run: .github/scripts/tag-and-release.sh sgp4-predict-cli sgp4-predict-cli "$VERSION"
+        run: |
+          [ "$LIB" = true ] && .github/scripts/tag-and-release.sh sgp4-predict sgp4-predict "$LIB_VERSION"
+          [ "$CLI" = true ] && .github/scripts/tag-and-release.sh sgp4-predict-cli sgp4-predict-cli "$CLI_VERSION"
+          true
 
   build-wheels:
     name: Build wheels (${{ matrix.id }})
-    needs: detect
-    if: needs.detect.outputs.py == 'true'
+    needs: plan
+    if: needs.plan.outputs.py == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -204,8 +157,6 @@ jobs:
           - { runner: windows-latest, target: x64, manylinux: "", id: windows-x64 }
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.detect.outputs.sha }}
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
@@ -220,13 +171,11 @@ jobs:
 
   sdist:
     name: Build + verify sdist
-    needs: detect
-    if: needs.detect.outputs.py == 'true'
+    needs: plan
+    if: needs.plan.outputs.py == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.detect.outputs.sha }}
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -250,24 +199,20 @@ jobs:
           path: dist
 
   publish-pypi:
-    name: Publish sgp4-predict (PyPI)
-    needs: [detect, build-wheels, sdist]
-    if: >-
-      always() && needs.detect.outputs.py == 'true'
-      && needs.build-wheels.result == 'success'
-      && needs.sdist.result == 'success'
+    name: Publish to PyPI
+    needs: [plan, build-wheels, sdist]
+    if: needs.plan.outputs.py == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      contents: write      # push tag / create release
-      id-token: write       # PyPI OIDC trusted publishing
+      contents: write     # push tag / create release
+      id-token: write     # PyPI OIDC trusted publishing
     env:
       GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ needs.detect.outputs.py_version }}
+      VERSION: ${{ needs.plan.outputs.py_version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.detect.outputs.sha }}
           fetch-depth: 0
           fetch-tags: true
       - name: Download built artifacts
@@ -277,6 +222,7 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Publish to PyPI
+        if: env.DRY_RUN != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist

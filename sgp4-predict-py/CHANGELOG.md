@@ -5,9 +5,9 @@ documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Release automation extracts the section whose heading matches the crate version
-in the release PR, so keep each version's notes under a `## [x.y.z] - YYYY-MM-DD`
-heading. Add work-in-progress notes under `## [Unreleased]`.
+Record unreleased work under the Unreleased heading below. The release
+automation rolls that section into a dated `## [x.y.z] - YYYY-MM-DD` heading and
+publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
