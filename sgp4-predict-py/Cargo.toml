@@ -1,6 +1,6 @@
 [package]
 name = "sgp4-predict-py"
-version = "0.0.1-rc.1"       # never released; see docs/RELEASING.md
+version = "0.1.0"       # never released; see docs/RELEASING.md
 edition = "2024"
 rust-version = "1.88"   # time/time-core floor, above the edition-2024 minimum
 publish = false          # ships to PyPI as `sgp4-predict`, never to crates.io
@@ -11,7 +11,7 @@ repository = "https://github.com/steg87/sgp4-predict"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-sgp4-predict = { path = "../sgp4-predict", version = "0.0.1-rc.1" }
+sgp4-predict = { path = "../sgp4-predict", version = "0.1.0" }
 pyo3 = { version = "0.29", features = ["chrono", "abi3-py310"] }
 chrono = "0.4"
 ouroboros = "0.18"

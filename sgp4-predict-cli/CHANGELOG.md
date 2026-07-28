@@ -11,6 +11,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-28
+
 Initial release — a command-line front-end to `sgp4-predict`.
 
 - Five prediction subcommands: `observations`, `transits`, `state-vectors`, `apsides`, and
