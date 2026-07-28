@@ -126,14 +126,14 @@ A GitHub App fixes it, and is what this repo uses:
 
 | Setting | Value |
 |---|---|
-| `RELEASE_APP_CLIENT_ID` **variable** | the App's Client ID |
+| `RELEASE_APP_CLIENT_ID` **variable** | the App's Client ID or App ID |
 | `RELEASE_APP_PRIVATE_KEY` **secret** | the full `.pem`, `BEGIN`/`END` lines included |
 
 To set it up: create the App with **contents: write** and **pull requests:
-write**, copy its **Client ID** (not the App ID — both are on the App's settings
-page), *Generate a private key*, and **install the App on this repository**.
-Creating it is not enough; without the install the token request fails with
-`Not Found`.
+write**, copy its **Client ID** or **App ID** (both are on the App's settings
+page; the action's `app-id` input accepts either), *Generate a private key*, and
+**install the App on this repository**. Creating it is not enough; without the
+install the token request fails with `Not Found`.
 
 The private key is how App auth works: the action signs a JWT with it and
 exchanges that for a short-lived installation token. A client secret cannot be
