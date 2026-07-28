@@ -1,6 +1,6 @@
 [package]
 name = "sgp4-predict"
-version = "0.1.0"
+version = "0.0.0"       # never released; see docs/RELEASING.md
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Higher-level satellite pass prediction built on the sgp4 crate — transits, observations, apsides, and illumination"

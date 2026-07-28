@@ -1,0 +1,247 @@
+name: Release
+
+# Publishes any crate whose `<name>-v<version>` tag does not yet exist, then
+# tags it and opens a GitHub Release carrying that version's changelog section.
+#
+# Normally triggered by merging a release PR from `Prepare release`, but tag
+# absence — not the commit — is the release signal, so a re-run after a partial
+# failure resumes rather than duplicating. Dispatch with dry_run to rehearse the
+# whole path without publishing. See docs/RELEASING.md.
+
+on:
+  push:
+    # `main` plus maintenance branches, so a backport patch can ship from an
+    # older line (e.g. 1.1.2 after 1.2.0 is out).
+    #
+    # Do NOT add `release/**` here: that is the namespace `Prepare release` opens
+    # its PR branches in, so matching it would publish before the PR is merged.
+    # Name maintenance branches `<major>.<minor>.x`.
+    branches:
+      - main
+      - "*.x" # e.g. 1.1.x
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Rehearse without publishing, tagging, or releasing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # `true` for a dispatch that requested it; always `false` for a push to main.
+  DRY_RUN: ${{ inputs.dry_run || false }}
+
+jobs:
+  plan:
+    name: Detect pending releases
+    runs-on: ubuntu-latest
+    outputs:
+      lib: ${{ steps.plan.outputs.lib }}
+      cli: ${{ steps.plan.outputs.cli }}
+      py: ${{ steps.plan.outputs.py }}
+      lib_version: ${{ steps.plan.outputs.lib_version }}
+      cli_version: ${{ steps.plan.outputs.cli_version }}
+      py_version: ${{ steps.plan.outputs.py_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Plan
+        id: plan
+        run: |
+          cargo metadata --no-deps --format-version 1 > /tmp/meta.json
+
+          # All three crates must share major.minor; see release.toml.
+          if [ "$(jq -r '[.packages[] | .version | split("-")[0] | split(".")[0:2] | join(".")] | unique | length' /tmp/meta.json)" != 1 ]; then
+            jq -r '.packages[] | "  \(.name) \(.version)"' /tmp/meta.json
+            echo "::error::Crate versions do not share major.minor."
+            exit 1
+          fi
+
+          for entry in lib:sgp4-predict cli:sgp4-predict-cli py:sgp4-predict-py; do
+            key="${entry%%:*}"; name="${entry#*:}"
+            version="$(jq -r --arg n "$name" '.packages[] | select(.name == $n) | .version' /tmp/meta.json)"
+            if [ "$version" = 0.0.0 ]; then
+              # 0.0.0 is the "never released" sentinel. Without it, merging any
+              # commit while a crate sits at an untagged version would publish
+              # it — including the commit that first adds this pipeline.
+              # Bump out of 0.0.0 with `Prepare release` to ship a real version.
+              pending=false
+            elif git rev-parse -q --verify "refs/tags/${name}-v${version}" >/dev/null; then
+              pending=false
+            else
+              pending=true
+            fi
+            echo "${key}=${pending}" >> "$GITHUB_OUTPUT"
+            echo "${key}_version=${version}" >> "$GITHUB_OUTPUT"
+            echo "${name} ${version}: pending=${pending}" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: plan
+    if: needs.plan.outputs.lib == 'true' || needs.plan.outputs.cli == 'true'
+    runs-on: ubuntu-latest
+    environment: cargo.io   # holds the CARGO_TOKEN secret
+    permissions:
+      contents: write
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      LIB: ${{ needs.plan.outputs.lib }}
+      CLI: ${{ needs.plan.outputs.cli }}
+      LIB_VERSION: ${{ needs.plan.outputs.lib_version }}
+      CLI_VERSION: ${{ needs.plan.outputs.cli_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Publish
+        run: |
+          # Recovery path: a previous run may have published but failed before
+          # tagging. Do NOT swap this for `cargo info` — run inside the
+          # workspace it resolves the local member and always reports
+          # "published", so nothing is ever published and the run goes green.
+          args=()
+          if [ "$LIB" = true ] && ! .github/scripts/crate-published.sh sgp4-predict "$LIB_VERSION"; then
+            args+=(-p sgp4-predict)
+          fi
+          if [ "$CLI" = true ] && ! .github/scripts/crate-published.sh sgp4-predict-cli "$CLI_VERSION"; then
+            args+=(-p sgp4-predict-cli)
+          fi
+          if [ ${#args[@]} -eq 0 ]; then
+            echo "Both versions are already on crates.io; nothing to publish."
+            exit 0
+          fi
+          # A single invocation publishes in dependency order and waits for the
+          # index itself, so no retry loop is needed for propagation lag.
+          if [ "$DRY_RUN" = true ]; then
+            cargo publish --dry-run "${args[@]}"
+          else
+            cargo publish "${args[@]}"
+          fi
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Tag + GitHub Release
+        # Tagging must respect DRY_RUN: tag absence is the release signal, so a
+        # rehearsal that tagged would permanently mark the version released and
+        # the real publish would then be skipped.
+        if: env.DRY_RUN != 'true'
+        run: |
+          [ "$LIB" = true ] && .github/scripts/tag-and-release.sh sgp4-predict "$LIB_VERSION"
+          [ "$CLI" = true ] && .github/scripts/tag-and-release.sh sgp4-predict-cli "$CLI_VERSION"
+          true
+
+  build-wheels:
+    name: Build wheels (${{ matrix.id }})
+    needs: plan
+    if: needs.plan.outputs.py == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, target: x86_64, manylinux: auto, id: linux-x86_64 }
+          - { runner: ubuntu-latest, target: aarch64, manylinux: auto, id: linux-aarch64 }
+          - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2, id: musllinux-x86_64 }
+          # Both native; macos-14 is deprecated. A dead leg blocks publish-pypi
+          # entirely, so keep these on supported labels.
+          - { runner: macos-15-intel, target: x86_64, manylinux: "", id: macos-x86_64 }
+          - { runner: macos-15, target: aarch64, manylinux: "", id: macos-aarch64 }
+          - { runner: windows-latest, target: x64, manylinux: "", id: windows-x64 }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist -m sgp4-predict-py/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.id }}
+          path: dist
+
+  sdist:
+    name: Build + verify sdist
+    needs: plan
+    if: needs.plan.outputs.py == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist -m sgp4-predict-py/Cargo.toml
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Verify sdist builds from source and imports
+        # Confirms the ../sgp4-predict path dependency is vendored into the
+        # archive — the sdist is a permanent pip fallback and cannot be replaced.
+        run: |
+          python -m venv /tmp/sdistcheck
+          /tmp/sdistcheck/bin/pip install --upgrade pip
+          /tmp/sdistcheck/bin/pip install dist/*.tar.gz
+          /tmp/sdistcheck/bin/python -c "import sgp4_predict; print('sdist import OK')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [plan, build-wheels, sdist]
+    if: needs.plan.outputs.py == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write     # push tag / create release
+      id-token: write     # PyPI OIDC trusted publishing
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.plan.outputs.py_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Publish to PyPI
+        if: env.DRY_RUN != 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Tag + GitHub Release
+        if: env.DRY_RUN != 'true'
+        run: .github/scripts/tag-and-release.sh sgp4-predict-py "$VERSION"

@@ -1,6 +1,6 @@
 [package]
 name = "sgp4-predict-cli"
-version = "0.1.0"
+version = "0.0.0"       # never released; see docs/RELEASING.md
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Command-line interface for SGP4 satellite pass prediction"
@@ -15,7 +15,7 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-sgp4-predict       = { path = "../sgp4-predict" }
+sgp4-predict       = { path = "../sgp4-predict", version = "0.0.0" }
 clap               = { version = "4", features = ["derive"] }
 anyhow             = "1"
 humantime          = "2.1"

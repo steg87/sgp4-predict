@@ -133,10 +133,24 @@ Coordinate range checks live in `Location::validate()` and run in `Config::groun
 
 - **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.
 - **CI** (`.github/workflows/`):
-  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`, and `cargo doc` (denying rustdoc warnings). Installs `uv` in the test and docs jobs.
+  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`, `cargo doc` (denying rustdoc warnings), and a `versions` job asserting the release invariant below. Installs `uv` in the test and docs jobs.
   - `audit.yml` — weekly `cargo audit` for security advisories.
   - `labeler.yml` — auto-labels PRs based on changed files (config in `.github/labeler.yml`).
 - **Dependencies**: `serde_yaml` (not `serde_yml`) is used for YAML parsing in dev/tests.
+
+### Releasing
+
+Full process in `docs/RELEASING.md`. `release-prepare.yml` (manual dispatch) bumps versions and rolls changelogs via `cargo-release` (`release.toml`), then opens a release PR; merging it triggers `release.yml`, which publishes, tags, and opens a GitHub Release per crate.
+
+**All three crates share `major.minor`; `patch` moves independently.** A `minor`/`major` bump is workspace-wide and zeroes patch everywhere, so alignment is automatic; a `patch` bump may be scoped to one crate. Both workflows assert the invariant, as does `test.yml`.
+
+Points that are deliberate and easy to "fix" wrongly:
+- `release.toml`'s changelog pattern is anchored (`(?m)^## \[Unreleased\]$`). Unanchored, it also matches each changelog preamble's prose reference to that heading and trips `exactly = 1`.
+- `release-prepare.yml` runs `cargo release version` and `cargo release replace` as separate steps rather than the all-in-one `cargo release <level>` — the all-in-one **commits**, and `create-pull-request` needs the changes left in the working tree.
+- Pre-releases (`0.2.0-rc.1`) skip the changelog roll; `extract-changelog.sh` reads `[Unreleased]` for any version with a pre-release suffix, so an rc ships the pending notes and the final release rolls them.
+- `release-prepare.yml` opens its PR branches under `release/…`, so `release.yml` triggers on `main` and `*.x` only. **Never add `release/**` to those triggers** — it would publish a release PR branch on push, before review. Maintenance branches are named `<major>.<minor>.x` (e.g. `1.1.x`) for the same reason.
+- `cargo publish` is one invocation with multiple `-p`. Cargo stages the crates in a temp registry so the cli verifies against the to-be-published lib; this is why there is no index-propagation retry loop.
+- Tag absence, not the commit, is the release signal, which is what makes a re-run resume instead of duplicating. **`0.0.0` is the "never released" sentinel** and is skipped: without it, any crate at an untagged version would publish on the next merge to `main`.
 
 ## Domain knowledge
 

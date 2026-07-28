@@ -59,6 +59,12 @@ CI enforces both. PRs with lint errors or failing tests will not be merged.
 - **Don't break the public API** without good reason. If you need to, note it clearly in the PR description.
 - **All units are SI.** Positions in metres, velocities in m/s, angles in radians. Don't introduce conversions into the library itself.
 
+## Releasing
+
+Maintainers only, and entirely through GitHub Actions — see [RELEASING.md](RELEASING.md).
+As a contributor the only thing you need to do is add your notes under
+`## [Unreleased]` in the affected crate's `CHANGELOG.md`.
+
 ## Reporting bugs
 
 Open an issue on GitHub with a minimal reproducer — the TLE, observer coordinates, time range, and the unexpected output.

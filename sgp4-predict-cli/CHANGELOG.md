@@ -1,0 +1,20 @@
+# Changelog
+
+All notable changes to `sgp4-predict-cli` (the command-line interface) are
+documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Record unreleased work under the Unreleased heading below. The release
+automation rolls that section into a dated `## [x.y.z] - YYYY-MM-DD` heading and
+publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
+
+## [Unreleased]
+
+Initial release — a command-line front-end to `sgp4-predict`.
+
+- Five subcommands: `observations`, `transits`, `state-vectors`, `apsides`, and
+  `illumination`, over a configurable start time and duration.
+- TLE input from a file (2- or 3-line) or an interactive prompt; ground location given as
+  `--observer "lat,lon,alt"` or prompted.
+- Tabular output to stdout or a file, with optional argument echoing and stale-TLE warnings.

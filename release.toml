@@ -1,0 +1,33 @@
+# cargo-release configuration.
+#
+# This file configures the *prepare* half of the release process only — the bump
+# and the CHANGELOG roll, driven by .github/workflows/release-prepare.yml.
+# Publishing, tagging and pushing are done explicitly by
+# .github/workflows/release.yml, so `cargo release` is never invoked with those
+# steps enabled. See docs/RELEASING.md.
+#
+# Version invariant: all three crates share major.minor, patch moves
+# independently. `cargo release version minor|major --workspace` zeroes patch
+# across the workspace, so alignment is automatic; `cargo release version patch
+# -p <crate>` moves one crate. The prepare workflow rejects a major/minor bump
+# that is not workspace-scoped.
+
+allow-branch = ["main"]
+
+# Matches the tags created by release.yml. Set so that a maintainer running
+# `cargo release tag` by hand produces the same names.
+tag-name = "{{crate_name}}-v{{version}}"
+
+# Roll `## [Unreleased]` into a dated section for the new version, leaving a
+# fresh empty `## [Unreleased]` behind. `file` is relative to each crate root,
+# so this one block covers all three CHANGELOG.md files.
+#
+# The pattern is anchored: unanchored, it also matches the changelog preamble's
+# prose reference to `## [Unreleased]` and trips `exactly = 1`.
+#
+# Pre-release versions deliberately skip this step — see release-prepare.yml.
+[[pre-release-replacements]]
+file    = "CHANGELOG.md"
+search  = "(?m)^## \\[Unreleased\\]$"
+replace = "## [Unreleased]\n\n## [{{version}}] - {{date}}"
+exactly = 1

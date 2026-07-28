@@ -1,0 +1,257 @@
+name: Prepare release
+
+# Bumps versions, rolls each crate's `## [Unreleased]` changelog section into a
+# dated section, verifies the result, and opens a release PR. Nothing is
+# published here — merging the PR is what triggers .github/workflows/release.yml.
+# See docs/RELEASING.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to release from
+        type: string
+        default: main
+      level:
+        description: "Version bump (ignored when 'version' is set)"
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - rc       # 0.1.0 -> 0.1.1-rc.1, 0.2.0-rc.1 -> 0.2.0-rc.2
+          - beta
+          - alpha
+          - release  # strip the pre-release suffix: 0.2.0-rc.2 -> 0.2.0
+      version:
+        description: "Exact version, overrides 'level' (e.g. 0.2.0-rc.1)"
+        type: string
+        default: ""
+      scope:
+        description: "Crate to bump (major/minor must use 'all')"
+        type: choice
+        default: all
+        options:
+          - all
+          - sgp4-predict
+          - sgp4-predict-cli
+          - sgp4-predict-py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-prepare-${{ inputs.branch }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: Bump and open release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Guard the version invariant
+        # All three crates share major.minor. A workspace-wide minor/major bump
+        # zeroes patch everywhere and so re-aligns them automatically; scoping
+        # one to a single crate would split major.minor apart. An explicit
+        # `version` is not checked here — the post-bump assertion below covers it.
+        if: inputs.version == '' && contains(fromJSON('["minor","major"]'), inputs.level) && inputs.scope != 'all'
+        run: |
+          echo "::error::A '${{ inputs.level }}' bump must use scope 'all' — all three crates share major.minor."
+          exit 1
+
+      - name: Require the release identity
+        # GitHub suppresses events created by GITHUB_TOKEN, so a PR opened with
+        # it never starts test.yml. Falling back would still open a PR, just an
+        # unverified one — silent enough to miss while reviewing a release, so
+        # stop here instead. See docs/RELEASING.md.
+        if: vars.RELEASE_APP_CLIENT_ID == ''
+        run: |
+          echo "::error::RELEASE_APP_CLIENT_ID is not set. The release PR must be opened by the GitHub App, or no CI runs on it. See docs/RELEASING.md."
+          exit 1
+
+      - name: Mint app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.branch }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: taiki-e/install-action@cargo-release
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+
+      - name: Record current versions
+        run: cargo metadata --no-deps --format-version 1 > /tmp/before.json
+
+      - name: Bump versions
+        env:
+          LEVEL: ${{ inputs.level }}
+          VERSION: ${{ inputs.version }}
+          SCOPE: ${{ inputs.scope }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ "$SCOPE" = all ]; then scope=(--workspace); else scope=(-p "$SCOPE"); fi
+          # `cargo release version` accepts a level or an exact version.
+          cargo release version "${VERSION:-$LEVEL}" "${scope[@]}" \
+            --allow-branch "$BRANCH" --execute --no-confirm
+
+      - name: Summarise the bump
+        id: bump
+        run: |
+          cargo metadata --no-deps --format-version 1 > /tmp/after.json
+
+          # Authoritative invariant check: covers explicit versions and any input
+          # combination the pre-flight guard above cannot reason about.
+          if [ "$(jq -r '[.packages[] | .version | split("-")[0] | split(".")[0:2] | join(".")] | unique | length' /tmp/after.json)" != 1 ]; then
+            jq -r '.packages[] | "  \(.name) \(.version)"' /tmp/after.json
+            echo "::error::That bump would leave the crates on different major.minor versions."
+            exit 1
+          fi
+
+          changed=()
+          {
+            echo "| Crate | From | To |"
+            echo "|---|---|---|"
+          } > /tmp/table.md
+          while read -r name old; do
+            new="$(jq -r --arg n "$name" '.packages[] | select(.name == $n) | .version' /tmp/after.json)"
+            [ "$old" = "$new" ] && continue
+            changed+=("$name:$new")
+            printf '| `%s` | %s | **%s** |\n' "$name" "$old" "$new" >> /tmp/table.md
+          done < <(jq -r '.packages[] | "\(.name) \(.version)"' /tmp/before.json | sort)
+
+          if [ ${#changed[@]} -eq 0 ]; then
+            echo "::error::No versions changed — nothing to release."
+            exit 1
+          fi
+          printf '%s\n' "${changed[@]}" > /tmp/changed.txt
+
+          # A pre-release ships the pending notes as-is, so the changelog is not
+          # rolled; the final release rolls everything accumulated under Unreleased.
+          lead="${changed[0]#*:}"
+          case "$lead" in
+            *-*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          # Branch and title name the release: the shared version when the whole
+          # workspace moved, the single crate otherwise. `release/` is this
+          # workflow's PR namespace, so release.yml must never trigger on it.
+          if [ "${{ inputs.scope }}" = all ]; then
+            version="$(jq -r '.packages[] | select(.name == "sgp4-predict") | .version' /tmp/after.json)"
+            echo "branch=release/v${version}" >> "$GITHUB_OUTPUT"
+            echo "title=chore: release v${version}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=release/${{ inputs.scope }}-v${lead}" >> "$GITHUB_OUTPUT"
+            echo "title=chore: release ${{ inputs.scope }} ${lead}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Roll changelogs
+        if: steps.bump.outputs.prerelease == 'false'
+        env:
+          SCOPE: ${{ inputs.scope }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ "$SCOPE" = all ]; then scope=(--workspace); else scope=(-p "$SCOPE"); fi
+          # Applies release.toml's pre-release-replacements. Kept separate from
+          # the all-in-one `cargo release <level>`: that commits, and
+          # create-pull-request needs the changes left in the working tree.
+          cargo release replace "${scope[@]}" --allow-branch "$BRANCH" --execute --no-confirm
+
+      - name: Verify the bumped workspace
+        run: |
+          cargo metadata --format-version 1 >/dev/null
+
+          # `cargo publish --dry-run` never contacts the registry for existence,
+          # so catch a bump onto an already-published version here rather than
+          # letting it no-op at merge time.
+          while IFS=: read -r name version; do
+            case "$name" in sgp4-predict|sgp4-predict-cli) ;; *) continue ;; esac
+            if .github/scripts/crate-published.sh "$name" "$version"; then
+              echo "::error::${name} ${version} is already on crates.io."
+              exit 1
+            fi
+          done < /tmp/changed.txt
+
+          # One invocation stages both publishable crates in a temp registry, so
+          # the cli verifies against the to-be-published lib rather than the index.
+          # --allow-dirty: the bump is intentionally left uncommitted above.
+          cargo publish --workspace --dry-run --allow-dirty
+          uvx --from 'maturin>=1.0,<2.0' maturin build --release \
+            --out /tmp/wheels -m sgp4-predict-py/Cargo.toml
+
+      - name: Build PR body
+        env:
+          PRERELEASE: ${{ steps.bump.outputs.prerelease }}
+          # Passed as env, never interpolated into the script: `branch` and
+          # `version` are free-form dispatch inputs and this step has the app
+          # token in scope.
+          BRANCH: ${{ inputs.branch }}
+          VERSION: ${{ inputs.version }}
+          LEVEL: ${{ inputs.level }}
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          if [ -n "$VERSION" ]; then how="version \`$VERSION\`"; else how="level \`$LEVEL\`"; fi
+          {
+            echo "Prepared by **Prepare release** from \`$BRANCH\` (scope \`$SCOPE\`, $how)."
+            echo
+            cat /tmp/table.md
+            echo
+            if [ "$PRERELEASE" = true ]; then
+              echo "> [!NOTE]"
+              echo "> Pre-release: the changelogs are **not** rolled. These notes stay under \`## [Unreleased]\` and are published again with the final release."
+              echo
+            fi
+            echo "Verified on the bumped tree: \`cargo publish --workspace --dry-run\`, \`maturin build --release\`."
+            echo
+            echo "---"
+            echo
+            echo "## Release notes preview"
+            echo
+            echo "Merging this PR publishes each crate above and opens a GitHub Release whose body is the section below. Edit the changelogs on this branch to change them — the notes are re-extracted from the merged files at publish time."
+            echo
+            while IFS=: read -r name version; do
+              echo "### \`${name}\` ${version}"
+              echo
+              notes="$(.github/scripts/extract-changelog.sh "$name" "$version")"
+              if [ -n "$notes" ]; then
+                echo "$notes"
+              else
+                echo "> [!WARNING]"
+                echo "> No entries were listed under \`## [Unreleased]\`, so this release has empty notes."
+                echo
+              fi
+            done < /tmp/changed.txt
+          } > /tmp/body.md
+          cat /tmp/body.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open release PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: ${{ inputs.branch }}
+          branch: ${{ steps.bump.outputs.branch }}
+          delete-branch: true
+          title: ${{ steps.bump.outputs.title }}
+          body-path: /tmp/body.md
+          commit-message: ${{ steps.bump.outputs.title }}
+          # Commit only what the bump touches, rather than whatever the verify
+          # steps left behind. Add Cargo.lock here if it ever becomes tracked.
+          add-paths: |
+            */Cargo.toml
+            */CHANGELOG.md
+          # The `release` label comes from .github/labeler.yml's head-branch rule.

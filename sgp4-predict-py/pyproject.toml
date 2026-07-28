@@ -1,10 +1,11 @@
 [project]
 name = "sgp4-predict"
-version = "0.1.0"
 description = "Python bindings for sgp4-predict satellite pass prediction"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
+# Version is sourced from Cargo.toml by maturin (single source of truth).
+dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/steg87/sgp4-predict"
@@ -19,6 +20,10 @@ dev = ["maturin>=1.0,<2.0", "pytest>=8", "ruff==0.15.21"]
 [tool.maturin]
 python-source = "python"
 module-name = "sgp4_predict._sgp4_predict"
+# Only maturin builds enable extension-module (so libpython is not linked into
+# the wheel — required for manylinux/auditwheel compliance). Plain cargo builds
+# (tests, the stub_gen bin) deliberately omit it so they can link libpython.
+features = ["pyo3/extension-module"]
 
 [tool.ruff]
 # Exclude auto-generated stub files from format checking, and Markdown so
