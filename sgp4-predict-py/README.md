@@ -1,7 +1,7 @@
 # sgp4-predict — Python bindings
 
 [![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
-[![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](../LICENSE-MIT)
+[![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT)
 
 Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library:
 satellite pass prediction from TLE or OMM data, with type stubs and native `datetime` support.

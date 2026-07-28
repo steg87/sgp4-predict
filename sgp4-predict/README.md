@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict)](https://crates.io/crates/sgp4-predict)
 [![docs.rs](https://img.shields.io/docsrs/sgp4-predict)](https://docs.rs/sgp4-predict)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)](../LICENSE-MIT)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)](LICENSE-MIT)
 
 Higher-level satellite prediction on top of the [`sgp4`](https://crates.io/crates/sgp4) crate.
 Give it a TLE and it will propagate state vectors, compute ground observations, and find passes,
@@ -118,5 +118,6 @@ and Space-Track, and `Predictor::new` takes it in place of a TLE.
 
 - [API documentation](https://docs.rs/sgp4-predict)
 - [`tests/examples.rs`](tests/examples.rs) — runnable end-to-end examples
-- [Architecture](../docs/architecture.md), [coordinate frames](../docs/coordinate-frames.md),
-  and [event detection](../docs/event-detection.md) notes
+- Notes on [architecture](https://github.com/steg87/sgp4-predict/blob/main/docs/architecture.md),
+  [coordinate frames](https://github.com/steg87/sgp4-predict/blob/main/docs/coordinate-frames.md),
+  and [event detection](https://github.com/steg87/sgp4-predict/blob/main/docs/event-detection.md)
