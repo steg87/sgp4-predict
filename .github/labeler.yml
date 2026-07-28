@@ -8,7 +8,13 @@ tests:
 
 ci:
   - changed-files:
-    - any-glob-to-any-file: [".github/**", "Makefile"]
+    - any-glob-to-any-file: [".github/**", "Makefile", "release.toml"]
+
+# Matched on the branch, not on paths: a release PR touches Cargo.toml and
+# CHANGELOG.md, which is exactly what ordinary PRs touch. `release/` is the
+# namespace release-prepare.yml opens its PRs in.
+release:
+  - head-branch: ["^release/"]
 
 python:
   - changed-files:

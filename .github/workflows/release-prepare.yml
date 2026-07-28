@@ -228,5 +228,5 @@ jobs:
           delete-branch: true
           title: ${{ steps.bump.outputs.title }}
           body-path: /tmp/body.md
-          labels: release
           commit-message: ${{ steps.bump.outputs.title }}
+          # The `release` label comes from .github/labeler.yml's head-branch rule.
