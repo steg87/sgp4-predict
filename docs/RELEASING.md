@@ -129,15 +129,10 @@ A GitHub App fixes it, and is what this repo uses:
 | `RELEASE_APP_CLIENT_ID` **variable** | the App's Client ID or App ID |
 | `RELEASE_APP_PRIVATE_KEY` **secret** | the full `.pem`, `BEGIN`/`END` lines included |
 
-To set it up: create the App with **contents: write** and **pull requests:
-write**, copy its **Client ID** or **App ID** (both are on the App's settings
-page; the action's `app-id` input accepts either), *Generate a private key*, and
-**install the App on this repository**. Creating it is not enough; without the
-install the token request fails with `Not Found`.
-
-The private key is how App auth works: the action signs a JWT with it and
-exchanges that for a short-lived installation token. A client secret cannot be
-used — that belongs to the OAuth user flow, which needs a browser and a human.
+Create the App with **contents: write** and **pull requests: write**, *Generate a
+private key*, and **install the App on this repository** — creating it is not
+enough; without the install the token request fails with `Not Found`. A client
+secret cannot be used in place of the key; that belongs to the OAuth user flow.
 
 Set the key from the file rather than pasting it, so its line breaks survive:
 
@@ -145,16 +140,13 @@ Set the key from the file rather than pasting it, so its line breaks survive:
 gh secret set RELEASE_APP_PRIVATE_KEY < ~/Downloads/<app>.<date>.private-key.pem
 ```
 
-A mangled or truncated value fails at *Mint app token* with `Invalid keyData` /
-`asn1 encoding routines::not enough data` — the key never reaches GitHub, so
-this is always the local value, not the App's registration.
+A mangled value fails at *Mint app token* with `Invalid keyData` /
+`asn1 encoding routines::not enough data`, which is always the local value
+rather than the App's registration.
 
-There is deliberately no fallback: if `RELEASE_APP_CLIENT_ID` is unset,
-*Prepare release* fails immediately rather than opening a PR that silently gets
-no CI.
-
-Note the App cannot approve its own PR, so a required-review rule on the
-base branch still needs a human — which is the intent for a release.
+If `RELEASE_APP_CLIENT_ID` is unset, *Prepare release* fails immediately rather
+than opening a PR that silently gets no CI. Note the App cannot approve its own
+PR, so a required-review rule still needs a human — which is the intent.
 
 ## Recovering from a partial release
 
@@ -176,24 +168,16 @@ publishes nothing.
 This exists because tag absence is otherwise the only release signal, so a crate
 sitting at an untagged version would publish on the next merge to `main` —
 including the merge that first added this pipeline. `0.0.0` says "there is no
-version here yet" rather than "here is an unpublished version".
-
-All three crates are at `0.0.0` today; nothing has been published to crates.io or
-PyPI. The first release bumps out of the sentinel.
+version here yet" rather than "here is an unpublished version". The first
+release bumps out of it.
 
 ## First release
 
-Nothing special — it is the normal flow, and it is the first real exercise of it:
-
-1. Confirm the repository setup above is complete, in particular the crates.io
-   token's **`publish-new`** scope (a `publish-update`-only token cannot create a
-   new crate) and the **pending** PyPI publisher.
-2. Dispatch *Prepare release* with `level: minor`, `scope: all` — `0.0.0` → `0.1.0`.
-   (`patch` would give `0.0.1`.)
-3. Review the PR: three version bumps, each `## [Unreleased]` rolled into
-   `## [0.1.0] - <date>`, and a body previewing the release notes.
-4. Merge. *Release* publishes all three, tags them, and opens three GitHub
-   Releases.
+Nothing special — the normal flow, and its first real exercise. Before
+dispatching, confirm the repository setup above, in particular the crates.io
+token's **`publish-new`** scope (a `publish-update`-only token cannot create a
+new crate) and the **pending** PyPI publisher. Then dispatch *Prepare release*
+with `level: minor`, `scope: all` — `0.0.0` → `0.1.0`.
 
 Consider adding required reviewers to the `cargo.io` and `pypi` environments
 first, so the publish jobs pause for an explicit approval on this first run.

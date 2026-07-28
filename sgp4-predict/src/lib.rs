@@ -33,16 +33,16 @@
 //! # Custom types
 //!
 //! If your application already has types that hold TLE data or coordinates,
-//! implement [`TleRecord`] and [`Observer`] instead of converting to [`Tle`] /
-//! [`GroundObserver`]. Pass your type to [`Predictor::from_tle`]. See the
-//! trait docs for details.
+//! implement [`TleRecord`] and [`Observer`] on them instead of converting to
+//! [`Tle`] / [`GroundObserver`].
 //!
 //! # OMM support
 //!
-//! [`sgp4::Elements`] (re-exported as [`Elements`]) represents orbital data
-//! from either a TLE or an OMM (Orbit Mean-Elements Message). Because it
-//! derives `serde::Deserialize`, you can parse an OMM JSON object directly
-//! with `serde_json` and hand the result to [`Predictor::new`]:
+//! [`sgp4::Elements`] (re-exported as [`Elements`]) holds orbital data from
+//! either a TLE or an OMM (Orbit Mean-Elements Message). It derives
+//! `serde::Deserialize` with the CCSDS field names (`NORAD_CAT_ID`, `EPOCH`,
+//! `MEAN_MOTION`, ...), so Celestrak and Space-Track JSON parses directly and
+//! can be handed to [`Predictor::new`]:
 //!
 //! ```no_run
 //! use sgp4_predict::{Elements, Predictor};
@@ -52,33 +52,26 @@
 //! let predictor = Predictor::new(elements).unwrap();
 //! ```
 //!
-//! The JSON field names follow the CCSDS OMM standard
-//! (`NORAD_CAT_ID`, `EPOCH`, `MEAN_MOTION`, `ECCENTRICITY`, etc.).
-//! Both Celestrak and Space-Track JSON responses parse directly into
-//! `Elements` with no extra mapping required.
-//!
 //! # Units
 //!
-//! All positions are in **metres** and velocities in **m/s**. Angles are
-//! type-safe: [`Degrees`] and [`Radians`] tag a plain `f64` with its unit so
-//! the two can't be mixed up at a function boundary — construction is always
-//! explicit (`Degrees(51.5)`, `Radians(1.2)`) and conversion goes through
-//! `.to_radians()`/`.to_degrees()` or the corresponding `From` impls.
-//! [`Observer::latitude`]/[`longitude`](Observer::longitude) take
-//! [`Degrees`]; [`Observation::azimuth`] and
-//! [`elevation`](Observation::elevation) are [`Radians`]. `min_elevation`
-//! parameters (`transits_iter`, `detect_transit`, ...) take `impl
-//! Into<Radians>`, so either unit can be passed directly.
+//! Positions are in **metres** and velocities in **m/s**. Angles are typed:
+//! [`Observer::latitude`]/[`longitude`](Observer::longitude) take [`Degrees`],
+//! [`Observation::azimuth`]/[`elevation`](Observation::elevation) are
+//! [`Radians`], and `min_elevation` parameters accept either.
 //!
 //! # Cargo features
 //!
 //! - `generics` — exposes the generic event/window detection building blocks
 //!   (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) that power
-//!   the concrete iterators, so new kinds of satellite events can be detected
-//!   without a bespoke iterator. Off by default: the concrete iterators above
-//!   cover everyday use, and this keeps the API surface small.
+//!   the concrete iterators, for detecting event kinds this crate does not
+//!   cover. Off by default.
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
+/// Compiles the README's examples as doctests so they cannot drift.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct Readme;
 
 mod angle;
 mod apsides;

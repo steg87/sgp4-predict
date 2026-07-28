@@ -2,6 +2,7 @@
 name = "sgp4-predict-cli"
 version = "0.0.1-rc.1"       # never released; see docs/RELEASING.md
 edition = "2024"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 description = "Command-line interface for SGP4 satellite pass prediction"
 repository = "https://github.com/steg87/sgp4-predict"

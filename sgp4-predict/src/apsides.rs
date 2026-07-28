@@ -21,8 +21,7 @@ use crate::{
 
 /// Tuning knobs for [`ApsisIter`]'s coarse scan.
 ///
-/// The default reproduces the fixed behavior `ApsisIter` used before this was
-/// configurable: a 60-second fixed step. Pass a customized value to
+/// Pass a customised value to
 /// [`Predictor::apsis_iter_with_opts`](crate::Predictor::apsis_iter_with_opts).
 #[derive(Debug, Clone, Copy)]
 pub struct ApsisIterOpts {

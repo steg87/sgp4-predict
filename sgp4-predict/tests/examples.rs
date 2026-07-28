@@ -95,24 +95,21 @@ fn next_ground_station_pass() {
     let start = p.epoch();
     let end = start + Duration::days(1);
 
-    // Lazily find the next transit that satisfies the predicate
+    // The iterator is lazy, so this scans only as far as the first transit.
     let next_transit = p
         .transits_iter(&gs, start..end, Degrees(15.0))
         .next()
-        .expect("no transits during search interval") // Iterator returned None
-        .expect("error calculating transit"); // Redundant in this case since we've checked already
+        .expect("no transits during search interval")
+        .expect("error calculating transit");
 
-    // Calculate observations for the transit
     println!("time,azimuth [deg], elevation [deg], range [km], range rate [km/s]");
     for observation in p
-        // Transit implements IntervalRange, so we can pass it as arg to observation_iter as interval
+        // Transit implements IntervalRange, so it doubles as the interval here.
         .observation_iter(&gs, next_transit, Duration::seconds(10))
-        // Include the transit end time in the output
+        // Sample the transit end time as well as the regular steps.
         .include_end()
     {
-        // Unwrap and shadow observation
         let (t, observation) = observation.expect("error calculating observation");
-        // Output results to stdout
         println!(
             "{},{:.2},{:.2},{:.3},{:.3}",
             t.format("%Y-%m-%d %H:%M:%S"),
@@ -134,7 +131,6 @@ fn ground_station_passes() {
     let start = p.epoch();
     let end = start + Duration::days(3);
 
-    // Define our custom type
     struct GroundStationPass {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
@@ -214,7 +210,6 @@ fn eclipse_transits() {
     println!("start,end,duration");
     for transit in p.transits_iter(&gs, start..end, Degrees(30.0)).flatten() {
         n_transits += 1;
-        // Detect eclipse portions of transits
         for window in p
             .illumination_iter(transit)
             .flatten()

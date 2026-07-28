@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cargo build                    # build the library
 cargo check                    # fast type-check without full compile
-cargo test --all-targets --all-features  # run all tests
+cargo test --all-targets --all-features  # run all tests (note: this skips doctests)
+cargo test --doc --all-features           # doctests, including the library README
 cargo test <name>              # run a single test by name (e.g. cargo test test_brent_cubic)
 cargo clippy                   # lint
 make lint                      # cargo fmt + clippy (preferred — matches CI and pre-commit hook)
@@ -128,6 +129,8 @@ Coordinate range checks live in `Location::validate()` and run in `Config::groun
 ## Conventions
 
 - **Code comments**: keep terse. State the non-obvious fact, not the reasoning behind it or alternatives considered.
+- **User-facing docs** (READMEs, `docs/`, docstrings) are for someone picking the library up, not a record of how it got here. No "this used to be X", no rationale for rejected alternatives, no edge cases that only came up in review. Design rationale belongs in this file instead.
+- `sgp4-predict/README.md` is compiled as a doctest via the `Readme` struct in `lib.rs`, so its examples cannot drift. `cargo test --all-targets` does **not** run doctests — `make test` and `test.yml` run `cargo test --doc` as a separate step for exactly this reason.
 
 ## Repo infrastructure
 

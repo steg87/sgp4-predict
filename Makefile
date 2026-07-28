@@ -12,6 +12,7 @@ init:
 .PHONY: test
 test:
 	cargo test --all-targets --all-features
+	cargo test --doc --all-features   # --all-targets skips doctests
 
 .PHONY: lint
 lint:
@@ -40,4 +41,9 @@ audit:
 .PHONY: docs
 docs:
 	cargo doc --all-features --no-deps --open
+
+.PHONY: docs-rs
+docs-rs:  ## build docs the way docs.rs does (nightly + --cfg docsrs)
+	RUSTDOCFLAGS="--cfg docsrs -D warnings" \
+	  cargo +nightly doc -p sgp4-predict --all-features --no-deps
 

@@ -1,8 +1,8 @@
 # Contributing
 
-Contributions are welcome. This document covers the standard workflow for submitting changes.
+Contributions are welcome.
 
-## Required tooling
+## Tooling
 
 | Tool | Purpose | Install |
 |---|---|---|
@@ -10,61 +10,60 @@ Contributions are welcome. This document covers the standard workflow for submit
 | cargo-llvm-cov | coverage (pre-push hook) | `cargo install cargo-llvm-cov` |
 | prek | git hook runner | [prek docs](https://github.com/blinpete/prek) |
 | uv | Python tooling | [docs.astral.sh/uv](https://docs.astral.sh/uv) |
-| maturin | build Python bindings | bundled via `uv sync --extra dev` |
 
 ## Getting started
 
-1. Fork the repository on GitHub.
-2. Clone your fork and create a branch for your change:
-   ```
-   git checkout -b my-feature
-   ```
-3. Install the git hooks:
-   ```
-   prek install
-   ```
-   This sets up pre-commit hooks (fmt, clippy) and pre-push hooks (test, coverage).
-4. Make your changes, then open a pull request against `main`.
+1. Fork the repository, clone your fork, and branch off `main`.
+2. Install the git hooks with `prek install` — this wires up pre-commit (fmt, clippy) and pre-push
+   (test, coverage).
+3. Make your change and open a pull request against `main`.
 
-## Python bindings setup
+Before pushing:
 
-The `sgp4-predict-py/` crate contains Python bindings built with [maturin](https://github.com/PyO3/maturin). To work on them:
+```bash
+make lint    # cargo fmt + clippy
+make test    # full test suite, including doctests
+```
+
+CI enforces both.
+
+## Python bindings
+
+The `sgp4-predict-py/` crate is built with [maturin](https://github.com/PyO3/maturin):
 
 ```bash
 cd sgp4-predict-py/
 uv sync --extra dev   # create .venv and install dev dependencies
-make dev              # compile the Rust extension in-place (maturin develop)
-make test             # compile the Rust extension + run pytest
-make stubs            # regenerate _sgp4_predict/__init__.pyi after Rust changes
-make lint             # ruff check + format
+make dev              # compile the Rust extension in-place
+make test             # compile + run pytest
+make lint             # ruff check --fix + ruff format
 ```
 
-`make` targets use `uv run` internally, so no manual venv activation is needed.
+`make` targets use `uv run`, so no venv activation is needed.
 
-## Before submitting
-
-Run the following before pushing:
+After changing the Rust API, regenerate the stubs from the repository root:
 
 ```bash
-make lint    # cargo fmt + clippy (must be clean)
-make test    # full test suite
+PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
+  cargo run --manifest-path sgp4-predict-py/Cargo.toml --bin stub_gen
 ```
-
-CI enforces both. PRs with lint errors or failing tests will not be merged.
 
 ## Guidelines
 
-- **Keep PRs focused.** One logical change per PR makes review faster and history easier to read.
-- **Add tests** for any new behaviour. The existing tests in `tests/` show the expected style.
-- **Don't break the public API** without good reason. If you need to, note it clearly in the PR description.
-- **All units are SI.** Positions in metres, velocities in m/s, angles in radians. Don't introduce conversions into the library itself.
+- **Keep PRs focused.** One logical change per PR.
+- **Add tests** for new behaviour; `tests/` shows the expected style.
+- **Don't break the public API** without saying so clearly in the PR description.
+- **Keep units SI** inside the library — metres, m/s. Conversions belong at the boundary.
+- **Add a changelog entry** under `## [Unreleased]` in the affected crate's `CHANGELOG.md`.
+- **Mind the MSRV.** Each crate declares its own `rust-version` in its `Cargo.toml`; the Python
+  bindings sit higher than the other two because their dependency tree does. CI checks every crate
+  against its declaration, so raising one is a deliberate edit rather than a surprise.
+
+## Reporting bugs
+
+Open an issue with a minimal reproducer: the TLE, observer coordinates, time range, and the
+unexpected output.
 
 ## Releasing
 
 Maintainers only, and entirely through GitHub Actions — see [RELEASING.md](RELEASING.md).
-As a contributor the only thing you need to do is add your notes under
-`## [Unreleased]` in the affected crate's `CHANGELOG.md`.
-
-## Reporting bugs
-
-Open an issue on GitHub with a minimal reproducer — the TLE, observer coordinates, time range, and the unexpected output.

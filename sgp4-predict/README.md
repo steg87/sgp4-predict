@@ -1,127 +1,91 @@
 # sgp4-predict
 
+[![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict)](https://crates.io/crates/sgp4-predict)
 [![docs.rs](https://img.shields.io/docsrs/sgp4-predict)](https://docs.rs/sgp4-predict)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)](../LICENSE-MIT)
+[![MSRV](https://img.shields.io/crates/msrv/sgp4-predict)](https://github.com/steg87/sgp4-predict/blob/main/sgp4-predict/Cargo.toml)
+![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)
 
-A Rust library wrapping the [`sgp4`](https://crates.io/crates/sgp4) crate to provide higher-level satellite prediction. Given a TLE, it can propagate state vectors, compute ground observations, iterate over passes, detect apsides, and query illumination.
-
-## Quick start
-
-Add to your `Cargo.toml`:
+Higher-level satellite prediction on top of the [`sgp4`](https://crates.io/crates/sgp4) crate.
+Give it a TLE and it will propagate state vectors, compute ground observations, and find passes,
+apsides, and sunlit windows over any time range.
 
 ```toml
 [dependencies]
 sgp4-predict = "0.1"
 ```
 
-The built-in [`Tle`] and [`GroundObserver`] types get you up and running immediately:
+## Quick start
 
-```rust
-use sgp4_predict::{GroundObserver, Predictor, Tle};
+Find the passes over a ground station in the next 24 hours, and sample each one:
+
+```rust,no_run
 use chrono::{Duration, Utc};
+use sgp4_predict::{Degrees, GroundObserver, Predictor, Tle};
 
-// Parse a 3-line element set (name + two TLE lines)
-let tle: Tle = "\
-    SENTINEL-2C\n\
-    1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990\n\
-    2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
-    .parse()?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tle: Tle = "\
+        SENTINEL-2C
+        1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
+        2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+        .parse()?;
 
-// Or construct directly
-let tle = Tle::new("SENTINEL-2C", line_1, line_2);
+    let predictor = Predictor::from_tle(&tle)?;
 
-let predictor = Predictor::from_tle(&tle)?;
+    // Glasgow: latitude, longitude, altitude in metres.
+    let glasgow = GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0);
 
-// Glasgow ground station: lat/lon in degrees, altitude in metres
-let glasgow = GroundObserver::new(55.86, -4.25, 40.0);
+    let start = Utc::now();
+    let interval = start..start + Duration::days(1);
 
-let start = Utc::now();
-let end = start + Duration::days(1);
+    for transit in predictor.transits_iter(&glasgow, interval, Degrees(5.0)) {
+        let transit = transit?;
+        println!("AoS {}  LoS {}", transit.start, transit.end);
 
-for transit in predictor.transits_iter(&glasgow, start..end, 5.0) {
-    let transit = transit?;
-    println!("AoS: {}  LoS: {}", transit.start, transit.end);
-}
-```
-
-### Sampling observations over a pass
-
-```rust
-use chrono::Duration;
-
-// Transit implements IntervalRange, so pass it directly as the interval
-for result in predictor.observation_iter(&glasgow, transit, Duration::seconds(10)).include_end() {
-    let (t, obs) = result?;
-    println!(
-        "{} az={:.1}° el={:.1}° range={:.0}km",
-        t,
-        obs.azimuth_deg(),
-        obs.elevation_deg(),
-        obs.range / 1000.0,
-    );
-}
-```
-
-### Illumination
-
-```rust
-use sgp4_predict::IlluminationState;
-
-match predictor.illumination_state(t)? {
-    IlluminationState::Sunlit  => println!("sunlit"),
-    IlluminationState::Eclipse => println!("in eclipse"),
-}
-```
-
-### Detecting a live pass
-
-If you receive a signal mid-pass and need to recover the full window:
-
-```rust
-let transit = predictor
-    .detect_transit(now, &glasgow, 5.0)?
-    .expect("satellite is not overhead");
-```
-
-### Apsides
-
-```rust
-use sgp4_predict::ApsisEvent;
-
-for apsis in predictor.apsis_iter(start..end) {
-    let apsis = apsis?;
-    match apsis.event {
-        ApsisEvent::Apogee  => println!("apogee  at {}", apsis.time),
-        ApsisEvent::Perigee => println!("perigee at {}", apsis.time),
+        // A Transit is itself a time interval, so it can be passed straight back in.
+        for observation in predictor.observation_iter(&glasgow, transit, Duration::seconds(10)) {
+            let (t, obs) = observation?;
+            println!(
+                "  {t}  az {:6.1}°  el {:5.1}°  range {:.0} km",
+                obs.azimuth.degrees(),
+                obs.elevation.degrees(),
+                obs.range / 1000.0,
+            );
+        }
     }
+    Ok(())
 }
 ```
 
-## Custom satellite and observer types
+## What else `Predictor` can do
 
-If your application already has types that hold TLE data or ground station coordinates, you can implement the traits directly rather than converting to `Tle` / `GroundObserver`:
+| Method | Yields |
+|---|---|
+| `propagate(t)` | TEME state vector at an instant |
+| `observe_at(t, observer)` | azimuth / elevation / range / range rate |
+| `prediction_iter(interval, step)` | state vectors at a fixed cadence |
+| `observation_iter(observer, interval, step)` | observations at a fixed cadence |
+| `transits_iter(observer, interval, min_elevation)` | passes above a minimum elevation |
+| `detect_transit(t, observer, min_elevation)` | the pass in progress at `t`, if any |
+| `max_elevation(interval, observer)` | the peak-elevation moment of a pass |
+| `apsis_iter(interval)` | apogee and perigee events |
+| `illumination_iter(interval)` | sunlit and eclipse windows |
+| `illumination_state(t)` | sunlit or in eclipse at an instant |
+| `tle_age(now)` | how stale the elements are |
+
+Each detection method has a `_with_opts` sibling taking scan steps and other tuning knobs, and
+`Predictor::with_refinement` configures the root finder that pins down event times.
+
+## Bring your own types
+
+If your application already has a satellite record or a ground-station type, implement
+[`TleRecord`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.TleRecord.html) or
+[`Observer`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.Observer.html) on it and pass
+it in directly — every method is generic over these traits:
 
 ```rust
-use sgp4_predict::{HasId, HasTle, Observer, Predictor};
+use sgp4_predict::{Degrees, Observer};
 
-// Any type with an id and TLE lines becomes a Satellite automatically
-struct MyRecord {
-    norad_id: String,
-    tle_line1: String,
-    tle_line2: String,
-}
-
-impl HasId for MyRecord {
-    fn id(&self) -> &str { &self.norad_id }
-}
-
-impl HasTle for MyRecord {
-    fn line_1(&self) -> &str { &self.tle_line1 }
-    fn line_2(&self) -> &str { &self.tle_line2 }
-}
-
-// Any type with lat/lon/alt becomes an Observer
 struct Site {
     lat: f64,
     lon: f64,
@@ -129,35 +93,49 @@ struct Site {
 }
 
 impl Observer for Site {
-    fn latitude_deg(&self) -> f64  { self.lat }
-    fn longitude_deg(&self) -> f64 { self.lon }
+    fn latitude(&self) -> Degrees  { Degrees(self.lat) }
+    fn longitude(&self) -> Degrees { Degrees(self.lon) }
     fn altitude(&self) -> f64      { self.elevation_m }
 }
-
-let predictor = Predictor::from_tle(&my_record)?;
 ```
-
-The `Satellite` supertrait is a blanket impl — any type implementing both `HasId` and `HasTle` satisfies it automatically.
 
 ## Units
 
-All quantities are SI. Angles follow a consistent convention: **inputs are in degrees, outputs are in radians**, with `_deg` convenience methods provided.
+Positions are in **metres** and velocities in **m/s** throughout.
 
-| Quantity                         | Unit                      |
-|----------------------------------|---------------------------|
-| Position                         | metres                    |
-| Velocity                         | m/s                       |
-| Observer lat/lon (input)         | degrees                   |
-| Observer altitude                | metres                    |
-| `min_elevation_deg` (input)      | degrees                   |
-| Azimuth / elevation (output)     | radians                   |
-| Range                            | metres                    |
-| Range rate                       | m/s (positive = receding) |
+Angles are typed: `Degrees` and `Radians` are distinct, so they cannot be mixed up by accident.
+Observer coordinates are `Degrees`; `Observation::azimuth` and `elevation` are `Radians`. Convert
+with `.to_degrees()` / `.to_radians()`, or use `.degrees()` / `.radians()` to get a bare `f64`.
+Anywhere a `min_elevation` is taken, either unit is accepted.
 
-Degree equivalents for output angles:
+Azimuth is measured clockwise from north over `(-π, π]`, so a southwesterly bearing is negative.
+Call `.normalized()` for the `[0, 2π)` convention that most tracking software reports.
 
-- `Observation::azimuth_deg()`, `Observation::elevation_deg()`
+## Orbit Mean-Elements Messages
 
-## Examples
+`sgp4::Elements` (re-exported) deserialises straight from CCSDS OMM JSON as served by Celestrak
+and Space-Track, and `Predictor::new` takes it in place of a TLE.
 
-See [`tests/examples.rs`](tests/examples.rs) for complete, runnable examples covering common use cases.
+## More
+
+- [API documentation](https://docs.rs/sgp4-predict)
+- [`tests/examples.rs`](tests/examples.rs) — runnable end-to-end examples
+- Notes on [architecture](https://github.com/steg87/sgp4-predict/blob/main/docs/architecture.md),
+  [coordinate frames](https://github.com/steg87/sgp4-predict/blob/main/docs/coordinate-frames.md),
+  and [event detection](https://github.com/steg87/sgp4-predict/blob/main/docs/event-detection.md)
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-APACHE) or
+  <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
+this crate by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without
+any additional terms or conditions.

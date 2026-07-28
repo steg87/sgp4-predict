@@ -1,142 +1,94 @@
 # Event Detection
 
-All three built-in detectors (transits, apsides, illumination) are thin wrappers over the generic
-`detect` module: a user-supplied scalar **event function** `f(t)` is sampled over the search interval
-by a pluggable **step strategy**, sign changes between samples bracket a crossing, and the crossing is
-refined by the bracketed hybrid solver (`Refinement`). `EventIter` yields refined point crossings;
-`WindowIter` pairs them into windows. The same building blocks are public, so new event kinds (e.g.
-ascending-node equator crossings via TEME `z = 0`) need no bespoke iterator.
+Transits, apsides, and illumination windows are all found the same way: a scalar **event function**
+`f(t)` is sampled across the interval by a **step strategy**, a sign change between two samples
+brackets a crossing, and the crossing time is refined by a bracketed hybrid solver. `EventIter`
+yields refined point crossings; `WindowIter` pairs them into intervals.
 
-## Transit Detection
+The three built-in iterators are thin wrappers over this machinery. Enabling the `generics` feature
+exposes it directly, so other event kinds — ascending-node crossings via TEME `z = 0`, say — need no
+bespoke iterator.
 
-A **transit** is a continuous interval during which a satellite's elevation above the observer's horizon
-exceeds a configurable `min_elevation` threshold (Acquisition of Signal → Loss of Signal).
+## Refining a crossing
 
-### Adaptive Stepping Strategy
+Once a crossing is bracketed, `Refinement` solves for the zero:
 
-`TransitIter` avoids scanning every second of a multi-day window by using two step sizes:
+```mermaid
+flowchart TD
+    A[Evaluate f at candidate time] --> B{Bracket < time_tolerance?}
+    B -- Yes --> C[Return refined time]
+    B -- No --> D{Sample carries a derivative?}
+    D -- Yes, step stays in bracket --> E[Newton-Raphson step]
+    D -- No --> F[Secant step through bracket endpoints]
+    E --> G[Bisection safeguard if the step escapes the bracket or one side stalls]
+    F --> G
+    G --> A
+```
 
-- **Large step** (10 minutes by default): used when the satellite is well below `min_elevation` or descending away.
-  Moves quickly through idle periods.
-- **Small step** (10 seconds by default): used when the satellite is approaching or already above `min_elevation`.
-  Provides enough resolution to bracket the exact crossing precisely.
+The bracket never widens: every evaluation replaces the endpoint of matching sign, and bisection is
+forced whenever an interpolated step leaves the bracket or the same side is updated twice running.
+Convergence is therefore guaranteed regardless of the function's shape — this is the safeguarded
+`rtsafe` scheme of *Numerical Recipes* §9.4, extended with a secant step for derivative-free
+samples.
 
-The step size is selected based on the current elevation and its rate of change, so the iterator
-automatically narrows its resolution only where it matters. These bounds, the boundary-walk step, and the
-max transit duration are all configurable via `TransitIterOpts` (`Predictor::transits_iter_with_opts`).
+Convergence is measured on the bracket width in seconds (`Refinement::time_tolerance`), so timing
+precision does not depend on the event function's units.
 
-### State Machine
+## Transits
+
+A **transit** is a continuous interval during which the satellite's elevation exceeds
+`min_elevation` — acquisition of signal (AoS) to loss of signal (LoS).
+
+Scanning a multi-day window second by second would be wasteful, so `TransitIter` steps adaptively:
+large steps (10 minutes by default) while the satellite is well below the threshold or descending
+away, small steps (10 seconds) as it approaches or while it is above. The elevation function
+carries its own rate of change, which both selects the step size and gives the solver a derivative
+for Newton-Raphson steps — near a horizon crossing elevation is nearly linear, so a step or two
+usually suffices.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Outside
     Outside --> Outside : el < min_el (large step)
     Outside --> Refining : el ≥ min_el detected
-    Refining --> Inside : AoS refined (hybrid solver)
+    Refining --> Inside : AoS refined
     Inside --> Inside : el ≥ min_el (small step)
     Inside --> Refining2 : el < min_el detected
     Refining2 --> Outside : LoS refined → emit Transit
     Outside --> [*] : interval end
 ```
 
-The iterator stays in `Outside` until a step crosses the elevation threshold. It then enters a
-`Refining` state to pin down the exact crossing time (AoS), switches to `Inside` to track the pass,
-and refines the LoS crossing before emitting a completed `Transit` and returning to `Outside`.
+Step bounds, the boundary-walk step, and the maximum transit duration are configurable via
+`TransitIterOpts`.
 
-### Root-Finding for AoS / LoS
+`Predictor::max_elevation` finds the peak of a pass with the same machinery applied to a different
+event function: falling zero crossings of the elevation *rate*.
 
-Once a crossing is bracketed, the exact time is found by treating elevation as a scalar function of time
-and solving for the zero with the bracketed hybrid solver. Each iteration chooses its step from the
-sample it just evaluated:
+## Apsides
 
-```mermaid
-flowchart TD
-    A[Evaluate f at candidate time] --> B{Converged?\nbracket < time_tolerance}
-    B -- Yes --> C[Return refined time]
-    B -- No --> D{Sample carries\na derivative?}
-    D -- Yes, step in bracket --> E[Newton-Raphson step]
-    D -- No --> F[Secant step through\nbracket endpoints]
-    E --> G[Bisection safeguard if step\nescapes bracket or one side stalls]
-    F --> G
-    G --> A
-```
+**Apogee** and **perigee** are the maximum and minimum orbital radius. `ApsisIter` watches the sign
+of the radial velocity `r·v` (position dotted with velocity) at a fixed 60-second step:
 
-**Newton-Raphson steps** use the elevation *rate* (already computed alongside the elevation) as the
-derivative. Near the crossing, elevation changes nearly linearly, so a step or two usually suffices.
+- `r·v > 0` — moving away from Earth's centre, heading for apogee
+- `r·v < 0` — moving toward it, heading for perigee
+- `+ → −` is an apogee, `− → +` a perigee
 
-**The bracket never widens**: every evaluation replaces the endpoint with matching sign, and a
-bisection rule (forced whenever an interpolated step leaves the bracket, or the same side has been
-updated twice in a row) guarantees convergence regardless of the function's shape — the safeguarded
-`rtsafe` scheme of *Numerical Recipes* §9.4, extended with a secant step for derivative-free samples.
+The derivative of `r·v` involves the jerk vector and is not cheaply available, so samples carry no
+rate and the solver falls back to secant/bisection steps — which converge in a handful of iterations
+on a tight bracket.
 
-Convergence is declared when the bracket is narrower than `Refinement::time_tolerance` (seconds), so
-timing precision is independent of the event function's units.
+This method suits **near-circular LEO orbits** (eccentricity ≲ 0.01). On a highly elliptical orbit
+the satellite moves fast enough near perigee that the 60-second default step can skip closely spaced
+events; pass a smaller `step` via `ApsisIterOpts`.
 
-### Peak Elevation
+## Illumination
 
-`Predictor::max_elevation` finds the highest-elevation instant within an interval (typically a
-`Transit`) by scanning for falling zero crossings of the elevation *rate* — the same root-finding
-infrastructure, applied to a different event function. Its fixed scan step (10 seconds by default)
-is configurable via `MaxElevationOpts` (`Predictor::max_elevation_with_opts`).
+A satellite is **sunlit** when it is outside Earth's shadow. `IlluminationIter` models the shadow as
+a cylinder extending behind Earth in the anti-Sun direction and computes a scalar that is negative
+in sunlight and positive in eclipse; its sign changes are refined as above (again without a
+derivative). The resulting `Illumination` windows tile the interval, each tagged `Sunlit` or
+`Eclipse`.
 
----
-
-## Apsis Detection
-
-**Apogee** and **perigee** are the points of maximum and minimum orbital radius respectively.
-
-### Radial Velocity Sign Change
-
-`ApsisIter` monitors the **radial velocity** scalar at a fixed step (60 seconds by default,
-configurable via `ApsisIterOpts` / `Predictor::apsis_iter_with_opts`):
-
-```
-r·v = position · velocity   (dot product)
-```
-
-- `r·v > 0`: satellite moving away from Earth's centre → heading toward apogee.
-- `r·v < 0`: satellite moving toward Earth's centre → heading toward perigee.
-- Sign change `+ → −`: apogee (`ApsisEvent::Apogee`)
-- Sign change `− → +`: perigee (`ApsisEvent::Perigee`)
-
-When a sign change is detected, the two adjacent time samples bracket the event, and the hybrid
-solver refines the crossing time. The derivative of `r·v` (involving the jerk vector) is not readily
-available, so samples carry no rate and the solver proceeds by secant/bisection steps — which
-converge in very few iterations on a tight bracket.
-
-### Correctness Note
-
-The radial-velocity sign-change method is correct and efficient for **near-circular LEO orbits**
-(eccentricity ≲ 0.01). For highly elliptical orbits (HEO, Molniya), the 60-second default step may
-skip closely-spaced events near perigee where the satellite moves very fast — pass a smaller `step`
-via `ApsisIterOpts` if needed. If using this library with non-LEO TLEs, consider whether apsis
-timing precision is critical to your use case.
-
----
-
-## Illumination Detection
-
-A satellite is **sunlit** when it is not in Earth's shadow and is therefore visible to optical
-ground observers (assuming favourable geometry).
-
-### Cylindrical Shadow Model
-
-A simplified cylindrical shadow extends behind Earth in the anti-Sun direction. For each time step,
-a **shadow scalar** is computed that is:
-
-- **Negative** when the satellite is in sunlight.
-- **Positive** when the satellite is in Earth's shadow (eclipse).
-
-The sign change of this scalar is found using the same root-finding infrastructure as transit
-detection (the shadow scalar has no cheap derivative, so refinement proceeds by secant/bisection
-steps). `IlluminationIter` yields `Illumination` events marking the start and end of each sunlit
-interval. The scan step, boundary-walk step, and window duration cap are configurable via
-`IlluminationIterOpts` (`Predictor::illumination_iter_with_opts`).
-
-### Limitation
-
-The cylindrical model ignores the **penumbra** — the partial shadow region where the satellite
-receives reduced sunlight. The transition between fully sunlit and fully eclipsed is treated as
-instantaneous. For most LEO scheduling applications (determining when a satellite is visible from
-the ground) this approximation is adequate. For precise radiometric or solar power modelling, a
-conical shadow model would be needed.
+The cylindrical model ignores the **penumbra**, treating the transition as instantaneous. That is
+adequate for deciding when a satellite is optically visible, but a conical shadow model would be
+needed for radiometric or solar-power work.

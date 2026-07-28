@@ -62,7 +62,8 @@ impl<T: Observer> ObserverExt for T {}
 /// [`elevation`](Observation::elevation) for degree equivalents.
 #[derive(Debug, Clone)]
 pub struct Observation {
-    /// Azimuth from north, measured clockwise.
+    /// Azimuth from north, measured clockwise, in `(-π, π]`. Call
+    /// [`normalized`](Radians::normalized) for the `[0, 2π)` convention.
     pub azimuth: Radians,
     /// Elevation above the horizon.
     pub elevation: Radians,

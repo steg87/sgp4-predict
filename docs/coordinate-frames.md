@@ -1,65 +1,43 @@
 # Coordinate Frames
 
-## Why Frames Matter
+SGP4 returns a state vector in the **TEME** frame; a ground observer needs **ENU**. Mixing frames
+produces plausible-looking but completely wrong numbers, so this library makes a wrong conversion a
+compile error.
 
-SGP4 propagation returns a satellite state vector in the **TEME** frame. Ground observers need
-**ENU** (azimuth/elevation). Mixing frames silently produces plausible-looking but completely wrong
-numbers — a common source of bugs in orbital mechanics software. This library makes wrong conversions
-a compile error.
+## The three frames
 
----
+**TEME — True Equator, Mean Equinox.** The native output frame of SGP4. Origin at Earth's centre of
+mass, X toward the mean vernal equinox, Z along Earth's rotation axis. It does not rotate with
+Earth's surface — suitable for propagation, not for ground geometry.
 
-## Frame Descriptions
+**ECEF — Earth-Centred, Earth-Fixed.** Same origin, but X is fixed to the prime meridian, so the
+frame rotates with Earth and a point on the ground has constant coordinates.
 
-### TEME — True Equator Mean Equinox
+**ENU — East-North-Up.** Local to the observer: E and N tangent to the ellipsoid, U along its
+normal. This is the natural basis for azimuth and elevation.
 
-The native output frame of the SGP4 propagator. The origin is Earth's centre of mass. The X-axis
-points toward the mean vernal equinox, the Z-axis is aligned with Earth's rotation axis (true equator),
-and the Y-axis completes the right-handed system. The frame rotates with Earth's precession but not
-with Earth's surface — it is an inertial-like frame suitable for propagation, not for ground geometry.
-
-### ECEF — Earth-Centred, Earth-Fixed
-
-Same origin as TEME but the X-axis is fixed to the prime meridian, so the frame rotates with Earth.
-A position in ECEF is constant for a fixed point on the ground. The TEME→ECEF transformation is a
-rotation around the Z-axis by the **Greenwich Mean Sidereal Time (GMST)** angle at the epoch.
-
-### ENU — East-North-Up
-
-A local, observer-relative frame. The origin is the observer's geodetic position on Earth's surface.
-Axes point:
-
-- **E** — local East (tangent to the ellipsoid, pointing east)
-- **N** — local North (tangent to the ellipsoid, pointing north)
-- **U** — local Up (normal to the ellipsoid, pointing away from Earth's centre)
-
-ENU coordinates are the natural basis for computing azimuth and elevation as seen by a ground station.
-
----
-
-## Conversion Pipeline
+## Conversion pipeline
 
 ```mermaid
 flowchart LR
-    TEME["StateVector&lt;Teme&gt;\n(SGP4 output)"]
-    -->|"to_ecef(t)\nZ-axis rotation by GMST"| ECEF["StateVector&lt;Ecef&gt;\n(Earth-fixed)"]
-    -->|"to_enu(observer)\nGeodetic origin shift"| ENU["StateVector&lt;Enu&gt;\n(Local East-North-Up)"]
-    -->|"to_observation()\nSpherical coords"| OBS["Observation\n(az, el, range, range_rate)"]
+    TEME["StateVector&lt;Teme&gt;"]
+    -->|"to_ecef(t)"| ECEF["StateVector&lt;Ecef&gt;"]
+    -->|"to_enu(observer)"| ENU["StateVector&lt;Enu&gt;"]
+    -->|"to_observation()"| OBS["Observation"]
 ```
-
-Each step is a method on the appropriately typed `StateVector`:
 
 | Step | Method | Transform |
 |---|---|---|
-| TEME → ECEF | `StateVector<Teme>::to_ecef(t)` | Z-rotation by GMST computed from `t` |
-| ECEF → ENU | `StateVector<Ecef>::to_enu(observer)` | Translate to observer origin, rotate to local tangent plane |
-| ENU → Observation | `StateVector<Enu>::to_observation()` | `atan2` for azimuth, `asin` for elevation, magnitude for range |
+| TEME → ECEF | `StateVector<Teme>::to_ecef(t)` | Z-rotation by the GMST angle at `t` |
+| ECEF → ENU | `StateVector<Ecef>::to_enu(observer)` | Translate to the observer, rotate to the local tangent plane |
+| ENU → `Observation` | `StateVector<Enu>::to_observation()` | `atan2` for azimuth, `asin` for elevation, magnitude for range |
 
----
+`Predictor::observe_at` runs the whole chain; the individual steps are public for callers who need
+an intermediate frame.
 
-## Phantom Marker Pattern
+## How the type safety works
 
-`StateVector<F>` is generic over a frame marker `F`:
+`StateVector<F>` is generic over a frame marker:
 
 ```rust
 pub struct StateVector<F> {
@@ -69,34 +47,22 @@ pub struct StateVector<F> {
 }
 ```
 
-`Teme`, `Ecef`, and `Enu` are empty structs used only as type parameters. Because `to_ecef` is
-implemented only on `StateVector<Teme>` and `to_enu` only on `StateVector<Ecef>`, the compiler
-rejects any code that tries to skip or reorder conversions. There is no runtime overhead — `PhantomData`
-is a zero-sized type that disappears entirely after compilation.
-
----
+`Teme`, `Ecef`, and `Enu` are empty structs used only as type parameters. `to_ecef` is implemented
+only on `StateVector<Teme>` and `to_enu` only on `StateVector<Ecef>`, so the compiler rejects any
+attempt to skip or reorder a conversion. `PhantomData` is zero-sized, so this costs nothing at
+runtime.
 
 ## Units
 
-**All positions are in metres. All velocities are in m/s.**
+Positions are in **metres**, velocities in **m/s**. `sgp4` returns kilometres; conversion happens
+once in `predict.rs` before anything reaches a caller.
 
-The `sgp4` crate returns kilometres and km/s. Conversion to SI units happens immediately in
-`predict.rs` inside the `From<sgp4::Prediction>` impl, before any coordinates are exposed to
-callers. No unit conversion is needed anywhere else in the library or in user code.
+Observer coordinates are `Degrees`; `Observation::azimuth` and `elevation` are `Radians`. Azimuth
+comes straight from `atan2`, so it spans `(-π, π]` rather than the `[0, 2π)` most tracking software
+reports — call `Radians::normalized()` if you need the latter.
 
----
+To supply a ground station, implement `Observer`:
 
-## Observer Requirements
-
-Implement the `Observer` trait on your ground-station type with three methods:
-
-- **`latitude()`**: geodetic latitude as `Degrees` (positive north)
-- **`longitude()`**: geodetic longitude as `Degrees` (positive east)
-- **`altitude()`**: metres above the WGS-84 ellipsoid
-
-The trait is intentionally degree-first since this is the common human readable form. `Degrees`
-and `Radians` (see `angle.rs`) tag a plain `f64` with its unit so the two can't be silently mixed
-up at a function boundary; conversion between them goes through `.to_radians()`/`.to_degrees()`.
-
-`Observation::azimuth` and `Observation::elevation` are `Radians`; call `.to_degrees()` on either
-for the degree equivalent.
+- `latitude() -> Degrees` — geodetic, positive north
+- `longitude() -> Degrees` — geodetic, positive east
+- `altitude() -> f64` — metres above the WGS-84 ellipsoid
