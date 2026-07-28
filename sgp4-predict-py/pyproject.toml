@@ -32,6 +32,15 @@ build-backend = "maturin"
 dev = ["maturin>=1.0,<2.0", "pytest>=8", "ruff==0.15.21"]
 
 [tool.maturin]
+# The sdist for a workspace member is rooted at the workspace, and maturin
+# hoists pyproject.toml/README there but leaves the licence files in this
+# directory — while still recording root-relative `License-File:` entries.
+# PyPI rejects the upload when those paths do not resolve, so place them at the
+# sdist root explicitly. Wheels are unaffected; they get dist-info/licenses/.
+include = [
+    { path = "LICENSE-APACHE", format = "sdist" },
+    { path = "LICENSE-MIT", format = "sdist" },
+]
 python-source = "python"
 module-name = "sgp4_predict._sgp4_predict"
 # Only maturin builds enable extension-module (so libpython is not linked into
