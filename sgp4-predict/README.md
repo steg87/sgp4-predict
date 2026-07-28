@@ -3,7 +3,7 @@
 [![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict)](https://crates.io/crates/sgp4-predict)
 [![docs.rs](https://img.shields.io/docsrs/sgp4-predict)](https://docs.rs/sgp4-predict)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)](LICENSE-MIT)
+![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict)
 
 Higher-level satellite prediction on top of the [`sgp4`](https://crates.io/crates/sgp4) crate.
 Give it a TLE and it will propagate state vectors, compute ground observations, and find passes,
@@ -122,3 +122,19 @@ and Space-Track, and `Predictor::new` takes it in place of a TLE.
 - Notes on [architecture](https://github.com/steg87/sgp4-predict/blob/main/docs/architecture.md),
   [coordinate frames](https://github.com/steg87/sgp4-predict/blob/main/docs/coordinate-frames.md),
   and [event detection](https://github.com/steg87/sgp4-predict/blob/main/docs/event-detection.md)
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-APACHE) or
+  <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
+this crate by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without
+any additional terms or conditions.

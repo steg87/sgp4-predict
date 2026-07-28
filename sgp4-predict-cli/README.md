@@ -2,7 +2,7 @@
 
 [![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict-cli)](https://crates.io/crates/sgp4-predict-cli)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict-cli)](LICENSE-MIT)
+![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict-cli)
 
 A command-line tool for SGP4 satellite pass prediction: transits, observations, state vectors,
 apsides, and illumination windows, as text, JSON, or CSV.
@@ -259,3 +259,19 @@ sgp4-predict man > /usr/local/share/man/man1/sgp4-predict.1
 | 1    | Runtime error (bad TLE, unreadable config, unknown station) |
 | 2    | Invalid command-line usage                                  |
 | 141  | Output pipe closed early, e.g. `… \| head` (128 + SIGPIPE)  |
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-APACHE) or
+  <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
+this crate by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without
+any additional terms or conditions.

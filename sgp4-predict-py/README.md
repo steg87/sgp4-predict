@@ -2,7 +2,7 @@
 
 [![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
-[![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT)
+![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)
 
 Python bindings for the [`sgp4-predict`](https://crates.io/crates/sgp4-predict) Rust library:
 satellite pass prediction from TLE or OMM data, with type stubs and native `datetime` support.
@@ -151,3 +151,19 @@ Type stubs live in two files: `python/sgp4_predict/_sgp4_predict/__init__.pyi` i
 `make stubs` after Rust API changes and is not committed, while
 `python/sgp4_predict/__init__.pyi` is hand-maintained and owns `IntervalRange`, `Interval`, and the
 typed `Predictor` overrides.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-APACHE) or
+  <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
+this crate by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without
+any additional terms or conditions.
