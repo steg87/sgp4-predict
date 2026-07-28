@@ -57,6 +57,25 @@ jobs:
           enable-cache: false
       - run: cargo doc --all-features --no-deps
 
+  docsrs:
+    name: Docs (docs.rs)
+    runs-on: ubuntu-latest
+    # The stable `docs` job above builds without `--cfg docsrs`, so it never
+    # compiles the `cfg_attr(docsrs, ...)` block and cannot catch a nightly
+    # rustdoc feature being renamed or removed under it. Mirror what docs.rs
+    # actually runs, or the first warning is a failed build after publishing.
+    env:
+      RUSTDOCFLAGS: --cfg docsrs -D warnings
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - run: cargo doc -p sgp4-predict --all-features --no-deps
+
   versions:
     name: Version alignment
     runs-on: ubuntu-latest

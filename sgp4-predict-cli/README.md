@@ -1,5 +1,6 @@
 # sgp4-predict-cli
 
+[![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![Crates.io](https://img.shields.io/crates/v/sgp4-predict-cli)](https://crates.io/crates/sgp4-predict-cli)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict-cli)](LICENSE-MIT)
 

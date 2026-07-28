@@ -42,3 +42,8 @@ audit:
 docs:
 	cargo doc --all-features --no-deps --open
 
+.PHONY: docs-rs
+docs-rs:  ## build docs the way docs.rs does (nightly + --cfg docsrs)
+	RUSTDOCFLAGS="--cfg docsrs -D warnings" \
+	  cargo +nightly doc -p sgp4-predict --all-features --no-deps
+

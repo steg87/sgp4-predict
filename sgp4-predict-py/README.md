@@ -1,5 +1,6 @@
 # sgp4-predict — Python bindings
 
+[![Test](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml/badge.svg)](https://github.com/steg87/sgp4-predict/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/sgp4-predict)](https://pypi.org/project/sgp4-predict/)
 [![License: MIT OR Apache-2.0](https://img.shields.io/pypi/l/sgp4-predict)](https://github.com/steg87/sgp4-predict/blob/main/LICENSE-MIT)
 

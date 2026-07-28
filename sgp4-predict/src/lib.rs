@@ -66,7 +66,7 @@
 //!   the concrete iterators, for detecting event kinds this crate does not
 //!   cover. Off by default.
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Compiles the README's examples as doctests so they cannot drift.
 #[cfg(doctest)]
