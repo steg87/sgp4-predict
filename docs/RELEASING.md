@@ -139,6 +139,16 @@ The private key is how App auth works: the action signs a JWT with it and
 exchanges that for a short-lived installation token. A client secret cannot be
 used — that belongs to the OAuth user flow, which needs a browser and a human.
 
+Set the key from the file rather than pasting it, so its line breaks survive:
+
+```bash
+gh secret set RELEASE_APP_PRIVATE_KEY < ~/Downloads/<app>.<date>.private-key.pem
+```
+
+A mangled or truncated value fails at *Mint app token* with `Invalid keyData` /
+`asn1 encoding routines::not enough data` — the key never reaches GitHub, so
+this is always the local value, not the App's registration.
+
 There is deliberately no fallback: if `RELEASE_APP_CLIENT_ID` is unset,
 *Prepare release* fails immediately rather than opening a PR that silently gets
 no CI.
