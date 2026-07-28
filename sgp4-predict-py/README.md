@@ -12,8 +12,6 @@ satellite pass prediction from TLE or OMM data, with type stubs and native `date
 pip install sgp4-predict
 ```
 
-Requires Python 3.10+.
-
 ## Quick start
 
 Find the passes over a ground station and sample each one:
