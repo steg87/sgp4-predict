@@ -57,6 +57,17 @@ fails `test.yml` immediately.
    `<name>-v<version>` tag does not yet exist, tags it, and opens a GitHub
    Release per crate.
 
+### Which release is "Latest"
+
+The **`sgp4-predict` release from `main`**, and only that one. `sgp4-predict` is
+the headline crate, so the cli and bindings releases are always created with
+`--latest=false` — and so is anything from a maintenance branch, since a
+backport `1.1.2` must not take the badge from `1.2.0`. Pre-releases are
+additionally marked `--prerelease` and never take it.
+
+Left to `gh`'s default ("automatic based on date and version") the three
+releases from a single bump would race for the badge.
+
 ### Pre-releases
 
 `rc`, `beta` and `alpha` bump into a pre-release series:

@@ -26,7 +26,21 @@ fi
 notes="$(.github/scripts/extract-changelog.sh "$dir" "$version")"
 [ -n "$notes" ] || notes="Release ${version}."
 
+# "Latest" belongs to the library crate released from main — it is the repo's
+# headline version. Left to gh's default ("automatic based on date and
+# version") the three releases race for the badge, and a backport from a
+# maintenance branch would take it from a newer line.
+case "$version" in
+  *-*) prerelease=true ;;
+  *)   prerelease=false ;;
+esac
+latest=false
+if [ "$prerelease" = false ] && [ "$name" = sgp4-predict ] && [ "${GITHUB_REF_NAME:-}" = main ]; then
+  latest=true
+fi
+
 git tag "$tag"
 git push origin "$tag"
-gh release create "$tag" --title "${name} ${version}" --notes "$notes"
-echo "Created tag and GitHub Release ${tag}."
+gh release create "$tag" --title "${name} ${version}" --notes "$notes" \
+  --latest="$latest" --prerelease="$prerelease"
+echo "Created tag and GitHub Release ${tag} (latest=${latest}, prerelease=${prerelease})."
