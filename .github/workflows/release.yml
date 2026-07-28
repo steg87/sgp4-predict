@@ -49,7 +49,6 @@ jobs:
       lib_version: ${{ steps.plan.outputs.lib_version }}
       cli_version: ${{ steps.plan.outputs.cli_version }}
       py_version: ${{ steps.plan.outputs.py_version }}
-      any: ${{ steps.plan.outputs.any }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -69,7 +68,6 @@ jobs:
             exit 1
           fi
 
-          any=false
           for entry in lib:sgp4-predict cli:sgp4-predict-cli py:sgp4-predict-py; do
             key="${entry%%:*}"; name="${entry#*:}"
             version="$(jq -r --arg n "$name" '.packages[] | select(.name == $n) | .version' /tmp/meta.json)"
@@ -82,13 +80,12 @@ jobs:
             elif git rev-parse -q --verify "refs/tags/${name}-v${version}" >/dev/null; then
               pending=false
             else
-              pending=true; any=true
+              pending=true
             fi
             echo "${key}=${pending}" >> "$GITHUB_OUTPUT"
             echo "${key}_version=${version}" >> "$GITHUB_OUTPUT"
             echo "${name} ${version}: pending=${pending}" >> "$GITHUB_STEP_SUMMARY"
           done
-          echo "any=${any}" >> "$GITHUB_OUTPUT"
 
   publish-crates:
     name: Publish to crates.io
@@ -114,13 +111,15 @@ jobs:
 
       - name: Publish
         run: |
-          # `cargo info <name>@<version>` is the recovery path: a previous run
-          # may have published but failed before tagging.
+          # Recovery path: a previous run may have published but failed before
+          # tagging. Do NOT swap this for `cargo info` — run inside the
+          # workspace it resolves the local member and always reports
+          # "published", so nothing is ever published and the run goes green.
           args=()
-          if [ "$LIB" = true ] && ! cargo info "sgp4-predict@${LIB_VERSION}" >/dev/null 2>&1; then
+          if [ "$LIB" = true ] && ! .github/scripts/crate-published.sh sgp4-predict "$LIB_VERSION"; then
             args+=(-p sgp4-predict)
           fi
-          if [ "$CLI" = true ] && ! cargo info "sgp4-predict-cli@${CLI_VERSION}" >/dev/null 2>&1; then
+          if [ "$CLI" = true ] && ! .github/scripts/crate-published.sh sgp4-predict-cli "$CLI_VERSION"; then
             args+=(-p sgp4-predict-cli)
           fi
           if [ ${#args[@]} -eq 0 ]; then
@@ -141,9 +140,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Tag + GitHub Release
+        # Tagging must respect DRY_RUN: tag absence is the release signal, so a
+        # rehearsal that tagged would permanently mark the version released and
+        # the real publish would then be skipped.
+        if: env.DRY_RUN != 'true'
         run: |
-          [ "$LIB" = true ] && .github/scripts/tag-and-release.sh sgp4-predict sgp4-predict "$LIB_VERSION"
-          [ "$CLI" = true ] && .github/scripts/tag-and-release.sh sgp4-predict-cli sgp4-predict-cli "$CLI_VERSION"
+          [ "$LIB" = true ] && .github/scripts/tag-and-release.sh sgp4-predict "$LIB_VERSION"
+          [ "$CLI" = true ] && .github/scripts/tag-and-release.sh sgp4-predict-cli "$CLI_VERSION"
           true
 
   build-wheels:
@@ -240,4 +243,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Tag + GitHub Release
-        run: .github/scripts/tag-and-release.sh sgp4-predict-py sgp4-predict-py "$VERSION"
+        if: env.DRY_RUN != 'true'
+        run: .github/scripts/tag-and-release.sh sgp4-predict-py "$VERSION"

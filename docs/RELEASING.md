@@ -29,6 +29,11 @@ is how a cli-only fix ships without dragging the library along.
 The invariant is enforced twice: **Prepare release** refuses to open a PR that
 would break it, and `test.yml`'s `versions` job asserts it on every PR.
 
+A consequence worth knowing before adding a crate: **a new workspace member must
+start at the current `major.minor`**, not at `0.0.0`. The assertion compares all
+members, so a fourth crate born at the sentinel while the others are at `0.4.x`
+fails `test.yml` immediately.
+
 ## Making a release
 
 1. **Write notes as you go.** Every PR that changes behaviour adds bullets under
@@ -84,7 +89,10 @@ publish a release PR branch the moment it was pushed, before anyone reviewed it.
 
 Required once:
 
-- A **`release` label**, which *Prepare release* attaches to the PR it opens.
+- **Branch protection on `main` requiring `test.yml`.** *Release* fires on push
+  and does not itself wait for the suite, so this is what actually stops a
+  release PR merging — and publishing — over a red build.
+- A **`release` label**, applied by `.github/labeler.yml`'s head-branch rule.
 - **`cargo.io` environment** with a `CARGO_TOKEN` secret (a crates.io API
   token). The environment name must match `release.yml` exactly — a mismatch
   makes GitHub create an empty environment, and `cargo publish` then fails

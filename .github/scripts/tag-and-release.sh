@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # Create the git tag and GitHub Release for one crate, idempotently.
 #
-# Usage: tag-and-release.sh <crate-dir> <crate-name> <version>
+# Usage: tag-and-release.sh <crate> <version>
+#
+# <crate> is both the crate name and its directory — they are the same for all
+# three workspace members, and the tag is "<crate>-v<version>".
 #
 # Requires: gh (with GH_TOKEN set), git remote 'origin' authenticated for push.
 set -euo pipefail
 
-dir="${1:?usage: tag-and-release.sh <crate-dir> <crate-name> <version>}"
-name="${2:?usage: tag-and-release.sh <crate-dir> <crate-name> <version>}"
-version="${3:?usage: tag-and-release.sh <crate-dir> <crate-name> <version>}"
+name="${1:?usage: tag-and-release.sh <crate> <version>}"
+version="${2:?usage: tag-and-release.sh <crate> <version>}"
+dir="$name"
 tag="${name}-v${version}"
 
 if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1; then

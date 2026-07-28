@@ -175,6 +175,18 @@ jobs:
       - name: Verify the bumped workspace
         run: |
           cargo metadata --format-version 1 >/dev/null
+
+          # `cargo publish --dry-run` never contacts the registry for existence,
+          # so catch a bump onto an already-published version here rather than
+          # letting it no-op at merge time.
+          while IFS=: read -r name version; do
+            case "$name" in sgp4-predict|sgp4-predict-cli) ;; *) continue ;; esac
+            if .github/scripts/crate-published.sh "$name" "$version"; then
+              echo "::error::${name} ${version} is already on crates.io."
+              exit 1
+            fi
+          done < /tmp/changed.txt
+
           # One invocation stages both publishable crates in a temp registry, so
           # the cli verifies against the to-be-published lib rather than the index.
           # --allow-dirty: the bump is intentionally left uncommitted above.
@@ -185,9 +197,17 @@ jobs:
       - name: Build PR body
         env:
           PRERELEASE: ${{ steps.bump.outputs.prerelease }}
+          # Passed as env, never interpolated into the script: `branch` and
+          # `version` are free-form dispatch inputs and this step has the app
+          # token in scope.
+          BRANCH: ${{ inputs.branch }}
+          VERSION: ${{ inputs.version }}
+          LEVEL: ${{ inputs.level }}
+          SCOPE: ${{ inputs.scope }}
         run: |
+          if [ -n "$VERSION" ]; then how="version \`$VERSION\`"; else how="level \`$LEVEL\`"; fi
           {
-            echo "Prepared by **Prepare release** from \`${{ inputs.branch }}\` (scope \`${{ inputs.scope }}\`, ${{ inputs.version != '' && format('version `{0}`', inputs.version) || format('level `{0}`', inputs.level) }})."
+            echo "Prepared by **Prepare release** from \`$BRANCH\` (scope \`$SCOPE\`, $how)."
             echo
             cat /tmp/table.md
             echo
