@@ -11,8 +11,6 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-07-25
-
 Initial release — Python bindings (PyO3) for `sgp4-predict`.
 
 - `Predictor` constructed from a TLE or OMM (`Elements` via JSON/dict): propagate state

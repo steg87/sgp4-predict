@@ -73,7 +73,13 @@ jobs:
           for entry in lib:sgp4-predict cli:sgp4-predict-cli py:sgp4-predict-py; do
             key="${entry%%:*}"; name="${entry#*:}"
             version="$(jq -r --arg n "$name" '.packages[] | select(.name == $n) | .version' /tmp/meta.json)"
-            if git rev-parse -q --verify "refs/tags/${name}-v${version}" >/dev/null; then
+            if [ "$version" = 0.0.0 ]; then
+              # 0.0.0 is the "never released" sentinel. Without it, merging any
+              # commit while a crate sits at an untagged version would publish
+              # it — including the commit that first adds this pipeline.
+              # Bump out of 0.0.0 with `Prepare release` to ship a real version.
+              pending=false
+            elif git rev-parse -q --verify "refs/tags/${name}-v${version}" >/dev/null; then
               pending=false
             else
               pending=true; any=true

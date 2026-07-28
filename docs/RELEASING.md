@@ -139,11 +139,32 @@ duplicating:
 To rehearse without side effects, dispatch *Release* with `dry_run: true`
 (the default): detection and the wheel builds run, publishing and tagging do not.
 
+## The 0.0.0 sentinel
+
+A crate at `0.0.0` is treated as **never released**: *Release* skips it and
+publishes nothing.
+
+This exists because tag absence is otherwise the only release signal, so a crate
+sitting at an untagged version would publish on the next merge to `main` —
+including the merge that first added this pipeline. `0.0.0` says "there is no
+version here yet" rather than "here is an unpublished version".
+
+All three crates are at `0.0.0` today; nothing has been published to crates.io or
+PyPI. The first release bumps out of the sentinel.
+
 ## First release
 
-There are no tags yet and all three crates sit at `0.1.0` with a written
-`## [0.1.0]` section, so **v0.1.0 needs no _Prepare release_ run** — merging to
-`main` makes *Release* see three untagged versions and publish all three.
+Nothing special — it is the normal flow, and it is the first real exercise of it:
 
-Rehearse it first with a `dry_run: true` dispatch. To defer instead, push the
-three `*-v0.1.0` tags by hand to suppress detection.
+1. Confirm the repository setup above is complete, in particular the crates.io
+   token's **`publish-new`** scope (a `publish-update`-only token cannot create a
+   new crate) and the **pending** PyPI publisher.
+2. Dispatch *Prepare release* with `level: minor`, `scope: all` — `0.0.0` → `0.1.0`.
+   (`patch` would give `0.0.1`.)
+3. Review the PR: three version bumps, each `## [Unreleased]` rolled into
+   `## [0.1.0] - <date>`, and a body previewing the release notes.
+4. Merge. *Release* publishes all three, tags them, and opens three GitHub
+   Releases.
+
+Consider adding required reviewers to the `cargo.io` and `pypi` environments
+first, so the publish jobs pause for an explicit approval on this first run.

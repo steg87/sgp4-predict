@@ -150,7 +150,7 @@ Points that are deliberate and easy to "fix" wrongly:
 - Pre-releases (`0.2.0-rc.1`) skip the changelog roll; `extract-changelog.sh` reads `[Unreleased]` for any version with a pre-release suffix, so an rc ships the pending notes and the final release rolls them.
 - `release-prepare.yml` opens its PR branches under `release/…`, so `release.yml` triggers on `main` and `*.x` only. **Never add `release/**` to those triggers** — it would publish a release PR branch on push, before review. Maintenance branches are named `<major>.<minor>.x` (e.g. `1.1.x`) for the same reason.
 - `cargo publish` is one invocation with multiple `-p`. Cargo stages the crates in a temp registry so the cli verifies against the to-be-published lib; this is why there is no index-propagation retry loop.
-- Tag absence, not the commit, is the release signal, which is what makes a re-run resume instead of duplicating.
+- Tag absence, not the commit, is the release signal, which is what makes a re-run resume instead of duplicating. **`0.0.0` is the "never released" sentinel** and is skipped: without it, any crate at an untagged version would publish on the next merge to `main`.
 
 ## Domain knowledge
 
