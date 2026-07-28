@@ -204,6 +204,29 @@ jobs:
           /tmp/sdistcheck/bin/pip install --upgrade pip
           /tmp/sdistcheck/bin/pip install dist/*.tar.gz
           /tmp/sdistcheck/bin/python -c "import sgp4_predict; print('sdist import OK')"
+      - name: Verify PyPI would accept the metadata
+        # PyPI rejects an upload whose `License-File:` entries do not resolve
+        # inside the archive, and that check is server-side only — twine check
+        # passes regardless. Assert it here so the failure lands before the
+        # publish job rather than after crates.io has already gone out.
+        run: |
+          /tmp/sdistcheck/bin/pip install twine
+          /tmp/sdistcheck/bin/twine check dist/*.tar.gz
+          /tmp/sdistcheck/bin/python - <<'PY'
+          import email, glob, sys, tarfile
+
+          sdist = glob.glob("dist/*.tar.gz")[0]
+          with tarfile.open(sdist) as tar:
+              names = set(tar.getnames())
+              root = sorted(names)[0].split("/")[0]
+              meta = email.message_from_bytes(tar.extractfile(f"{root}/PKG-INFO").read())
+
+          missing = [f for f in meta.get_all("License-File") or [] if f"{root}/{f}" not in names]
+          for found in meta.get_all("License-File") or []:
+              print(f"License-File {found}: {'missing' if found in missing else 'present'}")
+          if missing:
+              sys.exit(f"{sdist} declares License-File entries it does not contain: {missing}")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-sdist
