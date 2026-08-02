@@ -17,6 +17,9 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   latitude/longitude vertices — concave and self-intersecting rings are supported, with
   `FillRule::NonZero` (default) or `FillRule::EvenOdd` deciding the interior of the latter. The ring
   closes implicitly and vertex order does not matter. Implement `Area` for other shapes.
+- `Rectangle`, a latitude/longitude box whose north and south edges follow their parallels exactly,
+  with no great-circle bulge and no hemisphere restriction. Wraps across the antimeridian, and
+  `Rectangle::latitude_band` covers bands and polar caps.
 - `Geodetic` and `LatLon` types, `EcefState::to_geodetic`, and `Predictor::sub_point` — the geodetic
   point directly beneath the satellite.
 - `Predictor::ground_track_iter`, sampling sub-satellite points at a fixed cadence.

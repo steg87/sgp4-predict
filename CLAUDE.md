@@ -88,8 +88,8 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 
 ### Area-of-interest detection (`aoi.rs`)
 
-`AoiIter` finds the windows in which the sub-satellite point is inside an `Area`. `Polygon` is the
-only built-in implementation; rectangles and ellipses are intended to follow behind the same trait.
+`AoiIter` finds the windows in which the sub-satellite point is inside an `Area`. `Polygon` and
+`Rectangle` are the built-in implementations; ellipses are intended to follow behind the same trait.
 
 **The event function is one signed scalar and is a pure function of `t`.** This is the load-bearing
 decision. The alternative — track which edge was crossed, keeping an edge index and an inside/outside
@@ -141,6 +141,16 @@ crossing the scan can see and a 1 s floor would cap that at ~6.6 km of track. `m
 the resolved `min` rather than to a constant, so a wholly sub-second pair is honoured. This is the
 same distinction `DateTimeIter` draws below; do not "make it consistent" with the coarse scans that
 clamp at a second.
+
+`Rectangle` is a separate `Area` impl rather than a four-vertex `Polygon`, because a polygon's
+great-circle edges bow toward the nearer pole — *both* horizontal edges of a box move the same way,
+so the region is displaced poleward, not merely enlarged. It needs no bounding cap (containment is
+four inequalities, so the antipodal-winding problem does not arise) and therefore no hemisphere
+restriction. Two non-obvious details: a bound at a pole contributes no edge, since the parallel there
+is a single interior point — counting it would peg the reported distance to zero at the pole and
+collapse the step size; and each meridian edge is tested against its own half of its plane
+(`dot(foot, equator) > 0` plus the foot's latitude), because a meridian plane wraps round the globe
+and its antipodal half would otherwise report a near-zero distance for points on the far side.
 
 Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
 a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for

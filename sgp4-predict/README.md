@@ -116,9 +116,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Edges are **great-circle arcs**, so vertices at the same latitude are not joined along the parallel —
 the arc bows toward the nearer pole, growing with the square of the edge's longitude span. The 7° box
 above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would reach
-roughly 68°N, so densify edges that long. An area must also fit inside a hemisphere;
-this permits polar caps, equator-spanning and antimeridian-spanning areas, but not a region larger
-than half the globe. Implement `Area` on your own type for other shapes.
+roughly 68°N, so densify edges that long. Since the bow is always toward the *nearer* pole, both
+horizontal edges of a box shift the same way: the region ends up displaced poleward, not merely
+enlarged. A polygon must also fit inside a hemisphere; this permits polar caps, equator-spanning and
+antimeridian-spanning areas, but not a region larger than half the globe.
+
+When the region really is "these latitudes by these longitudes", use `Rectangle` instead — its north
+and south edges follow their parallels exactly, it has no hemisphere restriction, and it wraps across
+the antimeridian:
+
+```rust,no_run
+use sgp4_predict::{Degrees, LatLon, Rectangle};
+
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+let scotland = Rectangle::new(
+    LatLon { latitude: Degrees(54.0), longitude: Degrees(-8.0) },
+    LatLon { latitude: Degrees(60.0), longitude: Degrees(-1.0) },
+)?;
+
+// Runs eastward from the south-west corner, so this wraps the antimeridian.
+let pacific = Rectangle::new(
+    (Degrees(-20.0), Degrees(160.0)),
+    (Degrees(20.0), Degrees(-160.0)),
+)?;
+
+let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
+# Ok(())
+# }
+```
+
+Implement `Area` on your own type for other shapes.
 
 ## Bring your own types
 

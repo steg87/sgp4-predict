@@ -3,7 +3,7 @@ mod common;
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
     AoiIterOpts, Area, Degrees, DetectError, Error, FillRule, LatLon, Polygon, Predictor,
-    Refinement,
+    Rectangle, Refinement,
 };
 
 /// A ~6° × 7° box over Scotland — small enough that overpasses are short and
@@ -474,6 +474,90 @@ fn test_fill_rule_changes_windows_over_a_self_intersecting_area() {
     assert!(
         total(&nonzero) > total(&evenodd),
         "punching a hole in the middle must reduce total time over the area"
+    );
+}
+
+#[test]
+fn test_rectangle_matches_dense_scan() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = Rectangle::new(
+        LatLon {
+            latitude: Degrees(40.0),
+            longitude: Degrees(-10.0),
+        },
+        LatLon {
+            latitude: Degrees(65.0),
+            longitude: Degrees(30.0),
+        },
+    )
+    .expect("valid box");
+
+    let adaptive = p
+        .aoi_iter(&area, day())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let dense = dense_scan(&p, &area, day(), Duration::seconds(1));
+
+    assert!(!adaptive.is_empty());
+    assert_eq!(adaptive.len(), dense.len(), "adaptive and dense disagree");
+    for (a, (start, end)) in adaptive.iter().zip(&dense) {
+        assert!((a.start - *start).num_milliseconds().abs() <= 1_000);
+        assert!((a.end - *end).num_milliseconds().abs() <= 1_000);
+    }
+}
+
+/// A `Rectangle` honours its stated latitude bounds; the four-vertex `Polygon`
+/// with the same corners does not.
+///
+/// A great circle between two points at equal latitude always bows toward the
+/// nearer pole, so both of the polygon's horizontal edges shift north: the 65°N
+/// edge to ~66.3°N and the 40°N edge to ~41.8°N. The region is displaced
+/// poleward, not merely enlarged — it admits ground north of the stated bound
+/// and excludes ground just inside the southern one.
+#[test]
+fn test_rectangle_honours_its_latitude_bounds_where_a_polygon_does_not() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let corners = [(40.0, -10.0), (40.0, 30.0), (65.0, 30.0), (65.0, -10.0)];
+
+    let rect = Rectangle::new(
+        (Degrees(corners[0].0), Degrees(corners[0].1)),
+        (Degrees(corners[2].0), Degrees(corners[2].1)),
+    )
+    .expect("valid box");
+    let poly =
+        Polygon::new(corners.map(|(lat, lon)| (Degrees(lat), Degrees(lon)))).expect("valid ring");
+
+    // Highest latitude the ground track reaches while a window is open.
+    let peak_latitude = |windows: Vec<sgp4_predict::AoiWindow>| -> f64 {
+        let mut peak = f64::NEG_INFINITY;
+        for w in windows {
+            let mut t = w.start;
+            while t <= w.end {
+                peak = peak.max(p.sub_point(t).unwrap().latitude.to_f64());
+                t += Duration::seconds(1);
+            }
+        }
+        peak
+    };
+
+    let rect_peak = peak_latitude(
+        p.aoi_iter(&rect, day())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+    );
+    let poly_peak = peak_latitude(
+        p.aoi_iter(&poly, day())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+    );
+
+    assert!(
+        rect_peak <= 65.0 + 1e-3,
+        "rectangle admitted latitude {rect_peak}, north of its 65° bound"
+    );
+    assert!(
+        poly_peak > 65.5,
+        "the polygon's edges are expected to bow past 65°, but peaked at {poly_peak}"
     );
 }
 
