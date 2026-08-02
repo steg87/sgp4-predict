@@ -92,3 +92,59 @@ derivative). The resulting `Illumination` windows tile the interval, each tagged
 The cylindrical model ignores the **penumbra**, treating the transition as instantaneous. That is
 adequate for deciding when a satellite is optically visible, but a conical shadow model would be
 needed for radiometric or solar-power work.
+
+## Areas of interest
+
+An **area of interest** is a region on the ground; the events are the windows in which the
+sub-satellite point lies inside it. `AoiIter`'s event function is the *signed angular offset* of the
+ground point from the area's boundary — positive inside, negative outside, zero on the boundary.
+
+Making that one scalar, a pure function of time, is the whole design. The obvious alternative — track
+which polygon edge was crossed and keep an inside/outside flag — breaks down exactly at a vertex,
+where the "is the perpendicular foot within this arc" test is identically zero for both adjoining
+edges. Floating point then arbitrarily yields either no crossing or two, and a single mistake leaves
+the flag inverted for the rest of the scan. With a stateless scalar there is no flag to invert.
+
+`Polygon` computes the offset in three steps:
+
+1. **Bounding cap.** Every vertex lies within a spherical cap of radius < 90°. A ground point outside
+   that cap is outside the area, and its distance to the cap is a lower bound on its distance to the
+   boundary, so the answer is returned immediately.
+2. **Distance.** The minimum angular distance to any edge arc — the perpendicular foot when it falls
+   within the arc, otherwise the nearer endpoint.
+3. **Sign.** The winding number of the boundary about the point, from the signed angle it subtends in
+   the tangent plane. `FillRule::NonZero` (the default) is inside where the winding is non-zero;
+   `FillRule::EvenOdd` where it is odd. Both fall out of the same count, which is what makes
+   self-intersecting rings well defined rather than merely tolerated.
+
+Step 1 is not an optimisation. The tangent-plane angle sum measures degree on the sphere minus the
+point and its antipode, so without the cap gate the *antipode* of the area also winds to ±1 and reads
+as inside. This is why an area must fit within a hemisphere.
+
+Because the offset is an angular distance and the ground point's angular speed is bounded, the
+boundary cannot be reached in less than `|offset| / ω_max` seconds. `ProximityStep` steps by exactly
+that, so — unlike a fixed step — the coarse scan **cannot jump over a crossing**, however narrow the
+area. `ω_max` is derived in closed form from the element set (perigee angular rate, plus Earth's
+rotation, plus the geodetic-latitude stretch, plus margin), so it is a true bound rather than the
+largest rate some sampling happened to observe.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Outside
+    Outside --> Outside : offset < 0 (step |offset| / ω_max)
+    Outside --> Refining : offset ≥ 0 detected
+    Refining --> Inside : entry refined
+    Inside --> Refining2 : boundary walk finds exit
+    Refining2 --> Outside : exit refined → emit AoiWindow
+    Outside --> [*] : interval end
+```
+
+Two limits are worth knowing. The `min_step` floor (1 s, about 6.6 km of track) is what keeps the
+scan advancing at the boundary, and a chord traversed faster than that can still be missed. And the
+boundary walk uses a fixed `walk_step` rather than the adaptive one, so for a **concave** area a
+notch the ground track leaves and re-enters within `walk_step` is absorbed into the surrounding
+window; a convex area is unaffected. Both are configurable via `AoiIterOpts`.
+
+Polygon edges are great-circle arcs in the sphere obtained by treating geodetic latitude as spherical
+latitude — the S2 and GeoJSON-on-a-sphere convention. They are not lines of constant latitude, so a
+four-vertex ring at 60°N bulges to roughly 68°N between vertices.

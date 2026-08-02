@@ -2,7 +2,8 @@
 
 `sgp4-predict` wraps the [`sgp4`](https://crates.io/crates/sgp4) crate. Where `sgp4` exposes a
 single propagation call, this library adds coordinate-frame conversion, ground-observer geometry,
-and lazy iterators that discover transits, apsides, and illumination events over a time window.
+and lazy iterators that discover transits, apsides, illumination events, and area-of-interest
+overpasses over a time window.
 
 ## Module map
 
@@ -11,6 +12,7 @@ graph TD
     lib --> predict
     lib --> observe
     lib --> transits
+    lib --> aoi
     lib --> apsides
     lib --> illumination
     lib --> detect
@@ -20,6 +22,8 @@ graph TD
     lib --> time
     transits --> detect
     transits --> observe
+    aoi --> detect
+    aoi --> frames
     apsides --> detect
     illumination --> detect
     detect --> roots
@@ -40,7 +44,8 @@ graph TD
 | `transits.rs` | `TransitIter` over `WindowIter` (event function: elevation − min_elevation) |
 | `apsides.rs` | `ApsisIter` over `EventIter` (event function: radial velocity `r·v`) |
 | `illumination.rs` | Cylindrical shadow model; `IlluminationIter` over `WindowIter` |
-| `frames.rs` | Frame marker types `Teme`, `Ecef`, `Enu` |
+| `aoi.rs` | `Area`/`Polygon` spherical geometry; `AoiIter` over `WindowIter` (event function: signed angular offset from the area boundary) |
+| `frames.rs` | Frame marker types `Teme`, `Ecef`, `Enu`; geodetic `LatLon` / `Geodetic` and the ECEF inverse |
 | `vectors.rs` | `StateVector<F>`, `Position<F>`, `Velocity<F>`, generic over frame |
 | `angle.rs` | `Degrees` / `Radians` newtypes |
 | `roots.rs` | `Refinement` — bracketed hybrid root solver |
@@ -56,8 +61,10 @@ flowchart LR
     Predictor -->|transits_iter| TI["TransitIter → Transit"]
     Predictor -->|apsis_iter| AI["ApsisIter → Apsis"]
     Predictor -->|illumination_iter| II["IlluminationIter → Illumination"]
+    Predictor -->|aoi_iter| QI["AoiIter → AoiWindow"]
     Predictor -->|prediction_iter| PI["PredictionIter → StateVector"]
     Predictor -->|observation_iter| OI["ObservationIter → Observation"]
+    Predictor -->|ground_track_iter| GI["GroundTrackIter → Geodetic"]
 ```
 
 `Predictor` holds the parsed `sgp4::Elements` and exposes methods at two levels: **point queries**
@@ -74,15 +81,16 @@ compile error rather than a plausible-looking wrong number. See
 **SI units throughout.** `sgp4` returns kilometres and km/s; the `From<sgp4::Prediction>` impl in
 `predict.rs` converts once, at the boundary. Nothing downstream does unit bookkeeping.
 
-**Detection is one generic layer.** Transits, apsides, and illumination share a single skeleton —
+**Detection is one generic layer.** Transits, apsides, illumination, and areas of interest share
+a single skeleton —
 step through time, evaluate a scalar function, watch for a sign change, refine the crossing — which
-lives in `detect.rs`. The three built-in iterators are thin wrappers, and the `generics` feature
+lives in `detect.rs`. The four built-in iterators are thin wrappers, and the `generics` feature
 exposes the same building blocks for detecting other event kinds. See
 [event-detection.md](event-detection.md).
 
 **Events are iterators.** Detection is lazy, composes with the standard iterator adaptors, and lets
 a caller looking for the next pass stop as soon as it finds one.
 
-**Events are intervals.** `Transit` and `Illumination` implement `IntervalRange`, as does
+**Events are intervals.** `Transit`, `Illumination`, and `AoiWindow` implement `IntervalRange`, as does
 `Range<DateTime<Utc>>`, so a discovered event can be handed straight back to `prediction_iter` or
 `observation_iter` as the window to sample.
