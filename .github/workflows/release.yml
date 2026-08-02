@@ -175,7 +175,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
           args: --release --out dist -m sgp4-predict-py/Cargo.toml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.id }}
           path: dist
@@ -227,7 +227,7 @@ jobs:
           if missing:
               sys.exit(f"{sdist} declares License-File entries it does not contain: {missing}")
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
@@ -250,7 +250,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - name: Download built artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           path: dist
