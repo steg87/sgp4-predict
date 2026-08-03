@@ -196,6 +196,16 @@ interval ground through at 1 ms with no error ever raised. `checked_latitude` ne
 ellipse bearing, and the semi-axes — which is what `NotFinite`'s free-form `what` field is for, so
 each new site names itself rather than adding a variant.
 
+In the Python bindings, `area.rs` wraps all three shapes and dispatches through a private `AreaKind`
+enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly
+`Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the
+change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, exactly as
+`TransitIter` borrows its `GroundObserver`. Constructors take `&Bound<'_, PyAny>` so a point may be a
+`LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple — which means pyo3-stub-gen widens
+them to `Any`, so `Polygon`/`Rectangle`/`Ellipse` are redeclared in the hand-maintained
+`sgp4_predict/__init__.pyi`. A redeclaration there *replaces* the generated class rather than merging
+with it, so every member has to be repeated.
+
 Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
 a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for
 larger areas over a single day.
