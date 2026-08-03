@@ -19,9 +19,14 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - An `areas:` map in the config file, alongside `groundstations:`. Each area is tagged with its
   `shape` — `box`, `ellipse`, `circle`, or `polygon` — and given as named fields; all extents are
   in degrees of arc.
-- `aoi add|remove|list` (aliases `rm`, `ls`) to manage those areas. `aoi add` takes the shape as
-  exactly one of `--box LAT,LON,W,H`, `--ellipse LAT,LON,A,B[,BEARING]`, `--circle LAT,LON,R`, or
-  `--poly "(LAT,LON),(LAT,LON),..."`, and refuses geometry the library cannot build.
+- `aoi add|remove|list` (aliases `rm`, `ls`) to manage those areas. `aoi add` prompts field by field
+  like `gs add`, accepting each shape name's initial (`b`/`e`/`c`/`p`), and reads polygon vertices
+  one per line until a blank line. Anything given up front is not prompted for: the id is
+  positional, and the shape may be supplied as exactly one of `--box LAT,LON,W,H`,
+  `--ellipse LAT,LON,A,B[,BEARING]`, `--circle LAT,LON,R`, or `--poly "(LAT,LON),(LAT,LON),..."`.
+  Geometry the library cannot build is refused before anything is written.
+- Prompts re-ask on a malformed line instead of aborting, so a typo no longer discards the fields
+  already entered. This applies to `gs add` too.
 
 ### Changed
 

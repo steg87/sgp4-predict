@@ -265,7 +265,11 @@ Note the naming split, which is deliberate and easy to "tidy" wrongly: `aoi` is 
 
 Note the asymmetry with the data-input paths below: `gs add` prompts deliberately because it is interactive config management, whereas TLE and observer input prompts were removed so they could be piped. Do not "restore consistency" by removing this one.
 
-`commands/aoi.rs` is the same shape for areas, with one deliberate difference: **`aoi add` takes flags and never prompts**, because a polygon is a list of arbitrary length and does not survive a field-at-a-time prompt. `confirm()` was hoisted from `gs.rs` into `commands/mod.rs` so both remove commands share it.
+`commands/aoi.rs` is the same shape for areas. `aoi add` prompts like `gs add`, but its id and shape flag are *optional* rather than absent — whatever is supplied on the command line is not prompted for, so the same command works interactively and in a script. `confirm()`, `prompt()` and `prompt_f64()` were hoisted from `gs.rs` into `commands/mod.rs` so both command groups share them.
+
+**Prompts re-ask on a malformed line rather than aborting** (`prompt_retry`), because a typo five fields in would otherwise discard everything before it. EOF is what ends a prompt loop — `prompt` errors there — so a scripted caller cannot spin forever; keep that property when adding prompts. The polygon vertex loop re-asks *at the same index* on a bad line and on a blank line before the third vertex, for the same reason.
+
+The shape prompt accepts each name's initial (`b`/`e`/`c`/`p`) and underlines it with an ANSI escape, but **only when stderr is a terminal** (`IsTerminal`) — otherwise the codes would land in a redirected log, and `tests/aoi.rs` reads stderr as plain text. Clap cannot render a selection menu; it is an argument parser, and an interactive picker would mean a `dialoguer`-style dependency plus a non-TTY fallback.
 
 Neither *data* input prompts line-by-line any more; both were removed in favour of non-interactive paths. `--tle-file` reads a file, and omitting it reads *all* of stdin so a TLE can be piped in. `tle.rs` funnels both through one `parse_tle(&str)`, so file and pipe accept exactly the same 2-or-3-line text — keep it that way rather than adding a parser per source. When stdin is a terminal, `read_tle_stdin` prints a Ctrl-D hint to **stderr**, not stdout, so it cannot contaminate piped output. Note that the observer-taking commands resolve `--gs` *before* calling `load_tle`, so a bad station id fails immediately instead of after the user has typed a TLE.
 
