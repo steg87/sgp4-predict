@@ -124,9 +124,9 @@ pub enum AoiCommand {
 
 #[derive(clap::Args)]
 pub struct AoiAddArgs {
-    /// Area id, used later as `--area <ID>`
+    /// Area id, used later as `--area <ID>`; prompted for if omitted
     #[arg(value_name = "ID")]
-    pub id: String,
+    pub id: Option<String>,
 
     #[command(flatten)]
     pub shape: ShapeArgs,
@@ -136,12 +136,13 @@ pub struct AoiAddArgs {
     pub force: bool,
 }
 
-/// The four shapes an area may take. Exactly one is required.
+/// The four shapes an area may take, at most one of which may be given.
 ///
 /// Each parses straight into the stored [`AreaDef`], so a malformed shape is
-/// reported by clap alongside the flag that produced it.
+/// reported by clap alongside the flag that produced it. Omitting all four is
+/// how `aoi add` is asked to prompt instead.
 #[derive(clap::Args)]
-#[group(required = true, multiple = false)]
+#[group(multiple = false)]
 pub struct ShapeArgs {
     /// Latitude/longitude box: centre, then longitude and latitude extents
     #[arg(
@@ -185,13 +186,9 @@ pub struct ShapeArgs {
 }
 
 impl ShapeArgs {
-    /// The one shape that was given. The clap group guarantees exactly one.
-    pub fn resolve(self) -> AreaDef {
-        self.r#box
-            .or(self.ellipse)
-            .or(self.circle)
-            .or(self.poly)
-            .expect("the shape group is required")
+    /// The shape that was given, if any. The clap group guarantees at most one.
+    pub fn resolve(self) -> Option<AreaDef> {
+        self.r#box.or(self.ellipse).or(self.circle).or(self.poly)
     }
 }
 

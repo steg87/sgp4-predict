@@ -173,6 +173,59 @@ pub fn effective_config_path(explicit: Option<&Path>) -> Option<std::path::PathB
         .or_else(config::default_path)
 }
 
+/// Prompt for one field, shared by `gs add` and `aoi add`.
+///
+/// Prompts go to stderr so `gs list`-style piping is never contaminated and
+/// they stay visible when stdout is redirected.
+pub fn prompt(
+    lines: &mut impl Iterator<Item = std::io::Result<String>>,
+    label: &str,
+) -> anyhow::Result<String> {
+    eprint!("{label}: ");
+    std::io::stderr().flush()?;
+    let line = lines
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("unexpected end of input while reading {label}"))?
+        .context("failed to read from stdin")?;
+    Ok(line.trim().to_string())
+}
+
+/// Prompt until the answer parses, reporting each bad line and asking again.
+///
+/// A typo costs one line, not everything entered so far. EOF still ends it —
+/// `prompt` errors there — so a scripted caller cannot spin forever.
+pub fn prompt_retry<T>(
+    lines: &mut impl Iterator<Item = std::io::Result<String>>,
+    label: &str,
+    parse: impl Fn(&str) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    loop {
+        let input = prompt(lines, label)?;
+        match parse(&input) {
+            Ok(value) => return Ok(value),
+            Err(e) => eprintln!("  {e:#}"),
+        }
+    }
+}
+
+pub fn prompt_f64(
+    lines: &mut impl Iterator<Item = std::io::Result<String>>,
+    label: &str,
+    default: Option<f64>,
+) -> anyhow::Result<f64> {
+    let shown = match default {
+        Some(d) => format!("{label} [{d}]"),
+        None => label.to_string(),
+    };
+    prompt_retry(lines, &shown, |input| match (input, default) {
+        ("", Some(d)) => Ok(d),
+        ("", None) => anyhow::bail!("{label} is required"),
+        (value, _) => value
+            .parse()
+            .map_err(|_| anyhow::anyhow!("expected a number, got '{value}'")),
+    })
+}
+
 /// Ask a yes/no question, for the `gs` and `aoi` remove commands.
 ///
 /// The prompt goes to stderr so stdout stays pipeable. Anything other than

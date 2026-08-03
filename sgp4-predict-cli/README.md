@@ -174,8 +174,39 @@ Edit the file by hand, or use `sgp4-predict aoi`.
 | `aoi list` (`aoi ls`)             | List the configured areas            |
 | `aoi remove <id>` (`aoi rm <id>`) | Remove an area, after confirmation   |
 
-`aoi add` takes the shape as exactly one of four mutually exclusive flags. Unlike `gs add` it does
-not prompt, since a polygon is a list of arbitrary length:
+`aoi add` prompts field by field, like `gs add`. The underlined initial is accepted on its own, so
+the shape can be picked with a single key:
+
+```
+$ sgp4-predict aoi add
+Area id: scotland
+Shape (box, ellipse, circle, polygon): b
+Centre latitude (degrees): 57
+Centre longitude (degrees): -4.5
+Width (degrees of longitude): 7
+Height (degrees of latitude): 6
+added area 'scotland' (54..60, 7 eastward from -8) to /home/you/.sgp4-predict/config.yaml
+```
+
+A polygon has no fixed number of fields, so its vertices are read one per line until a blank line:
+
+```
+$ sgp4-predict aoi add corridor
+Shape (box, ellipse, circle, polygon): p
+Vertices, one per line as `lat,lon`. Blank line when done.
+Vertex 1 lat,lon (degrees): 54,-8
+Vertex 2 lat,lon (degrees): 54,-1
+Vertex 3 lat,lon (degrees): 60,-1
+Vertex 4 lat,lon (degrees):
+added area 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
+```
+
+A line that does not parse is reported and asked for again, so a typo costs one line rather than
+everything entered before it. The same is true of a blank line before the third vertex.
+
+Every field can also be given up front, which is how areas are added non-interactively. The id is
+positional and the shape is exactly one of four mutually exclusive flags; whatever is supplied is not
+prompted for:
 
 ```sh
 sgp4-predict aoi add scotland  --box 57,-4.5,7,6          # centre, then width and height

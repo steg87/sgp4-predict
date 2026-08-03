@@ -208,14 +208,145 @@ fn test_shapes_are_mutually_exclusive() {
     assert!(message.contains("cannot be used with"), "{message}");
 }
 
+/// With no id and no shape flag, `aoi add` prompts for everything, like
+/// `gs add`.
 #[test]
-fn test_a_shape_is_required() {
-    let config = fresh_config("area_shape_required");
-    let message = err(&aoi(&config, &["add", "x"], ""));
-    assert!(
-        message.contains("required arguments were not provided"),
-        "{message}"
+fn test_add_prompts_for_every_shape() {
+    let config = fresh_config("area_prompt_shapes");
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
+    ok(&aoi(
+        &config,
+        &["add"],
+        "north-sea\nellipse\n56\n2\n2.7\n1.1\n45\n",
+    ));
+    ok(&aoi(
+        &config,
+        &["add"],
+        "cape-town\ncircle\n-33.9\n18.4\n2.25\n",
+    ));
+    ok(&aoi(
+        &config,
+        &["add"],
+        "corridor\npolygon\n54,-8\n54,-1\n60,-1\n\n",
+    ));
+
+    let listed = ok(&aoi(&config, &["list", "--format", "csv"], ""));
+    assert!(listed.contains("scotland,box,latitude=57 longitude=-4.5 width=7 height=6"));
+    assert!(listed.contains(
+        "north-sea,ellipse,latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45"
+    ));
+    assert!(listed.contains("cape-town,circle,latitude=-33.9 longitude=18.4 radius=2.25"));
+    // The definition contains commas, so CSV quotes it.
+    assert!(listed.contains(r#"corridor,polygon,"(54, -8) (54, -1) (60, -1)""#));
+}
+
+/// An id given on the command line is not prompted for again.
+#[test]
+fn test_add_prompts_only_for_what_is_missing() {
+    let config = fresh_config("area_prompt_partial");
+    let out = aoi(&config, &["add", "scotland"], "box\n57\n-4.5\n7\n6\n");
+    ok(&out);
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(!prompts.contains("Area id"), "{prompts}");
+    assert!(prompts.contains("Shape"), "{prompts}");
+
+    // A shape flag with no id prompts for the id alone.
+    let out = aoi(&config, &["add", "--box", "57,-4.5,7,6"], "north\n");
+    ok(&out);
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(prompts.contains("Area id"), "{prompts}");
+    assert!(!prompts.contains("Shape"), "{prompts}");
+}
+
+/// Vertices are numbered as they are entered, and a blank line ends the list.
+#[test]
+fn test_polygon_vertices_are_numbered_and_blank_line_ends_them() {
+    let config = fresh_config("area_prompt_vertices");
+    let out = aoi(
+        &config,
+        &["add"],
+        "corridor\npolygon\n54,-8\n54,-1\n60,-1\n60,-8\n\n",
     );
+    ok(&out);
+
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    for n in 1..=5 {
+        assert!(
+            prompts.contains(&format!("Vertex {n} lat,lon (degrees)")),
+            "vertex {n} was not numbered:\n{prompts}"
+        );
+    }
+    assert!(ok(&aoi(&config, &["list"], "")).contains("(60, -8)"));
+}
+
+/// A typo re-asks the same field instead of discarding everything before it.
+#[test]
+fn test_malformed_input_re_prompts_rather_than_aborting() {
+    let config = fresh_config("area_prompt_retry");
+
+    // A bad shape, then a bad number, then a good run of the same entry.
+    let out = aoi(
+        &config,
+        &["add"],
+        "scotland\nhexagon\nbox\n57\nnorth\n-4.5\n7\n6\n",
+    );
+    ok(&out);
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(prompts.contains("unknown shape 'hexagon'"), "{prompts}");
+    assert!(
+        prompts.contains("expected a number, got 'north'"),
+        "{prompts}"
+    );
+    assert!(
+        ok(&aoi(&config, &["list"], "")).contains("latitude=57 longitude=-4.5"),
+        "the entry survived the typos"
+    );
+}
+
+/// A malformed vertex re-asks at the same index, so earlier ones are kept.
+#[test]
+fn test_malformed_vertex_re_prompts_at_the_same_index() {
+    let config = fresh_config("area_prompt_vertex_retry");
+    let out = aoi(
+        &config,
+        &["add"],
+        "corridor\npolygon\n54,-8\nnorth-west\n54,-1\n60,-1\n\n",
+    );
+    ok(&out);
+
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(prompts.contains("expected `lat,lon`"), "{prompts}");
+    // Three good vertices were kept despite the bad line between them.
+    assert!(ok(&aoi(&config, &["list"], "")).contains("(54, -8) (54, -1) (60, -1)"));
+}
+
+/// A blank line before the third vertex re-asks rather than throwing away the
+/// vertices already entered.
+#[test]
+fn test_blank_line_too_early_keeps_the_vertices_so_far() {
+    let config = fresh_config("area_prompt_vertex_early_blank");
+    let out = aoi(
+        &config,
+        &["add"],
+        "corridor\npolygon\n54,-8\n54,-1\n\n60,-1\n\n",
+    );
+    ok(&out);
+
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        prompts.contains("needs at least 3 vertices; 2 so far"),
+        "{prompts}"
+    );
+    assert!(ok(&aoi(&config, &["list"], "")).contains("(54, -8) (54, -1) (60, -1)"));
+}
+
+/// Prompting still ends at end-of-input, so a scripted caller cannot spin.
+#[test]
+fn test_end_of_input_ends_prompting() {
+    let config = fresh_config("area_prompt_eof");
+    let message = err(&aoi(&config, &["add"], "scotland\n"));
+    assert!(message.contains("unexpected end of input"), "{message}");
+    assert!(!config.exists(), "nothing should have been written");
 }
 
 /// Geometry the library rejects never reaches the file.

@@ -1,12 +1,8 @@
 //! `sgp4-predict gs add|remove|list` — manage the config file's ground stations.
 
-use anyhow::Context as _;
-use std::{
-    io::{BufRead as _, Write as _},
-    path::Path,
-};
+use std::{io::BufRead as _, path::Path};
 
-use super::confirm;
+use super::{confirm, prompt, prompt_f64};
 use crate::{
     cli::{GsCommand, GsListArgs, GsRemoveArgs},
     config::{self, Config, GroundStation, Location},
@@ -111,38 +107,4 @@ fn describe(id: &str, station: &GroundStation) -> String {
         "{id}: latitude {}, longitude {}, altitude {} m",
         station.location.latitude, station.location.longitude, station.location.altitude
     )
-}
-
-/// Prompts go to stderr so `gs list`-style piping is never contaminated and
-/// the prompts stay visible when stdout is redirected.
-fn prompt(
-    lines: &mut impl Iterator<Item = std::io::Result<String>>,
-    label: &str,
-) -> anyhow::Result<String> {
-    eprint!("{label}: ");
-    std::io::stderr().flush()?;
-    let line = lines
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("unexpected end of input while reading {label}"))?
-        .context("failed to read from stdin")?;
-    Ok(line.trim().to_string())
-}
-
-fn prompt_f64(
-    lines: &mut impl Iterator<Item = std::io::Result<String>>,
-    label: &str,
-    default: Option<f64>,
-) -> anyhow::Result<f64> {
-    let shown = match default {
-        Some(d) => format!("{label} [{d}]"),
-        None => label.to_string(),
-    };
-    let input = prompt(lines, &shown)?;
-    match (input.as_str(), default) {
-        ("", Some(d)) => Ok(d),
-        ("", None) => anyhow::bail!("{label} is required"),
-        (value, _) => value
-            .parse()
-            .map_err(|_| anyhow::anyhow!("{label}: expected a number, got '{value}'")),
-    }
 }
