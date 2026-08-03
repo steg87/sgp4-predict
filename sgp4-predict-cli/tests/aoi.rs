@@ -217,7 +217,7 @@ fn test_add_prompts_for_every_shape() {
     ok(&aoi(
         &config,
         &["add"],
-        "north-sea\nellipse\n56\n2\n2.7\n1.1\n45\n",
+        "north-sea\nellipse\n56\n2\n45\n2.7\n1.1\n",
     ));
     ok(&aoi(
         &config,
@@ -301,6 +301,48 @@ fn test_malformed_input_re_prompts_rather_than_aborting() {
         ok(&aoi(&config, &["list"], "")).contains("latitude=57 longitude=-4.5"),
         "the entry survived the typos"
     );
+}
+
+/// The bearing is asked before the axes, so each can be described relative to
+/// it rather than leaving the reader to guess which is latitude.
+#[test]
+fn test_ellipse_prompts_bearing_before_the_axes() {
+    let config = fresh_config("area_prompt_ellipse_order");
+    let out = aoi(&config, &["add"], "north-sea\ne\n56\n2\n45\n2.7\n1.1\n");
+    ok(&out);
+
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    let at = |needle: &str| {
+        prompts
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing {needle} in:\n{prompts}"))
+    };
+    assert!(at("Bearing of the long axis") < at("Semi-major axis"));
+    assert!(at("Semi-major axis") < at("Semi-minor axis"));
+    assert!(prompts.contains("ALONG that bearing"), "{prompts}");
+    assert!(prompts.contains("ACROSS it"), "{prompts}");
+}
+
+/// A semi-minor axis larger than the semi-major is the likely confusion, so it
+/// is caught at the prompt with the fix spelled out, not at the end.
+#[test]
+fn test_semi_minor_above_semi_major_re_prompts_with_the_fix() {
+    let config = fresh_config("area_prompt_ellipse_swapped");
+    // Wanted 10 east-west by 2 north-south, entered the axes the wrong way round.
+    let out = aoi(&config, &["add"], "wide\ne\n0\n0\n90\n2\n10\n1\n");
+    ok(&out);
+
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        prompts.contains("cannot exceed the semi-major axis of 2"),
+        "{prompts}"
+    );
+    assert!(
+        prompts.contains("turn the bearing by 90 degrees"),
+        "{prompts}"
+    );
+    // The centre and bearing entered before the mistake survived it.
+    assert!(ok(&aoi(&config, &["list"], "")).contains("bearing=90"));
 }
 
 /// A malformed vertex re-asks at the same index, so earlier ones are kept.
