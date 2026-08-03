@@ -92,7 +92,8 @@ path when it is omitted.
 
 | Command                         | Description                             |
 |---------------------------------|-----------------------------------------|
-| `gs add`                        | Add a station, prompting for each field |
+| `gs add [id]`                   | Add a station, prompting for each field |
+| `gs add [id] --force`           | Replace an existing station             |
 | `gs list` (`gs ls`)             | List the configured stations            |
 | `gs remove <id>` (`gs rm <id>`) | Remove a station, after confirmation    |
 
@@ -192,7 +193,7 @@ Edit the file by hand, or use `sgp4-predict aoi`.
 
 | Command                           | Description                          |
 |-----------------------------------|--------------------------------------|
-| `aoi add <id> <shape>`            | Add an area                          |
+| `aoi add [id] [--shape S]`        | Add an area, prompting for its coordinates |
 | `aoi list` (`aoi ls`)             | List the configured areas            |
 | `aoi remove <id>` (`aoi rm <id>`) | Remove an area, after confirmation   |
 
@@ -224,22 +225,27 @@ added area 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
 ```
 
 A line that does not parse is reported and asked for again, so a typo costs one line rather than
-everything entered before it. The same is true of a blank line before the third vertex.
+everything entered before it. The same is true of a blank line before the third vertex, and of an
+out-of-range extent.
 
-Every field can also be given up front, which is how areas are added non-interactively. The id is
-positional and the shape is exactly one of four mutually exclusive flags; whatever is supplied is not
-prompted for:
+The id and the shape may be given as arguments, in which case they are echoed as though they had been
+typed and only the coordinates are asked for:
 
 ```sh
-sgp4-predict aoi add scotland  --box 57,-4.5,7,6          # centre, then width and height
-sgp4-predict aoi add north-sea --ellipse 56,2,2.7,1.1,45  # centre, axes, optional bearing
-sgp4-predict aoi add cape-town --circle -33.9,18.4,2.25   # centre and radius
-sgp4-predict aoi add corridor  --poly "(54,-8),(54,-1),(60,-1)"
+sgp4-predict aoi add scotland
+sgp4-predict aoi add scotland --shape box
 ```
 
-Parentheses are shell metacharacters, so quote a `--poly` value. Adding over an existing id needs
-`-f` / `--force`. Geometry the library rejects — an ellipse whose semi-minor axis exceeds its
-semi-major, a box running past a pole — is refused before anything is written.
+**Coordinates are never taken as arguments.** As with `gs add`, an area is either entered at the
+prompts or written into the config file by hand — a positional coordinate syntax would be both
+verbose and easy to get the wrong way round. Adding over an existing id needs `-f` / `--force`.
+
+`gs add` takes its id the same way, and `-f` / `--force` replaces an existing station:
+
+```sh
+sgp4-predict gs add glasgow
+sgp4-predict gs add glasgow --force
+```
 
 `aoi list` honours `--format` and shows each area by its config field names:
 
