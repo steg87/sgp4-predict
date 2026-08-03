@@ -62,10 +62,14 @@ TLEs are available from [CelesTrak](https://celestrak.org).
 ```python
 sv    = predictor.propagate(t)               # StateVectorTeme
 obs   = predictor.observe_at(t, observer)    # Observation
+point = predictor.sub_point(t)               # Geodetic — the point beneath the satellite
 state = predictor.illumination_state(t)      # IlluminationState.Sunlit or .Eclipse
 
 # The pass in progress at t, or None
 transit = predictor.detect_transit(t, observer, min_elevation_deg=5.0)
+
+# The area window in progress at t, or None
+overpass = predictor.detect_aoi(t, area)
 
 # Peak elevation within an interval; raises RuntimeError if there is no peak
 t_peak, obs_peak = predictor.max_elevation(observer, window)
@@ -82,6 +86,8 @@ for t, obs in predictor.observation_iter(observer, window, step): ...  # Observa
 for transit in predictor.transits_iter(observer, window, min_elevation_deg=5.0): ...
 for apsis in predictor.apsis_iter(window): ...                      # Apsis
 for illumination in predictor.illumination_iter(window): ...        # Illumination
+for t, point in predictor.ground_track_iter(window, step): ...      # Geodetic
+for overpass in predictor.aoi_iter(area, window): ...               # AoiWindow
 ```
 
 `Predictor.with_refinement(Refinement(...))` returns a copy with a different root-finder
@@ -106,10 +112,61 @@ apsis.altitude                # float — metres above the WGS-84 equatorial rad
 illumination.start / .end     # datetime (UTC)
 illumination.state            # IlluminationState.Sunlit or .Eclipse
 illumination.duration_seconds # float
+
+overpass.start / .end         # datetime (UTC) — entry / exit
+overpass.duration_seconds     # float
+
+point.latitude_deg            # float — positive north
+point.longitude_deg           # float — positive east
+point.altitude                # float — metres above the WGS-84 ellipsoid
 ```
 
-`Transit` and `Illumination` are themselves intervals — `isinstance(transit, IntervalRange)` is
-`True`, and either can be passed wherever a window is expected.
+`Transit`, `Illumination` and `AoiWindow` are themselves intervals —
+`isinstance(transit, IntervalRange)` is `True`, and any of them can be passed wherever a window is
+expected.
+
+## Areas of interest
+
+An area is a region on the ground; `aoi_iter` yields the windows in which the sub-satellite point
+lies inside it. Points are `LatLon` objects or plain `(latitude_deg, longitude_deg)` tuples.
+
+```python
+from sgp4_predict import Ellipse, LatLon, Polygon, Rectangle
+
+# An arbitrary ring. Concave and self-intersecting rings are both fine, the ring
+# closes itself, and vertex order does not matter.
+scotland = Polygon([(54.0, -8.0), (54.0, -1.0), (60.0, -1.0), LatLon(60.0, -8.0)])
+
+# A latitude/longitude box, whose north and south edges follow their parallels
+# exactly. Runs eastward from the south-west corner, so this one wraps the
+# antimeridian.
+pacific = Rectangle((-20.0, 160.0), (20.0, -160.0))
+arctic = Rectangle.latitude_band(66.5, 90.0)
+
+# An ellipse, roughly 300 km by 120 km, major axis pointing north-east. Semi-axes
+# are angular — a degree of arc is about 111.2 km on the ground.
+north_sea = Ellipse((56.0, 2.0), semi_major_deg=2.7, semi_minor_deg=1.1, bearing_deg=45.0)
+cape_town = Ellipse.circle((-33.9, 18.4), radius_deg=2.25)
+
+for overpass in predictor.aoi_iter(scotland, window):
+    print(overpass.start, overpass.end)
+```
+
+A malformed area raises `ValueError` — fewer than three distinct vertices, a latitude outside
+`[-90, 90]`, a `nan` or infinite coordinate, a polygon larger than a hemisphere, an empty box, or
+ellipse semi-axes outside `0 < semi_minor_deg <= semi_major_deg < 90`.
+
+`Polygon` edges are **great-circle arcs**, so vertices at the same latitude are not joined along the
+parallel — the arc bows toward the nearer pole, growing with the square of the edge's longitude span.
+The 7° box above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would
+reach roughly 68°N, so densify edges that long. Since the bow is always toward the *nearer* pole,
+both horizontal edges of a box shift the same way: the region ends up displaced poleward, not merely
+enlarged — use `Rectangle` when the region really is "these latitudes by these longitudes". A polygon
+must also fit inside a hemisphere; this permits polar caps, equator-spanning and antimeridian-spanning
+areas, but not a region larger than half the globe.
+
+Each shape also exposes `signed_angular_offset_deg(point)`, positive inside the area and negative
+outside, which is the quantity detection is built on.
 
 ## Coordinate frames
 

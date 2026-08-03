@@ -1,20 +1,29 @@
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Protocol, Union, runtime_checkable
 
 from sgp4_predict._sgp4_predict import (
+    AoiIter,
+    AoiWindow,
     Apsis,
     ApsisEvent,
     ApsisIter,
     Classification,
     Elements,
+    Ellipse,
+    FillRule,
+    Geodetic,
     GroundObserver,
+    GroundTrackIter,
     Illumination,
     IlluminationIter,
     IlluminationState,
+    LatLon,
     Observation,
     ObservationIter,
+    Polygon,
     PredictionIter,
     Predictor,
+    Rectangle,
     Refinement,
     StateVectorEcef,
     StateVectorEnu,
@@ -24,6 +33,12 @@ from sgp4_predict._sgp4_predict import (
     TransitIter,
     Vec3,
 )
+
+#: A region on the ground, accepted by `Predictor.aoi_iter` and `detect_aoi`.
+Area = Union[Polygon, Rectangle, Ellipse]
+
+#: Anywhere a point is taken, a `(latitude_deg, longitude_deg)` tuple works too.
+LatLonLike = Union[LatLon, Geodetic, tuple[float, float]]
 
 
 @runtime_checkable
@@ -55,21 +70,32 @@ class Interval:
 
 
 __all__ = [
+    "AoiIter",
+    "AoiWindow",
     "Apsis",
     "ApsisEvent",
     "ApsisIter",
+    "Area",
     "Classification",
     "Elements",
+    "Ellipse",
+    "FillRule",
+    "Geodetic",
     "GroundObserver",
+    "GroundTrackIter",
     "Illumination",
     "IlluminationIter",
     "IlluminationState",
     "Interval",
     "IntervalRange",
+    "LatLon",
+    "LatLonLike",
     "Observation",
     "ObservationIter",
+    "Polygon",
     "PredictionIter",
     "Predictor",
+    "Rectangle",
     "Refinement",
     "StateVectorEcef",
     "StateVectorEnu",
