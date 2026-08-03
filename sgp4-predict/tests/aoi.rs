@@ -2,7 +2,7 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
-    AoiIterOpts, Area, Degrees, DetectError, Error, FillRule, LatLon, Polygon, Predictor,
+    AoiIterOpts, Area, Degrees, DetectError, Ellipse, Error, FillRule, LatLon, Polygon, Predictor,
     Rectangle, Refinement,
 };
 
@@ -559,6 +559,86 @@ fn test_rectangle_honours_its_latitude_bounds_where_a_polygon_does_not() {
         poly_peak > 65.5,
         "the polygon's edges are expected to bow past 65°, but peaked at {poly_peak}"
     );
+}
+
+/// An eccentric ellipse is the case where `signed_angular_offset` reports well
+/// under the true distance to the boundary, so this is the check that the
+/// under-estimate still never lets the scan step over a crossing.
+#[test]
+fn test_ellipse_matches_dense_scan() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = Ellipse::new(
+        LatLon {
+            latitude: Degrees(52.0),
+            longitude: Degrees(10.0),
+        },
+        Degrees(14.0),
+        Degrees(4.0),
+        Degrees(60.0),
+    )
+    .expect("valid ellipse");
+
+    let adaptive = p
+        .aoi_iter(&area, day())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let dense = dense_scan(&p, &area, day(), Duration::seconds(1));
+
+    assert!(!adaptive.is_empty());
+    assert_eq!(adaptive.len(), dense.len(), "adaptive and dense disagree");
+    for (a, (start, end)) in adaptive.iter().zip(&dense) {
+        assert!((a.start - *start).num_milliseconds().abs() <= 1_000);
+        assert!((a.end - *end).num_milliseconds().abs() <= 1_000);
+    }
+}
+
+#[test]
+fn test_circle_matches_dense_scan() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = Ellipse::circle(
+        LatLon {
+            latitude: Degrees(52.0),
+            longitude: Degrees(10.0),
+        },
+        Degrees(10.0),
+    )
+    .expect("valid circle");
+
+    let adaptive = p
+        .aoi_iter(&area, day())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let dense = dense_scan(&p, &area, day(), Duration::seconds(1));
+
+    assert!(!adaptive.is_empty());
+    assert_eq!(adaptive.len(), dense.len(), "adaptive and dense disagree");
+    for (a, (start, end)) in adaptive.iter().zip(&dense) {
+        assert!((a.start - *start).num_milliseconds().abs() <= 1_000);
+        assert!((a.end - *end).num_milliseconds().abs() <= 1_000);
+    }
+}
+
+/// Rotating the major axis changes which overpasses are caught, so the bearing
+/// reaches the detection path and is not merely stored.
+#[test]
+fn test_ellipse_bearing_changes_the_windows() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let centre = LatLon {
+        latitude: Degrees(52.0),
+        longitude: Degrees(10.0),
+    };
+    let windows = |bearing: f64| {
+        let area = Ellipse::new(centre, Degrees(20.0), Degrees(3.0), Degrees(bearing))
+            .expect("valid ellipse");
+        p.aoi_iter(&area, day())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .iter()
+            .map(|w| (w.end - w.start).num_seconds())
+            .sum::<i64>()
+    };
+
+    assert_ne!(windows(0.0), windows(90.0));
 }
 
 #[test]

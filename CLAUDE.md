@@ -88,8 +88,8 @@ Brent's method refines the crossing time (no derivative needed; bracket is alrea
 
 ### Area-of-interest detection (`aoi.rs`)
 
-`AoiIter` finds the windows in which the sub-satellite point is inside an `Area`. `Polygon` and
-`Rectangle` are the built-in implementations; ellipses are intended to follow behind the same trait.
+`AoiIter` finds the windows in which the sub-satellite point is inside an `Area`. `Polygon`,
+`Rectangle` and `Ellipse` are the built-in implementations; anything else goes behind the same trait.
 
 **The event function is one signed scalar and is a pure function of `t`.** This is the load-bearing
 decision. The alternative — track which edge was crossed, keeping an edge index and an inside/outside
@@ -151,6 +151,36 @@ is a single interior point — counting it would peg the reported distance to ze
 collapse the step size; and each meridian edge is tested against its own half of its plane
 (`dot(foot, equator) > 0` plus the foot's latitude), because a meridian plane wraps round the globe
 and its antipodal half would otherwise report a near-zero distance for points on the far side.
+
+That second detail has a known limit, documented rather than fixed: at a point sitting *exactly* on a
+pole, `dot(foot, m.equator)` is identically zero for both meridians, so both are skipped and a wedge
+reports the pole as deep inside when it is actually a boundary point. It is measure-zero — 89.999999°
+engages the meridian term correctly — and no ground track lands on a pole to f64 precision, so the
+special case would be pure cost. Do not "fix" it without a reproducer.
+
+`Ellipse` is the two-foci definition (`d(F₁,p) + d(F₂,p) <= 2a`), not a projected planar ellipse.
+The value returned is `a − (d₁ + d₂)/2`, and the **halving is what makes it legal**: each distance is
+1-Lipschitz along the surface, so the sum is 2-Lipschitz, and only half the shortfall is guaranteed
+not to exceed the distance to the boundary. Do not drop the `/2` to "tighten" it — the tighter value
+is the local gradient `|û₁ + û₂|`, which is not a bound along the whole path to the boundary. The
+under-estimate costs nothing but smaller steps, and for a circle the two foci coincide and the
+formula is already exact.
+
+Focal separation comes from `cos a = cos b cos c`, the spherical right triangle at a minor-axis
+endpoint (which is `a` from each focus, since the two distances there are equal and sum to `2a`).
+`semi_major < 90°` is required so that ratio stays in `[0, 1]`; it also rules out an antipodal
+component, since the antipode of the centre sits `2(π − c)` from the foci. Hence no bounding cap and
+no hemisphere restriction, unlike `Polygon`. `local_frame` falls back to the prime-meridian direction
+at a pole, where north is undefined.
+
+**Every constructor rejects a non-finite argument** (`Error::NotFinite`), because nothing downstream
+will. A NaN slips past every comparison that would otherwise catch it — `NaN < COINCIDENT` is false,
+so `wrap_tau` and `build()` both wave it through — and is then baked into the shape, making every
+`signed_angular_offset` NaN. `ProximityStep` floors NaN to `min_step`, so the symptom is the whole
+interval ground through at 1 ms with no error ever raised. `checked_latitude` needs no separate test
+(its range check already fails NaN and both infinities); `checked_angle` covers the longitudes, the
+ellipse bearing, and the semi-axes — which is what `NotFinite`'s free-form `what` field is for, so
+each new site names itself rather than adding a variant.
 
 Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
 a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for

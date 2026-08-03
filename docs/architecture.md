@@ -44,7 +44,7 @@ graph TD
 | `transits.rs` | `TransitIter` over `WindowIter` (event function: elevation − min_elevation) |
 | `apsides.rs` | `ApsisIter` over `EventIter` (event function: radial velocity `r·v`) |
 | `illumination.rs` | Cylindrical shadow model; `IlluminationIter` over `WindowIter` |
-| `aoi.rs` | `Area`/`Polygon` spherical geometry; `AoiIter` over `WindowIter` (event function: signed angular offset from the area boundary) |
+| `aoi.rs` | `Area`/`Polygon`/`Rectangle`/`Ellipse` spherical geometry; `AoiIter` over `WindowIter` (event function: signed angular offset from the area boundary) |
 | `frames.rs` | Frame marker types `Teme`, `Ecef`, `Enu`; geodetic `LatLon` / `Geodetic` and the ECEF inverse |
 | `vectors.rs` | `StateVector<F>`, `Position<F>`, `Velocity<F>`, generic over frame |
 | `angle.rs` | `Degrees` / `Radians` newtypes |

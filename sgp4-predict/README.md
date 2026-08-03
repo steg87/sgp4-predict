@@ -145,6 +145,28 @@ let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
 # }
 ```
 
+`Ellipse` covers circular and elliptical footprints. Semi-axes are angular, and the bearing turns the
+major axis clockwise from north:
+
+```rust,no_run
+use sgp4_predict::{Degrees, Ellipse, LatLon};
+
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+// Roughly 300 km by 120 km, major axis pointing north-east. A degree of arc is
+// about 111.2 km on the ground.
+let north_sea = Ellipse::new(
+    LatLon { latitude: Degrees(56.0), longitude: Degrees(2.0) },
+    Degrees(2.7),
+    Degrees(1.1),
+    Degrees(45.0),
+)?;
+
+// A circular area 500 km across.
+let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
+# Ok(())
+# }
+```
+
 Implement `Area` on your own type for other shapes.
 
 ## Bring your own types

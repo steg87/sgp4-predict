@@ -20,6 +20,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - `Rectangle`, a latitude/longitude box whose north and south edges follow their parallels exactly,
   with no great-circle bulge and no hemisphere restriction. Wraps across the antimeridian, and
   `Rectangle::latitude_band` covers bands and polar caps.
+- `Ellipse`, an elliptical area given as a centre, angular semi-axes, and the bearing of the major
+  axis clockwise from north. `Ellipse::circle` is the circular case.
 - `Geodetic` and `LatLon` types, `EcefState::to_geodetic`, and `Predictor::sub_point` — the geodetic
   point directly beneath the satellite.
 - `Predictor::ground_track_iter`, sampling sub-satellite points at a fixed cadence.

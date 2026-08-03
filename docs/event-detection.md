@@ -164,3 +164,14 @@ restriction — a pole-to-pole wedge is fine. Two details earn their keep: a bou
 not an edge (the parallel degenerates to a point interior to the box), and each meridian edge is
 tested against its own half of the plane, or a point on the far side of the Earth would report itself
 a few kilometres from the boundary.
+
+`Ellipse` is the two-foci definition read on the sphere: inside where the great-circle distances to
+the two foci sum to at most twice the semi-major axis. The foci are placed from the spherical right
+triangle `cos a = cos b cos c`, which is what fixes their separation from the two semi-axes. Each
+distance to a focus is 1-Lipschitz along the surface, so their sum is 2-Lipschitz and *half* the
+shortfall from `2a` is a valid lower bound on the distance to the boundary — an under-estimate for an
+eccentric ellipse, and exact for a circle, where the two foci coincide and the formula collapses to
+`radius − distance`. Under-reporting only costs smaller steps, which is why the `Area` contract asks
+for a bound rather than the true distance. There is no winding number and no antipodal component (an
+ellipse under 90° across cannot reach the far side), so like `Rectangle` it needs no bounding cap and
+carries no hemisphere restriction.
