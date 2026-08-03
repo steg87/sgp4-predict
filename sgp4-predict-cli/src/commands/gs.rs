@@ -2,9 +2,9 @@
 
 use std::{io::BufRead as _, path::Path};
 
-use super::{confirm, prompt, prompt_f64};
+use super::{confirm, echo, prompt, prompt_f64};
 use crate::{
-    cli::{GsCommand, GsListArgs, GsRemoveArgs},
+    cli::{GsAddArgs, GsCommand, GsListArgs, GsRemoveArgs},
     config::{self, Config, GroundStation, Location},
     output,
 };
@@ -12,28 +12,34 @@ use crate::{
 pub fn run(command: GsCommand, config_path: Option<&Path>) -> anyhow::Result<()> {
     // Only `add` may bring a config file into existence.
     let missing = match command {
-        GsCommand::Add => config::Missing::Create,
+        GsCommand::Add(_) => config::Missing::Create,
         GsCommand::Remove(_) | GsCommand::List(_) => config::Missing::Reject,
     };
     let (config, path) = config::open_for_edit(config_path, missing)?;
 
     match command {
-        GsCommand::Add => add(config, &path),
+        GsCommand::Add(args) => add(config, &path, args),
         GsCommand::Remove(args) => remove(config, &path, args),
         GsCommand::List(args) => list(&config, &path, args),
     }
 }
 
-fn add(mut config: Config, path: &Path) -> anyhow::Result<()> {
+fn add(mut config: Config, path: &Path, args: GsAddArgs) -> anyhow::Result<()> {
     let existed = path.is_file();
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
 
-    let id = prompt(&mut lines, "Ground station id")?;
+    let id = match args.id {
+        Some(id) => {
+            echo("Ground station id", &id);
+            id
+        }
+        None => prompt(&mut lines, "Ground station id")?,
+    };
     anyhow::ensure!(!id.is_empty(), "ground station id cannot be empty");
     anyhow::ensure!(
-        !config.groundstations.contains_key(&id),
-        "ground station '{id}' already exists; remove it first or pick another id"
+        args.force || !config.groundstations.contains_key(&id),
+        "ground station '{id}' already exists; pass --force to replace it, or pick another id"
     );
 
     let location = Location {

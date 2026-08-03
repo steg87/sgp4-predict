@@ -49,25 +49,21 @@ fn err(out: &Output) -> String {
 #[test]
 fn test_add_stores_named_fields_for_every_shape() {
     let config = fresh_config("area_add_all_shapes");
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
     ok(&aoi(
         &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
+        &["add"],
+        "north-sea\nellipse\n56\n2\n45\n2.7\n1.1\n",
     ));
     ok(&aoi(
         &config,
-        &["add", "north-sea", "--ellipse", "56,2,2.7,1.1,45"],
-        "",
+        &["add"],
+        "cape-town\ncircle\n-33.9\n18.4\n2.25\n",
     ));
     ok(&aoi(
         &config,
-        &["add", "cape-town", "--circle", "-33.9,18.4,2.25"],
-        "",
-    ));
-    ok(&aoi(
-        &config,
-        &["add", "corridor", "--poly", "(54,-8),(54,-1),(60,-1)"],
-        "",
+        &["add"],
+        "corridor\npolygon\n54,-8\n54,-1\n60,-1\n\n",
     ));
 
     let text = std::fs::read_to_string(&config).unwrap();
@@ -85,14 +81,14 @@ fn test_add_stores_named_fields_for_every_shape() {
     ] {
         assert!(text.contains(expected), "missing {expected} in:\n{text}");
     }
-    // Nothing comma-separated is persisted.
+    // Coordinates are stored one per named field, never as a list.
     assert!(!text.contains("57,-4.5"), "{text}");
 }
 
 #[test]
 fn test_add_creates_config_and_parents() {
     let config = fresh_config("area_add_creates");
-    let out = aoi(&config, &["add", "scotland", "--box", "57,-4.5,7,6"], "");
+    let out = aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n");
     ok(&out);
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("created"),
@@ -109,11 +105,7 @@ fn test_add_creates_config_and_parents() {
 #[test]
 fn test_list_shows_config_field_names() {
     let config = fresh_config("area_list_fields");
-    ok(&aoi(
-        &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
 
     let listed = ok(&aoi(&config, &["list", "--format", "csv"], ""));
     assert!(
@@ -125,11 +117,7 @@ fn test_list_shows_config_field_names() {
 #[test]
 fn test_ls_and_rm_aliases() {
     let config = fresh_config("area_aliases");
-    ok(&aoi(
-        &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
     assert!(ok(&aoi(&config, &["ls"], "")).contains("scotland"));
 
     ok(&aoi(&config, &["rm", "scotland", "--force"], ""));
@@ -140,11 +128,7 @@ fn test_ls_and_rm_aliases() {
 #[test]
 fn test_remove_requires_confirmation() {
     let config = fresh_config("area_remove_confirm");
-    ok(&aoi(
-        &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
 
     ok(&aoi(&config, &["remove", "scotland"], "n\n"));
     assert!(ok(&aoi(&config, &["list"], "")).contains("scotland"));
@@ -160,11 +144,7 @@ fn test_remove_requires_confirmation() {
 #[test]
 fn test_remove_unknown_id_lists_known_ids() {
     let config = fresh_config("area_remove_unknown");
-    ok(&aoi(
-        &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
 
     let message = err(&aoi(&config, &["remove", "nowhere", "--force"], ""));
     assert!(message.contains("unknown area 'nowhere'"), "{message}");
@@ -176,13 +156,9 @@ fn test_remove_unknown_id_lists_known_ids() {
 #[test]
 fn test_add_refuses_to_overwrite_without_force() {
     let config = fresh_config("area_add_duplicate");
-    ok(&aoi(
-        &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
 
-    let message = err(&aoi(&config, &["add", "scotland", "--circle", "0,0,1"], ""));
+    let message = err(&aoi(&config, &["add", "scotland"], "circle\n0\n0\n1\n"));
     assert!(message.contains("already exists"), "{message}");
     assert!(
         ok(&aoi(&config, &["list"], "")).contains("box"),
@@ -191,21 +167,60 @@ fn test_add_refuses_to_overwrite_without_force() {
 
     ok(&aoi(
         &config,
-        &["add", "scotland", "--circle", "0,0,1", "--force"],
-        "",
+        &["add", "scotland", "--force"],
+        "circle\n0\n0\n1\n",
     ));
     assert!(ok(&aoi(&config, &["list"], "")).contains("circle"));
 }
 
+/// The shape may be named up front; only its coordinates are prompted for.
 #[test]
-fn test_shapes_are_mutually_exclusive() {
-    let config = fresh_config("area_exclusive");
-    let message = err(&aoi(
+fn test_shape_flag_skips_the_shape_prompt() {
+    let config = fresh_config("area_shape_flag");
+    let out = aoi(
         &config,
-        &["add", "x", "--box", "1,2,3,4", "--circle", "1,2,3"],
-        "",
-    ));
-    assert!(message.contains("cannot be used with"), "{message}");
+        &["add", "scotland", "--shape", "box"],
+        "57\n-4.5\n7\n6\n",
+    );
+    ok(&out);
+    assert!(ok(&aoi(&config, &["list"], "")).contains("width=7 height=6"));
+}
+
+/// There is deliberately no flag carrying coordinates.
+#[test]
+fn test_no_coordinate_flags_exist() {
+    let config = fresh_config("area_no_coord_flags");
+    for flag in ["--box", "--ellipse", "--circle", "--poly"] {
+        let message = err(&aoi(&config, &["add", "x", flag, "1,2,3,4"], ""));
+        assert!(message.contains("unexpected argument"), "{flag}: {message}");
+    }
+}
+
+#[test]
+fn test_unknown_shape_flag_value_is_rejected() {
+    let config = fresh_config("area_bad_shape_flag");
+    let message = err(&aoi(&config, &["add", "x", "--shape", "hexagon"], ""));
+    assert!(message.contains("invalid value 'hexagon'"), "{message}");
+}
+
+/// An id or shape given as an argument is echoed as though it had been typed,
+/// so the transcript reads the same either way.
+#[test]
+fn test_arguments_are_echoed_like_prompts() {
+    let config = fresh_config("area_echo");
+    let out = aoi(
+        &config,
+        &["add", "scotland", "--shape", "box"],
+        "57\n-4.5\n7\n6\n",
+    );
+    ok(&out);
+
+    let transcript = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(transcript.contains("Area id: scotland"), "{transcript}");
+    assert!(
+        transcript.contains("Shape (box, ellipse, circle, polygon): box"),
+        "{transcript}"
+    );
 }
 
 /// With no id and no shape flag, `aoi add` prompts for everything, like
@@ -240,22 +255,33 @@ fn test_add_prompts_for_every_shape() {
     assert!(listed.contains(r#"corridor,polygon,"(54, -8) (54, -1) (60, -1)""#));
 }
 
-/// An id given on the command line is not prompted for again.
+/// Anything given as an argument consumes no input. The transcript looks the
+/// same either way — that is the point of the echo — so this asserts on what
+/// stdin is read for instead: each run supplies exactly the missing fields, and
+/// a spurious re-prompt would swallow the next line and land the wrong values.
 #[test]
-fn test_add_prompts_only_for_what_is_missing() {
+fn test_arguments_consume_no_input() {
     let config = fresh_config("area_prompt_partial");
-    let out = aoi(&config, &["add", "scotland"], "box\n57\n-4.5\n7\n6\n");
-    ok(&out);
-    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
-    assert!(!prompts.contains("Area id"), "{prompts}");
-    assert!(prompts.contains("Shape"), "{prompts}");
 
-    // A shape flag with no id prompts for the id alone.
-    let out = aoi(&config, &["add", "--box", "57,-4.5,7,6"], "north\n");
-    ok(&out);
-    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
-    assert!(prompts.contains("Area id"), "{prompts}");
-    assert!(!prompts.contains("Shape"), "{prompts}");
+    // Id given: stdin starts at the shape.
+    ok(&aoi(&config, &["add", "scotland"], "box\n57\n-4.5\n7\n6\n"));
+    // Shape given: stdin starts at the id.
+    ok(&aoi(
+        &config,
+        &["add", "--shape", "box"],
+        "north\n57\n-4.5\n7\n6\n",
+    ));
+    // Both given: stdin holds coordinates alone.
+    ok(&aoi(
+        &config,
+        &["add", "south", "--shape", "circle"],
+        "10\n20\n3\n",
+    ));
+
+    let listed = ok(&aoi(&config, &["list", "--format", "csv"], ""));
+    assert!(listed.contains("scotland,box,latitude=57 longitude=-4.5 width=7 height=6"));
+    assert!(listed.contains("north,box,latitude=57 longitude=-4.5 width=7 height=6"));
+    assert!(listed.contains("south,circle,latitude=10 longitude=20 radius=3"));
 }
 
 /// Vertices are numbered as they are entered, and a blank line ends the list.
@@ -395,51 +421,43 @@ fn test_end_of_input_ends_prompting() {
 #[test]
 fn test_invalid_geometry_is_rejected_before_saving() {
     let config = fresh_config("area_invalid_geometry");
-    // semi-minor above semi-major.
-    let message = err(&aoi(&config, &["add", "x", "--ellipse", "0,0,1,5"], ""));
-    assert!(message.contains("semi-minor"), "{message}");
+    // A box whose height runs past the pole. Its extents are individually
+    // fine, so only `build()` can catch it.
+    let message = err(&aoi(&config, &["add", "x"], "box\n88\n0\n10\n10\n"));
+    assert!(message.contains("outside [-90, 90]"), "{message}");
     assert!(
         !config.exists(),
         "a rejected area must not create the config"
     );
+}
 
-    // A box whose height runs past the pole.
-    let message = err(&aoi(&config, &["add", "x", "--box", "88,0,10,10"], ""));
-    assert!(message.contains("outside [-90, 90]"), "{message}");
+/// Out-of-range extents are caught at their own prompt, naming the field,
+/// rather than surfacing later as a confusing corner error.
+#[test]
+fn test_out_of_range_extents_re_prompt() {
+    let config = fresh_config("area_extent_range");
+
+    let out = aoi(&config, &["add"], "wide\nbox\n0\n0\n400\n7\n6\n");
+    ok(&out);
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        prompts.contains("less than 360 degrees, got 400"),
+        "{prompts}"
+    );
+
+    let out = aoi(&config, &["add"], "big\ncircle\n0\n0\n100\n2\n");
+    ok(&out);
+    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        prompts.contains("less than 90 degrees, got 100"),
+        "{prompts}"
+    );
 }
 
 #[test]
-fn test_malformed_shape_values_name_the_flag() {
-    let config = fresh_config("area_malformed");
-    for (args, expected) in [
-        (["add", "x", "--box", "1,2,3"], "expected LAT,LON,W,H"),
-        (
-            ["add", "x", "--box", "0,0,400,5"],
-            "width must be in (0, 360)",
-        ),
-        (["add", "x", "--circle", "1,2"], "expected LAT,LON,R"),
-        (["add", "x", "--ellipse", "1,2,3"], "expected LAT,LON,A,B"),
-        (["add", "x", "--poly", "1,2,3,4"], "expected '('"),
-        (["add", "x", "--poly", "(1,2),(3,4)"], "at least 3 vertices"),
-        (
-            ["add", "x", "--box", "1,2,x,4"],
-            "expected a number, got 'x'",
-        ),
-    ] {
-        let message = err(&aoi(&config, &args, ""));
-        assert!(message.contains(expected), "{args:?}: {message}");
-    }
-}
-
-/// Negative coordinates are values, not flags.
-#[test]
-fn test_leading_negative_coordinates_are_accepted() {
+fn test_negative_coordinates_are_accepted() {
     let config = fresh_config("area_negative");
-    ok(&aoi(
-        &config,
-        &["add", "cape", "--circle", "-33.9,18.4,2"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "cape\ncircle\n-33.9\n18.4\n2\n"));
     assert!(ok(&aoi(&config, &["list"], "")).contains("latitude=-33.9"));
 }
 
@@ -475,11 +493,7 @@ fn test_areas_and_ground_stations_coexist() {
     };
 
     ok(&gs(&["add"], "glasgow\n55.86\n-4.25\n40\n"));
-    ok(&aoi(
-        &config,
-        &["add", "scotland", "--box", "57,-4.5,7,6"],
-        "",
-    ));
+    ok(&aoi(&config, &["add"], "scotland\nbox\n57\n-4.5\n7\n6\n"));
 
     assert!(ok(&gs(&["list"], "")).contains("glasgow"));
     assert!(ok(&aoi(&config, &["list"], "")).contains("scotland"));

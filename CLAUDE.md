@@ -265,7 +265,11 @@ Note the naming split, which is deliberate and easy to "tidy" wrongly: `aoi` is 
 
 Note the asymmetry with the data-input paths below: `gs add` prompts deliberately because it is interactive config management, whereas TLE and observer input prompts were removed so they could be piped. Do not "restore consistency" by removing this one.
 
-`commands/aoi.rs` is the same shape for areas. `aoi add` prompts like `gs add`, but its id and shape flag are *optional* rather than absent — whatever is supplied on the command line is not prompted for, so the same command works interactively and in a script. `confirm()`, `prompt()` and `prompt_f64()` were hoisted from `gs.rs` into `commands/mod.rs` so both command groups share them.
+`commands/aoi.rs` is the same shape for areas. **Coordinates are never accepted as arguments** — only the id and `--shape` are, on both `aoi add` and `gs add`. This is the same rule as `--gs`/`--area`: config data is entered at a prompt or written into the YAML by hand, never assembled from a positional flag syntax. An earlier `--box LAT,LON,W,H` family was removed for exactly that reason; do not reintroduce it. `confirm()`, `prompt()`, `prompt_f64()` and `echo()` live in `commands/mod.rs` so both command groups share them.
+
+An argument that replaces a prompt is `echo()`ed in that prompt's own format, so the transcript is identical whether a value was typed or passed. That is why `tests/aoi.rs` asserts on *what stdin is consumed* rather than on which prompts appear — the transcript deliberately cannot tell them apart.
+
+Range checks on extents live in the prompts (`prompt_bounded`, and the semi-minor-versus-semi-major check), not in a value parser, because there is no longer a parser to put them in. Keep them there: `Rectangle` sees only derived corners and cannot say which extent was wrong.
 
 **Prompts re-ask on a malformed line rather than aborting** (`prompt_retry`), because a typo five fields in would otherwise discard everything before it. EOF is what ends a prompt loop — `prompt` errors there — so a scripted caller cannot spin forever; keep that property when adding prompts. The polygon vertex loop re-asks *at the same index* on a bad line and on a blank line before the third vertex, for the same reason.
 

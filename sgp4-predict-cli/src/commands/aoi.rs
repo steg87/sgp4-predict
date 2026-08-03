@@ -1,20 +1,20 @@
 //! `sgp4-predict aoi add|remove|list` — manage the config file's areas of interest.
 //!
-//! `aoi add` prompts field by field like `gs add`, and takes the same shape
-//! flags the config stores, so it works interactively or in a script. A
-//! polygon has no fixed field count, so its vertices are read in a numbered
-//! loop that a blank line ends. Prompts and confirmations go to stderr, so
-//! `aoi list` stays pipeable.
+//! `aoi add` prompts field by field like `gs add`. The id and the shape may be
+//! given on the command line, but the coordinates never are — hand-writing an
+//! area is what editing the config file is for. A polygon has no fixed field
+//! count, so its vertices are read in a numbered loop that a blank line ends.
+//! Prompts and confirmations go to stderr, so `aoi list` stays pipeable.
 
 use std::{
     io::{BufRead as _, IsTerminal as _},
     path::Path,
 };
 
-use super::{confirm, prompt, prompt_f64, prompt_retry};
+use super::{confirm, echo, prompt, prompt_f64, prompt_retry};
 use crate::{
     area::AreaShape,
-    cli::{AoiAddArgs, AoiCommand, AoiListArgs, AoiRemoveArgs},
+    cli::{AoiAddArgs, AoiCommand, AoiListArgs, AoiRemoveArgs, Shape},
     config::{self, AreaDef, BoxDef, CircleDef, Config, EllipseDef, PolygonDef, Vertex},
     output,
 };
@@ -43,7 +43,10 @@ fn add(mut config: Config, path: &Path, args: AoiAddArgs) -> anyhow::Result<()> 
     let mut lines = stdin.lock().lines();
 
     let id = match args.id {
-        Some(id) => id,
+        Some(id) => {
+            echo("Area id", &id);
+            id
+        }
         None => prompt(&mut lines, "Area id")?,
     };
     // Checked before the shape, so a clashing id is not discovered only after
@@ -54,10 +57,14 @@ fn add(mut config: Config, path: &Path, args: AoiAddArgs) -> anyhow::Result<()> 
         "area '{id}' already exists; pass --force to replace it, or pick another id"
     );
 
-    let def = match args.shape.resolve() {
-        Some(def) => def,
+    let shape_kind = match args.shape {
+        Some(shape) => {
+            echo(&shape_label(), crate::cli::value_name(shape));
+            shape
+        }
         None => prompt_shape(&mut lines)?,
     };
+    let def = prompt_definition(&mut lines, shape_kind)?;
     // Reject a shape the library cannot build before it reaches the file,
     // rather than on the next lookup.
     let shape = def.build()?;
@@ -76,46 +83,66 @@ fn add(mut config: Config, path: &Path, args: AoiAddArgs) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// Ask which shape, then for that shape's fields.
+/// Ask which shape it is.
 ///
 /// Each name's initial is accepted on its own, and is underlined in the prompt
 /// when stderr is a terminal.
-fn prompt_shape(lines: &mut Lines) -> anyhow::Result<AreaDef> {
-    let label = format!(
+fn prompt_shape(lines: &mut Lines) -> anyhow::Result<Shape> {
+    prompt_retry(lines, &shape_label(), |input| {
+        match input.to_ascii_lowercase().as_str() {
+            "b" | "box" => Ok(Shape::Box),
+            "e" | "ellipse" => Ok(Shape::Ellipse),
+            "c" | "circle" => Ok(Shape::Circle),
+            "p" | "poly" | "polygon" => Ok(Shape::Polygon),
+            other => anyhow::bail!(
+                "unknown shape '{other}'; expected box, ellipse, circle or polygon (or b/e/c/p)"
+            ),
+        }
+    })
+}
+
+/// Ask for the shape's coordinates. Always prompted — there is no flag
+/// carrying them, so ranges are checked here rather than in a value parser.
+fn prompt_definition(lines: &mut Lines, shape: Shape) -> anyhow::Result<AreaDef> {
+    Ok(match shape {
+        Shape::Box => AreaDef::Box(BoxDef {
+            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
+            longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
+            width: prompt_bounded(lines, "Width (degrees of longitude)", 360.0)?,
+            height: prompt_bounded(lines, "Height (degrees of latitude)", 180.0)?,
+        }),
+        Shape::Ellipse => prompt_ellipse(lines)?,
+        Shape::Circle => AreaDef::Circle(CircleDef {
+            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
+            longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
+            radius: prompt_bounded(lines, "Radius (degrees)", 90.0)?,
+        }),
+        Shape::Polygon => AreaDef::Polygon(PolygonDef {
+            vertices: prompt_vertices(lines)?,
+        }),
+    })
+}
+
+/// The shape prompt's label, also used when echoing a `--shape` flag.
+fn shape_label() -> String {
+    format!(
         "Shape ({}, {}, {}, {})",
         initial("box"),
         initial("ellipse"),
         initial("circle"),
         initial("polygon"),
-    );
-    let kind = prompt_retry(lines, &label, |input| {
-        match input.to_ascii_lowercase().as_str() {
-            "b" | "box" => Ok("box"),
-            "e" | "ellipse" => Ok("ellipse"),
-            "c" | "circle" => Ok("circle"),
-            "p" | "poly" | "polygon" => Ok("polygon"),
-            other => anyhow::bail!(
-                "unknown shape '{other}'; expected box, ellipse, circle or polygon (or b/e/c/p)"
-            ),
-        }
-    })?;
-    Ok(match kind {
-        "box" => AreaDef::Box(BoxDef {
-            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
-            longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
-            width: prompt_f64(lines, "Width (degrees of longitude)", None)?,
-            height: prompt_f64(lines, "Height (degrees of latitude)", None)?,
-        }),
-        "ellipse" => prompt_ellipse(lines)?,
-        "circle" => AreaDef::Circle(CircleDef {
-            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
-            longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
-            radius: prompt_f64(lines, "Radius (degrees)", None)?,
-        }),
-        // The retry above already rejected anything else.
-        _ => AreaDef::Polygon(PolygonDef {
-            vertices: prompt_vertices(lines)?,
-        }),
+    )
+}
+
+/// Prompt for an extent in `(0, limit)`.
+fn prompt_bounded(lines: &mut Lines, label: &str, limit: f64) -> anyhow::Result<f64> {
+    prompt_retry(lines, label, move |input| {
+        let value = number(input)?;
+        anyhow::ensure!(
+            value > 0.0 && value < limit,
+            "must be greater than 0 and less than {limit} degrees, got {value}"
+        );
+        Ok(value)
     })
 }
 

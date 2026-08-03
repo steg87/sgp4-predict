@@ -190,6 +190,12 @@ pub fn prompt(
     Ok(line.trim().to_string())
 }
 
+/// Echo a value that came from the command line as though it had been typed at
+/// its prompt, so the transcript reads the same either way.
+pub fn echo(label: &str, value: impl std::fmt::Display) {
+    eprintln!("{label}: {value}");
+}
+
 /// Prompt until the answer parses, reporting each bad line and asking again.
 ///
 /// A typo costs one line, not everything entered so far. EOF still ends it —

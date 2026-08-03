@@ -60,6 +60,22 @@ fn test_add_creates_config_and_parents() {
     assert!(listed.contains("glasgow"), "{listed}");
 }
 
+/// The id may be given as an argument; it is echoed as though it had been
+/// typed, and consumes no input, so stdin starts at the latitude.
+#[test]
+fn test_add_accepts_the_id_as_an_argument() {
+    let config = fresh_config("gs_add_id_arg");
+    let out = gs(&config, &["add", "glasgow"], "55.86\n-4.25\n40\n");
+    ok(&out);
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("Ground station id: glasgow"),
+        "the id should be echoed like a prompt"
+    );
+
+    let listed = ok(&gs(&config, &["list", "--format", "csv"], ""));
+    assert!(listed.contains("glasgow,55.8600,-4.2500,40.0"), "{listed}");
+}
+
 /// A blank altitude takes the documented default of 0.
 #[test]
 fn test_add_altitude_defaults_to_zero() {
@@ -79,6 +95,15 @@ fn test_add_rejects_duplicate_id() {
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("already exists"), "{stderr}");
+    assert!(
+        stderr.contains("--force"),
+        "the error should name the way out"
+    );
+
+    // --force replaces it, like `aoi add --force`.
+    ok(&gs(&config, &["add", "--force"], "glasgow\n1\n2\n3\n"));
+    let listed = ok(&gs(&config, &["list", "--format", "csv"], ""));
+    assert!(listed.contains("glasgow,1.0000,2.0000,3.0"), "{listed}");
 }
 
 #[test]
