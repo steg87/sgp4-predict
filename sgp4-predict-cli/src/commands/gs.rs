@@ -6,6 +6,7 @@ use std::{
     path::Path,
 };
 
+use super::confirm;
 use crate::{
     cli::{GsCommand, GsListArgs, GsRemoveArgs},
     config::{self, Config, GroundStation, Location},
@@ -144,20 +145,4 @@ fn prompt_f64(
             .parse()
             .map_err(|_| anyhow::anyhow!("{label}: expected a number, got '{value}'")),
     }
-}
-
-/// Ask a yes/no question. Anything other than y/yes means no, and so does EOF,
-/// so a non-interactive caller that forgot `--force` cannot delete anything.
-fn confirm(question: &str) -> anyhow::Result<bool> {
-    eprint!("{question} [y/N] ");
-    std::io::stderr().flush()?;
-
-    let mut answer = String::new();
-    if std::io::stdin().read_line(&mut answer)? == 0 {
-        return Ok(false);
-    }
-    Ok(matches!(
-        answer.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
 }

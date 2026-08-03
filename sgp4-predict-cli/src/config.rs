@@ -1,4 +1,5 @@
-//! Config file (`~/.sgp4-predict/config.yaml` by default) holding named ground stations.
+//! Config file (`~/.sgp4-predict/config.yaml` by default) holding named ground
+//! stations and areas of interest.
 
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
@@ -16,8 +17,98 @@ const CONFIG_FILE: &str = "config.yaml";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Ground stations keyed by the id passed to `--gs`.
-    #[serde(default)]
+    /// Omitted when empty, so a config with only areas does not grow a stub.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub groundstations: BTreeMap<String, GroundStation>,
+    /// Areas of interest keyed by the id passed to `--area`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub areas: BTreeMap<String, AreaDef>,
+}
+
+/// A region on the ground, as written in the config file.
+///
+/// Internally tagged on `shape`, so each area is a flat map of named fields:
+///
+/// ```yaml
+/// areas:
+///   scotland:
+///     shape: box
+///     latitude: 57.0
+///     longitude: -4.5
+///     width: 7.0
+///     height: 6.0
+/// ```
+///
+/// Externally tagged (`box: { ... }`) would read as well, but serde_yaml
+/// represents that with a `!Box` YAML tag rather than a nested map, which is
+/// not something to hand-write.
+///
+/// This is the *stored* form. [`AreaDef::build`] turns it into the library
+/// shape, which is where the geometry is validated.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "shape", rename_all = "lowercase")]
+pub enum AreaDef {
+    /// A latitude/longitude box, given by its centre and extents.
+    Box(BoxDef),
+    Ellipse(EllipseDef),
+    Circle(CircleDef),
+    /// A ring of at least three vertices, closing implicitly.
+    Polygon(PolygonDef),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoxDef {
+    /// Centre latitude in degrees.
+    pub latitude: f64,
+    /// Centre longitude in degrees.
+    pub longitude: f64,
+    /// Full extent in **longitude**, degrees. The ground width therefore
+    /// shrinks with the cosine of the latitude.
+    pub width: f64,
+    /// Full extent in latitude, degrees.
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EllipseDef {
+    /// Centre latitude in degrees.
+    pub latitude: f64,
+    /// Centre longitude in degrees.
+    pub longitude: f64,
+    /// Semi-major axis in degrees of arc (about 111.2 km per degree).
+    pub semi_major: f64,
+    /// Semi-minor axis in degrees of arc.
+    pub semi_minor: f64,
+    /// Bearing of the major axis, degrees clockwise from north.
+    #[serde(default)]
+    pub bearing: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CircleDef {
+    /// Centre latitude in degrees.
+    pub latitude: f64,
+    /// Centre longitude in degrees.
+    pub longitude: f64,
+    /// Radius in degrees of arc (about 111.2 km per degree).
+    pub radius: f64,
+}
+
+/// Wraps the vertex list in a struct because an internally tagged enum cannot
+/// carry a bare sequence — the tag has nowhere to live.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PolygonDef {
+    pub vertices: Vec<Vertex>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Vertex {
+    pub latitude: f64,
+    pub longitude: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -52,6 +143,16 @@ groundstations:
       latitude: 55.86
       longitude: -4.25
       altitude: 40
+
+# Areas of interest. Select one with `--area <id>`.
+# All extents are in degrees of arc — about 111.2 km per degree.
+areas:
+  scotland:
+    shape: box
+    latitude: 57.0
+    longitude: -4.5
+    width: 7.0
+    height: 6.0
 ";
 
 /// Load the config from `path`, or from [`default_path`] when `path` is `None`.
@@ -118,9 +219,9 @@ fn write_template(path: &Path) -> anyhow::Result<()> {
 
 /// Header re-emitted on every save, since serialising drops YAML comments.
 const SAVED_HEADER: &str = "\
-# sgp4-predict ground stations. Select one with `--gs <id>`.
-# Managed by `sgp4-predict gs add|remove|list`; hand edits are preserved,
-# but comments are not.
+# sgp4-predict ground stations (`--gs <id>`) and areas of interest (`--area <id>`).
+# Managed by `sgp4-predict gs add|remove|list` and `sgp4-predict aoi add|remove|list`;
+# hand edits are preserved, but comments are not.
 ";
 
 /// Whether a `gs` subcommand may create the config it was pointed at.
@@ -229,6 +330,38 @@ impl Config {
             String::new()
         } else {
             format!(" (known ground stations: {})", self.ids().join(", "))
+        }
+    }
+
+    /// Look up an area by id, without building or validating its geometry.
+    ///
+    /// `aoi remove` uses this, for the same reason [`Config::find`] exists: a
+    /// hand-edited area that no longer builds is still listed, so it must be
+    /// removable without editing the YAML by hand.
+    pub fn find_area(&self, id: &str) -> anyhow::Result<&AreaDef> {
+        self.areas.get(id).ok_or_else(|| {
+            if self.areas.is_empty() {
+                anyhow::anyhow!("unknown area '{id}'; the config defines none")
+            } else {
+                anyhow::anyhow!(
+                    "unknown area '{id}'; known ids: {}",
+                    self.area_ids().join(", ")
+                )
+            }
+        })
+    }
+
+    /// Area ids in sorted order.
+    pub fn area_ids(&self) -> Vec<&str> {
+        self.areas.keys().map(String::as_str).collect()
+    }
+
+    /// `" (known areas: a, b)"`, or empty when the config defines none.
+    pub fn area_ids_hint(&self) -> String {
+        if self.areas.is_empty() {
+            String::new()
+        } else {
+            format!(" (known areas: {})", self.area_ids().join(", "))
         }
     }
 }

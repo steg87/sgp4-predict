@@ -232,11 +232,23 @@ The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in
 
 `main.rs` returns `ExitCode`, not `anyhow::Result`: a broken pipe (`… | head`) exits 141 silently instead of printing an error, so piping is not reported as failure. Warnings go through `tracing` to **stderr** and never to stdout.
 
-Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag — it was removed.
+Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag — it was removed. **Areas of interest follow the same rule**: `aoi-windows --area <id>` names an entry in the `areas` map, and there is no inline `--box`/`--circle` on the prediction command. Those flags exist only on `aoi add`, where they are how a shape is written into the config.
+
+Note the naming split, which is deliberate and easy to "tidy" wrongly: `aoi` is the *management* command group (`aoi add|remove|list`, mirroring `gs`), and `aoi-windows` is the *prediction* command (mirroring `transits`). The stored data is called an **area** everywhere — the `areas:` map, `--area <id>`, `AreaDef`, `AreaShape` — while `aoi` is only ever a command name.
+
+`AreaDef` is internally tagged on `shape`, not externally tagged. This is not a style choice: **serde_yaml 0.9 serialises an externally tagged enum as a `!Box` YAML tag rather than a nested `box: { … }` map**, and refuses the map form on the way back in, so `{shape: box, latitude: …}` is the only flat representation that round-trips. `PolygonDef` wraps its `Vec<Vertex>` in a struct for the same reason — an internal tag has nowhere to live on a bare sequence.
+
+`--box`/`--ellipse`/`--circle`/`--poly` are a clap `#[group(required = true, multiple = false)]`, so exactly-one is enforced by clap rather than by hand, and each `value_parser` produces an `AreaDef` directly — a malformed shape is reported against the flag that produced it. They need `allow_hyphen_values` (not `allow_negative_numbers`, which only admits values that parse as a *single* number) or `--circle -33.9,18.4,2` reads as a flag. Extents are range-checked in the parser where the library cannot: `Rectangle` sees only the derived corners, so it cannot say that `width` was the bad input.
+
+`AreaDef::build()` is where geometry is validated, so `aoi add` rejects an impossible shape before writing and `--area` rejects one that was hand-edited into the file. `Config::find_area` deliberately skips that, for the same reason `Config::find` exists: `aoi remove` must be able to delete an entry that no longer builds.
+
+`commands/aoi_windows.rs` matches on `AreaShape` once and calls a generic `windows(ctx, area: &impl Area)`, rather than giving `AreaShape` an `impl Area`. `Predictor::aoi_iter` is generic over one `Area`, so the dispatch has to happen somewhere; doing it at the call site keeps the per-sample geometry call static. The Python bindings solve the same problem the other way (an `impl Area for AreaKind`) because a pyclass cannot be monomorphised per shape.
 
 `commands/gs.rs` implements `gs add|remove|list` (aliases `rm`, `ls`) over `open_for_edit`/`save`. Its prompts and confirmations go to **stderr**, so `gs list` stays pipeable and prompts stay visible when stdout is redirected. `confirm()` treats EOF and anything other than `y`/`yes` as no, so a non-interactive caller that forgot `--force` cannot delete a station. `gs list` reuses the `output.rs` column machinery, so it honours `--format` like every other table.
 
 Note the asymmetry with the data-input paths below: `gs add` prompts deliberately because it is interactive config management, whereas TLE and observer input prompts were removed so they could be piped. Do not "restore consistency" by removing this one.
+
+`commands/aoi.rs` is the same shape for areas, with one deliberate difference: **`aoi add` takes flags and never prompts**, because a polygon is a list of arbitrary length and does not survive a field-at-a-time prompt. `confirm()` was hoisted from `gs.rs` into `commands/mod.rs` so both remove commands share it.
 
 Neither *data* input prompts line-by-line any more; both were removed in favour of non-interactive paths. `--tle-file` reads a file, and omitting it reads *all* of stdin so a TLE can be piped in. `tle.rs` funnels both through one `parse_tle(&str)`, so file and pipe accept exactly the same 2-or-3-line text — keep it that way rather than adding a parser per source. When stdin is a terminal, `read_tle_stdin` prints a Ctrl-D hint to **stderr**, not stdout, so it cannot contaminate piped output. Note that the observer-taking commands resolve `--gs` *before* calling `load_tle`, so a bad station id fails immediately instead of after the user has typed a TLE.
 
