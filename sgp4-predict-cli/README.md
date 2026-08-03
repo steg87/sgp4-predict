@@ -159,10 +159,32 @@ areas:
 | `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
 
 **Every extent is in degrees of arc**, about 111.2 km per degree. A box's `width` is an extent in
-*longitude*, so its ground width shrinks with the cosine of its latitude; its north and south edges
-follow their parallels exactly. Ellipse axes must satisfy `0 < semi_minor <= semi_major < 90`, and
-`bearing` turns the major axis clockwise from north. Polygon edges are great-circle arcs, so they are
-not lines of constant latitude — use `box` when the region really is a latitude/longitude box.
+*longitude* and its `height` an extent in latitude, so its ground width shrinks with the cosine of
+its latitude; its north and south edges follow their parallels exactly. Polygon edges are
+great-circle arcs, so they are not lines of constant latitude — use `box` when the region really is a
+latitude/longitude box.
+
+An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the length of
+the *longer* axis and `semi_minor` half the *shorter* — they must satisfy
+`0 < semi_minor <= semi_major < 90` — and `bearing` is what points them, turning the major axis
+clockwise from north. So `bearing: 0` (the default) runs the long axis north–south, and `bearing: 90`
+runs it east–west:
+
+```yaml
+  tall:                 # 10 degrees north-south by 2 east-west
+    shape: ellipse
+    latitude: 0.0
+    longitude: 0.0
+    semi_major: 10.0
+    semi_minor: 2.0
+  wide:                 # the same ellipse turned a quarter turn
+    shape: ellipse
+    latitude: 0.0
+    longitude: 0.0
+    semi_major: 10.0
+    semi_minor: 2.0
+    bearing: 90.0
+```
 
 ### Managing areas
 

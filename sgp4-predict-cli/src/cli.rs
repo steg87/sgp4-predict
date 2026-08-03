@@ -203,13 +203,20 @@ The north and south edges follow their parallels exactly.
 
 const ELLIPSE_LONG_HELP: &str = "\
 Ellipse, as centre latitude, centre longitude, semi-major axis, semi-minor
-axis, and optionally the bearing of the major axis in degrees clockwise from
-north (default 0, pointing at the pole).
+axis, and optionally a bearing.
+
+The semi-axes are not latitude and longitude extents. The semi-major axis is
+half the length of the LONGER axis, the semi-minor half the length of the
+shorter one, and the bearing is what points them: it turns the major axis
+clockwise from north, so 0 (the default) runs it north-south and 90 runs it
+east-west. For a wider-than-long area, swap the two axes and turn the bearing
+by 90 degrees.
 
 Both axes are in degrees of arc — about 111.2 km per degree — and must satisfy
 0 < semi-minor <= semi-major < 90.
 
-    --ellipse 56,2,2.7,1.1,45      # roughly 300 x 120 km, pointing north-east";
+    --ellipse 56,2,2.7,1.1,45      # roughly 300 x 120 km, pointing north-east
+    --ellipse 0,0,10,2,90          # 10 degrees east-west by 2 north-south";
 
 const CIRCLE_LONG_HELP: &str = "\
 Circle, as centre latitude, centre longitude, radius.

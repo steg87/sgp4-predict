@@ -106,13 +106,7 @@ fn prompt_shape(lines: &mut Lines) -> anyhow::Result<AreaDef> {
             width: prompt_f64(lines, "Width (degrees of longitude)", None)?,
             height: prompt_f64(lines, "Height (degrees of latitude)", None)?,
         }),
-        "ellipse" => AreaDef::Ellipse(EllipseDef {
-            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
-            longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
-            semi_major: prompt_f64(lines, "Semi-major axis (degrees)", None)?,
-            semi_minor: prompt_f64(lines, "Semi-minor axis (degrees)", None)?,
-            bearing: prompt_f64(lines, "Bearing (degrees clockwise from north)", Some(0.0))?,
-        }),
+        "ellipse" => prompt_ellipse(lines)?,
         "circle" => AreaDef::Circle(CircleDef {
             latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
             longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
@@ -123,6 +117,65 @@ fn prompt_shape(lines: &mut Lines) -> anyhow::Result<AreaDef> {
             vertices: prompt_vertices(lines)?,
         }),
     })
+}
+
+/// Ask for an ellipse, **bearing first**.
+///
+/// The semi-axes are not latitude and longitude extents — semi-major is simply
+/// the longer one, and the bearing is what points it. Asking for the bearing
+/// first means the two axes can be described as along and across it, rather
+/// than leaving the reader to work out which is which.
+fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AreaDef> {
+    let latitude = prompt_f64(lines, "Centre latitude (degrees)", None)?;
+    let longitude = prompt_f64(lines, "Centre longitude (degrees)", None)?;
+    let bearing = prompt_f64(
+        lines,
+        "Bearing of the long axis, degrees clockwise from north (0 = north-south)",
+        Some(0.0),
+    )?;
+
+    let semi_major = prompt_retry(
+        lines,
+        "Semi-major axis, half the length ALONG that bearing (degrees)",
+        |input| {
+            let value = number(input)?;
+            anyhow::ensure!(
+                value > 0.0 && value < 90.0,
+                "must be greater than 0 and less than 90 degrees, got {value}"
+            );
+            Ok(value)
+        },
+    )?;
+    // Checked here, not at `build()`, so the fix is offered while the value is
+    // still on screen instead of after every field has been entered.
+    let semi_minor = prompt_retry(
+        lines,
+        "Semi-minor axis, half the width ACROSS it (degrees)",
+        |input| {
+            let value = number(input)?;
+            anyhow::ensure!(value > 0.0, "must be greater than 0, got {value}");
+            anyhow::ensure!(
+                value <= semi_major,
+                "cannot exceed the semi-major axis of {semi_major}; for a wider-than-long \
+                 area, swap the two and turn the bearing by 90 degrees"
+            );
+            Ok(value)
+        },
+    )?;
+
+    Ok(AreaDef::Ellipse(EllipseDef {
+        latitude,
+        longitude,
+        semi_major,
+        semi_minor,
+        bearing,
+    }))
+}
+
+fn number(input: &str) -> anyhow::Result<f64> {
+    input
+        .parse()
+        .map_err(|_| anyhow::anyhow!("expected a number, got '{input}'"))
 }
 
 /// Read vertices until a blank line. Numbered as they are entered, since a
@@ -171,15 +224,9 @@ fn parse_vertex(input: &str) -> anyhow::Result<Vertex> {
     let (latitude, longitude) = input
         .split_once(',')
         .ok_or_else(|| anyhow::anyhow!("expected `lat,lon`, got '{input}'"))?;
-    let number = |field: &str| {
-        field
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| anyhow::anyhow!("expected a number, got '{}'", field.trim()))
-    };
     Ok(Vertex {
-        latitude: number(latitude)?,
-        longitude: number(longitude)?,
+        latitude: number(latitude.trim())?,
+        longitude: number(longitude.trim())?,
     })
 }
 
