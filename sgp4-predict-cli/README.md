@@ -117,6 +117,88 @@ other than `y`/`yes` — including end-of-input — leaves the config untouched.
 Note that `gs add` and `gs remove` re-serialise the file, so **YAML comments are not preserved**. A
 config that fails to parse is never overwritten.
 
+## Areas of interest
+
+`aoi-windows` needs a region on the ground, given as `--area <id>` naming an entry in the same
+config file. Areas live under `areas:` alongside `groundstations:`, and each is a flat map of named
+fields tagged with its `shape`:
+
+```yaml
+areas:
+  scotland:
+    shape: box
+    latitude: 57.0
+    longitude: -4.5
+    width: 7.0
+    height: 6.0
+  north-sea:
+    shape: ellipse
+    latitude: 56.0
+    longitude: 2.0
+    semi_major: 2.7
+    semi_minor: 1.1
+    bearing: 45.0
+  cape-town:
+    shape: circle
+    latitude: -33.9
+    longitude: 18.4
+    radius: 2.25
+  corridor:
+    shape: polygon
+    vertices:
+      - { latitude: 54.0, longitude: -8.0 }
+      - { latitude: 54.0, longitude: -1.0 }
+      - { latitude: 60.0, longitude: -1.0 }
+```
+
+| `shape`   | Fields                                                          |
+|-----------|-----------------------------------------------------------------|
+| `box`     | `latitude`, `longitude` (centre), `width`, `height`             |
+| `ellipse` | `latitude`, `longitude` (centre), `semi_major`, `semi_minor`, `bearing` (default 0) |
+| `circle`  | `latitude`, `longitude` (centre), `radius`                       |
+| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
+
+**Every extent is in degrees of arc**, about 111.2 km per degree. A box's `width` is an extent in
+*longitude*, so its ground width shrinks with the cosine of its latitude; its north and south edges
+follow their parallels exactly. Ellipse axes must satisfy `0 < semi_minor <= semi_major < 90`, and
+`bearing` turns the major axis clockwise from north. Polygon edges are great-circle arcs, so they are
+not lines of constant latitude — use `box` when the region really is a latitude/longitude box.
+
+### Managing areas
+
+Edit the file by hand, or use `sgp4-predict aoi`.
+
+| Command                           | Description                          |
+|-----------------------------------|--------------------------------------|
+| `aoi add <id> <shape>`            | Add an area                          |
+| `aoi list` (`aoi ls`)             | List the configured areas            |
+| `aoi remove <id>` (`aoi rm <id>`) | Remove an area, after confirmation   |
+
+`aoi add` takes the shape as exactly one of four mutually exclusive flags. Unlike `gs add` it does
+not prompt, since a polygon is a list of arbitrary length:
+
+```sh
+sgp4-predict aoi add scotland  --box 57,-4.5,7,6          # centre, then width and height
+sgp4-predict aoi add north-sea --ellipse 56,2,2.7,1.1,45  # centre, axes, optional bearing
+sgp4-predict aoi add cape-town --circle -33.9,18.4,2.25   # centre and radius
+sgp4-predict aoi add corridor  --poly "(54,-8),(54,-1),(60,-1)"
+```
+
+Parentheses are shell metacharacters, so quote a `--poly` value. Adding over an existing id needs
+`-f` / `--force`. Geometry the library rejects — an ellipse whose semi-minor axis exceeds its
+semi-major, a box running past a pole — is refused before anything is written.
+
+`aoi list` honours `--format` and shows each area by its config field names:
+
+```
+id               shape    definition
+------------------------------------
+cape-town        circle   latitude=-33.9 longitude=18.4 radius=2.25
+corridor         polygon  (54, -8) (54, -1) (60, -1)
+north-sea        ellipse  latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45
+scotland         box      latitude=57 longitude=-4.5 width=7 height=6
+```
+
 ## Subcommands
 
 All prediction subcommands share `--start` (ISO 8601 or loose RFC 3339, UTC, default: now) and
@@ -185,6 +267,39 @@ start                    end                           state   duration
 -----------------------------------------------------------------------
 2026-03-25T10:00:00Z     2026-03-25T10:51:08Z         Sunlit     51m 8s
 2026-03-25T10:51:08Z     2026-03-25T11:24:48Z        Eclipse    33m 40s
+```
+
+### `ground-track` — the sub-satellite point
+
+The geodetic point directly beneath the satellite, sampled at `--step` (default: `60s`).
+
+```sh
+sgp4-predict ground-track --tle-file sentinel.tle --duration 20m --step 5m
+```
+
+```
+datetime                  lat [deg]   lon [deg]  altitude [km]
+--------------------------------------------------------------
+2025-12-22T12:00:00Z       -29.3239    -27.2842        800.274
+2025-12-22T12:05:00Z       -46.8701    -32.9106        807.646
+2025-12-22T12:10:00Z       -64.0128    -42.8591        814.142
+2025-12-22T12:15:00Z       -79.0528    -76.9861        817.736
+```
+
+### `aoi-windows` — overpasses of an area of interest
+
+The windows in which the ground track lies inside the area named by `--area <id>`, with the
+sub-satellite point at each boundary crossing. See [Areas of interest](#areas-of-interest).
+
+```sh
+sgp4-predict aoi-windows --tle-file sentinel.tle --area europe --duration 12h
+```
+
+```
+entry                    exit                     entry_lat [deg] entry_lon [deg] exit_lat [deg] exit_lon [deg]   duration
+--------------------------------------------------------------------------------------------------------------------------
+2025-12-22T19:40:33Z     2025-12-22T19:43:28Z             55.0985         30.0000        65.0000        22.9317     2m 54s
+2025-12-22T21:16:56Z     2025-12-22T21:24:10Z             40.0000         11.0870        65.0000        -2.2431     7m 14s
 ```
 
 ## Output

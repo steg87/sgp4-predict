@@ -1,4 +1,7 @@
+pub mod aoi;
+pub mod aoi_windows;
 pub mod apsides;
+pub mod ground_track;
 pub mod gs;
 pub mod illumination;
 pub mod observations;
@@ -168,4 +171,23 @@ pub fn effective_config_path(explicit: Option<&Path>) -> Option<std::path::PathB
     explicit
         .map(Path::to_path_buf)
         .or_else(config::default_path)
+}
+
+/// Ask a yes/no question, for the `gs` and `aoi` remove commands.
+///
+/// The prompt goes to stderr so stdout stays pipeable. Anything other than
+/// y/yes means no, and so does EOF, so a non-interactive caller that forgot
+/// `--force` cannot delete anything.
+pub fn confirm(question: &str) -> anyhow::Result<bool> {
+    eprint!("{question} [y/N] ");
+    std::io::stderr().flush()?;
+
+    let mut answer = String::new();
+    if std::io::stdin().read_line(&mut answer)? == 0 {
+        return Ok(false);
+    }
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }

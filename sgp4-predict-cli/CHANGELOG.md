@@ -11,6 +11,23 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `ground-track`, sampling the geodetic point directly beneath the satellite at `--step`.
+- `aoi-windows`, finding the windows in which the ground track lies inside an area of interest,
+  reporting the sub-satellite point at each boundary crossing. The area is named by `--area <id>`.
+- An `areas:` map in the config file, alongside `groundstations:`. Each area is tagged with its
+  `shape` — `box`, `ellipse`, `circle`, or `polygon` — and given as named fields; all extents are
+  in degrees of arc.
+- `aoi add|remove|list` (aliases `rm`, `ls`) to manage those areas. `aoi add` takes the shape as
+  exactly one of `--box LAT,LON,W,H`, `--ellipse LAT,LON,A,B[,BEARING]`, `--circle LAT,LON,R`, or
+  `--poly "(LAT,LON),(LAT,LON),..."`, and refuses geometry the library cannot build.
+
+### Changed
+
+- `groundstations:` is omitted from a saved config when empty, so a config holding only areas no
+  longer grows an empty stub.
+
 ## [0.1.0] - 2026-07-28
 
 Initial release — a command-line front-end to `sgp4-predict`.

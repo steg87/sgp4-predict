@@ -28,3 +28,6 @@ serde_yaml         = "0.9"
 dirs               = "6"
 clap_complete      = "4"
 clap_mangen        = "0.3"
+
+[dev-dependencies]
+assert_approx_eq   = "1.1"
