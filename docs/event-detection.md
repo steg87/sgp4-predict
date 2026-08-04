@@ -139,12 +139,15 @@ stateDiagram-v2
     Outside --> [*] : interval end
 ```
 
-Two limits are worth knowing. The `min_step` floor (1 s, about 6.6 km of track) is what keeps the
-scan advancing at the boundary, and a chord traversed faster than that can still be missed. And the
+Two limits are worth knowing. The `min_step` floor is what keeps the scan advancing at the boundary,
+and a chord traversed faster than that can still be missed — at the 1 s default, about 6.6 km of
+track. Lower it for a narrower area; it is honoured down to 1 ms. And the
 boundary walk uses a fixed `walk_step` rather than the adaptive one, so for a **concave** area a
 notch the ground track leaves and re-enters within `walk_step` is absorbed into the surrounding
 window; a convex area is unaffected. Both are configurable via `AoiIterOpts`.
 
 Polygon edges are great-circle arcs in the sphere obtained by treating geodetic latitude as spherical
-latitude — the S2 and GeoJSON-on-a-sphere convention. They are not lines of constant latitude, so a
-four-vertex ring at 60°N bulges to roughly 68°N between vertices.
+latitude — the S2 and GeoJSON-on-a-sphere convention. They are not lines of constant latitude: an edge
+between two vertices at 60°N bows poleward by about 0.02° over a 5° longitude span and 0.09° over 10°,
+growing with the square of the span, so a four-vertex ring with vertices a quarter of the globe apart
+reaches roughly 68°N.

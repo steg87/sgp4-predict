@@ -128,12 +128,19 @@ ground point is in ECEF, times `1/(1−e²_WGS84)` for the geodetic-latitude str
 it beats sampling the orbit: sampling costs propagations and can miss the maximum, whereas this is a
 bound by construction. The empirical cross-check lives in `tests/aoi.rs` instead.
 
-Known limits, documented rather than fixed: the `min_step` floor voids the guarantee below its own
-scale (a chord traversed in under 1 s can be missed), and the `WindowIter` boundary walk uses a fixed
-`walk_step`, so a concave notch crossed in under `walk_step` is absorbed into the surrounding window.
-Fixing the latter properly needs a signed walk strategy in `detect.rs` — the walk runs in both
-directions while `StepStrategy::next_time` returns an absolute forward time — which is a public API
-break under `generics` for little gain. Revisit only if a real notch bug appears.
+Known limits: the `min_step` floor voids the guarantee below its own scale, and the `WindowIter`
+boundary walk uses a fixed `walk_step`, so a concave notch crossed in under `walk_step` is absorbed
+into the surrounding window. Fixing the walk properly needs a signed walk strategy in `detect.rs` —
+the walk runs in both directions while `StepStrategy::next_time` returns an absolute forward time —
+which is a public API break under `generics` for little gain. Revisit only if a real notch bug
+appears.
+
+The `min_step` floor is a knob rather than a fixed limit, though: it is floored at `MIN_AOI_STEP`
+(1 ms), deliberately **not** at `detect::MIN_POSITIVE_STEP` (1 s), because it bounds the shortest
+crossing the scan can see and a 1 s floor would cap that at ~6.6 km of track. `max_step` is raised to
+the resolved `min` rather than to a constant, so a wholly sub-second pair is honoured. This is the
+same distinction `DateTimeIter` draws below; do not "make it consistent" with the coarse scans that
+clamp at a second.
 
 Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
 a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for

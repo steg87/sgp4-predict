@@ -103,11 +103,12 @@ fn test_aoi_windows() {
 
     for w in &windows {
         // The ground track crosses a ~700 km box at ~6.6 km/s, so a couple of
-        // minutes at most; a few seconds at minimum for a corner clip.
-        let seconds = (w.end - w.start).num_seconds();
+        // minutes at most; a corner clip can be arbitrarily brief. Measured in
+        // milliseconds so a sub-second graze is short, not zero.
+        let millis = (w.end - w.start).num_milliseconds();
         assert!(
-            (1..=300).contains(&seconds),
-            "window duration {seconds} s is implausible for this box"
+            (1..=300_000).contains(&millis),
+            "window duration {millis} ms is implausible for this box"
         );
 
         // Self-consistency, needing no external reference: the midpoint is
@@ -186,7 +187,9 @@ fn test_ground_track_never_outruns_the_step_bound() {
         [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat]
     };
 
-    let step = Duration::seconds(10);
+    // Sampling resolution, not a tolerance: a longer step averages the rate
+    // over the chord and would hide a short-lived peak on an eccentric orbit.
+    let step = Duration::seconds(1);
     let mut t = day().start;
     let mut worst: f64 = 0.0;
     while t < day().end {

@@ -113,8 +113,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Edges are **great-circle arcs**, so four vertices at 60°N do not trace the 60°N parallel — the arcs
-between them bulge to roughly 68°N. Densify long edges. An area must also fit inside a hemisphere;
+Edges are **great-circle arcs**, so vertices at the same latitude are not joined along the parallel —
+the arc bows toward the nearer pole, growing with the square of the edge's longitude span. The 7° box
+above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would reach
+roughly 68°N, so densify edges that long. An area must also fit inside a hemisphere;
 this permits polar caps, equator-spanning and antimeridian-spanning areas, but not a region larger
 than half the globe. Implement `Area` on your own type for other shapes.
 

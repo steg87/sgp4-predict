@@ -20,8 +20,11 @@
 //! Polygon edges are **great-circle arcs**, in the sphere obtained by treating
 //! geodetic latitude as spherical latitude — the same convention as S2,
 //! BigQuery GIS, and GeoJSON-on-a-sphere. They are neither rhumb lines nor
-//! lines of constant latitude, so four vertices at 60°N do not trace the 60°N
-//! parallel: the arcs between them bulge to roughly 68°N. Densify long edges.
+//! lines of constant latitude: an edge joining two vertices at the same
+//! latitude bows toward the nearer pole, by an amount growing with the square
+//! of its longitude span. At 60°N a 5° edge bulges 0.02° (under 3 km) and a
+//! 10° edge 0.09°, while vertices a quarter of the globe apart reach roughly
+//! 68°N. Densify the long edges; a box a few degrees wide needs nothing.
 //!
 //! [`IntervalRange`]: crate::IntervalRange
 //! [`Predictor::prediction_iter`]: crate::Predictor::prediction_iter
@@ -36,7 +39,7 @@ use thiserror::Error as ThisError;
 use crate::{
     Predictor, Result,
     angle::Radians,
-    detect::{self, EventFunction, MIN_POSITIVE_STEP, Sample, StepStrategy, WindowIter},
+    detect::{self, EventFunction, Sample, StepStrategy, WindowIter},
     frames::{LatLon, WGS84_E2},
     roots::Refinement,
     time::{self, IntervalRange},
@@ -48,6 +51,12 @@ const COINCIDENT: f64 = 1e-9;
 /// A ground point within this angle of the boundary is reported as exactly on
 /// it. Roughly 6 nanometres of arc.
 const ON_BOUNDARY: f64 = 1e-15;
+
+/// Floor on the adaptive coarse-scan step, deliberately finer than
+/// `detect::MIN_POSITIVE_STEP`: `min_step` bounds the shortest crossing the
+/// scan can see, so flooring it at a second would cap that guarantee at
+/// ~6.6 km of track. Only a zero or negative step has to be excluded.
+const MIN_AOI_STEP: Duration = Duration::milliseconds(1);
 
 /// A region on Earth's surface that a ground track can pass over.
 ///
@@ -135,6 +144,8 @@ impl Polygon {
     /// # Errors
     ///
     /// - [`Error::Latitude`] if a latitude is outside `[-90, 90]`.
+    /// - [`Error::NotFinite`] if a longitude is NaN or infinite. Longitude
+    ///   itself is unbounded — it wraps — so only finiteness is checked.
     /// - [`Error::TooFewVertices`] if fewer than three distinct vertices remain.
     /// - [`Error::AntipodalEdge`] if consecutive vertices are antipodal, since
     ///   no unique great-circle arc joins them.
@@ -147,6 +158,16 @@ impl Polygon {
             let lat = vertex.latitude.to_f64();
             if !(-90.0..=90.0).contains(&lat) {
                 return Err(Error::Latitude(lat).into());
+            }
+            // A non-finite longitude gives a NaN vertex, which slips past every
+            // comparison below and reaches `normalize` as a zero-norm vector.
+            let lon = vertex.longitude.to_f64();
+            if !lon.is_finite() {
+                return Err(Error::NotFinite {
+                    what: "polygon vertex longitude",
+                    value: lon,
+                }
+                .into());
             }
             let v = unit_from_lat_lon(vertex);
             if verts.last().is_none_or(|prev| !coincident(*prev, v)) {
@@ -357,13 +378,14 @@ impl StepStrategy for ProximityStep {
     fn next_time(&mut self, current: DateTime<Utc>, sample: Option<&Sample>) -> DateTime<Utc> {
         let step = match sample {
             Some(s) => {
-                // Clamping the f64 seconds before the Duration conversion
+                // Clamping the f64 milliseconds before the Duration conversion
                 // keeps it from overflowing and already bounds the result to
                 // self.max; only the floor still needs enforcing. It also
-                // funnels a NaN value into `min` rather than a stall.
-                let seconds =
-                    (s.value.abs() / self.angular_rate).clamp(0.0, self.max.num_seconds() as f64);
-                Duration::milliseconds((seconds * 1e3) as i64).max(self.min)
+                // funnels a NaN value into `min` rather than a stall, since
+                // clamp propagates NaN and the cast then saturates to zero.
+                let millis = (s.value.abs() / self.angular_rate * 1e3)
+                    .clamp(0.0, self.max.num_milliseconds() as f64);
+                Duration::milliseconds(millis as i64).max(self.min)
             }
             None => self.max,
         };
@@ -404,10 +426,11 @@ fn max_sub_point_rate(elements: &Elements) -> f64 {
 #[derive(Debug, Clone, Copy)]
 pub struct AoiIterOpts {
     /// Lower bound of the adaptive coarse-scan step. Also the shortest
-    /// crossing the scan is guaranteed to see.
+    /// crossing the scan is guaranteed to see, so lower it for an area the
+    /// ground track can cross in under a second. Floored at 1 ms.
     pub min_step: Duration,
     /// Upper bound of the adaptive coarse-scan step, used when the ground
-    /// track is far from the area.
+    /// track is far from the area. Raised to `min_step` if it is below it.
     pub max_step: Duration,
     /// Fixed step used to walk from a window's start to its end.
     ///
@@ -442,6 +465,14 @@ impl Default for AoiIterOpts {
     }
 }
 
+/// The coarse-scan bounds an [`AoiIterOpts`] actually yields: `min_step`
+/// floored, and `max_step` raised to it rather than to a fixed constant, so a
+/// wholly sub-second pair is honoured as asked.
+fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
+    let min = opts.min_step.max(MIN_AOI_STEP);
+    (min, opts.max_step.max(min))
+}
+
 /// Iterator over the windows during which the satellite's ground track lies
 /// inside an area.
 ///
@@ -458,9 +489,10 @@ impl<'a, A: Area> AoiIter<'a, A> {
         opts: AoiIterOpts,
         refinement: Refinement,
     ) -> Self {
+        let (min, max) = step_bounds(&opts);
         let step = ProximityStep {
-            min: opts.min_step.max(MIN_POSITIVE_STEP),
-            max: opts.max_step.max(MIN_POSITIVE_STEP),
+            min,
+            max,
             angular_rate: max_sub_point_rate(&predictor.elements),
         };
         let mut builder = WindowIter::builder()
@@ -591,6 +623,8 @@ pub enum Error {
     TooFewVertices(usize),
     #[error("latitude {0} is outside [-90, 90]")]
     Latitude(f64),
+    #[error("{what} is not finite: {value}")]
+    NotFinite { what: &'static str, value: f64 },
     #[error("polygon edge {index} joins antipodal vertices; no unique great-circle arc joins them")]
     AntipodalEdge { index: usize },
     #[error(
@@ -677,10 +711,14 @@ mod step_tests {
     use chrono::TimeZone;
 
     fn step(value: Option<f64>) -> Duration {
+        step_within(Duration::seconds(1), Duration::minutes(10), value)
+    }
+
+    fn step_within(min: Duration, max: Duration, value: Option<f64>) -> Duration {
         let now = Utc.with_ymd_and_hms(2025, 12, 20, 12, 0, 0).unwrap();
         let mut s = ProximityStep {
-            min: Duration::seconds(1),
-            max: Duration::minutes(10),
+            min,
+            max,
             // A round number near a typical LEO ground-track rate.
             angular_rate: 1e-3,
         };
@@ -723,7 +761,78 @@ mod step_tests {
         assert_eq!(step(Some(f64::NAN)), Duration::seconds(1));
     }
 
-    // --- max_sub_point_rate ---
+    #[test]
+    fn test_sub_second_bounds_are_honoured() {
+        // The whole point of the knob: a 100 ms floor is what lets the scan
+        // see a chord it crosses in under a second.
+        assert_eq!(
+            step_within(
+                Duration::milliseconds(100),
+                Duration::milliseconds(500),
+                Some(0.0)
+            ),
+            Duration::milliseconds(100)
+        );
+        assert_eq!(
+            step_within(
+                Duration::milliseconds(100),
+                Duration::milliseconds(500),
+                Some(1.0)
+            ),
+            Duration::milliseconds(500)
+        );
+    }
+
+    #[test]
+    fn test_fractional_max_step_is_not_truncated() {
+        // Clamping in whole seconds would round this cap down to 1 s.
+        assert_eq!(
+            step_within(
+                Duration::milliseconds(1),
+                Duration::milliseconds(1500),
+                Some(1.0)
+            ),
+            Duration::milliseconds(1500)
+        );
+    }
+
+    // --- step_bounds ---
+
+    #[test]
+    fn test_step_bounds_floor_at_a_millisecond() {
+        let bounds = |min, max| {
+            step_bounds(&AoiIterOpts {
+                min_step: min,
+                max_step: max,
+                ..Default::default()
+            })
+        };
+
+        // A sub-second request survives; only zero and negative are floored.
+        assert_eq!(
+            bounds(Duration::milliseconds(100), Duration::minutes(10)).0,
+            Duration::milliseconds(100)
+        );
+        assert_eq!(
+            bounds(Duration::zero(), Duration::minutes(10)).0,
+            Duration::milliseconds(1)
+        );
+        assert_eq!(
+            bounds(Duration::seconds(-5), Duration::minutes(10)).0,
+            Duration::milliseconds(1)
+        );
+
+        // `max` is raised to `min`, not to a fixed constant, so a wholly
+        // sub-second pair stays sub-second.
+        assert_eq!(
+            bounds(Duration::milliseconds(100), Duration::milliseconds(500)),
+            (Duration::milliseconds(100), Duration::milliseconds(500))
+        );
+        assert_eq!(
+            bounds(Duration::milliseconds(100), Duration::milliseconds(50)),
+            (Duration::milliseconds(100), Duration::milliseconds(100))
+        );
+    }
 
     // --- max_sub_point_rate ---
 
@@ -808,6 +917,9 @@ mod geometry_tests {
         .expect("valid box")
     }
 
+    /// Note the round-trip: the vector reaching the polygon is
+    /// `unit_from_lat_lon(lat_lon_from_unit(v))`, not `v` itself, so these are
+    /// not exact-input tests. The tolerances below absorb the difference.
     fn offset(poly: &Polygon, v: [f64; 3]) -> f64 {
         poly.signed_angular_offset(lat_lon_from_unit(v)).to_f64()
     }
@@ -1199,6 +1311,36 @@ mod geometry_tests {
             (Degrees(10.0), Degrees(10.0)),
         ]);
         assert!(matches!(bad, Err(Error::Aoi(super::Error::Latitude(_)))));
+    }
+
+    /// A non-finite latitude fails the range test; a non-finite longitude has
+    /// no range to fail, so it needs its own check. Both must be an error
+    /// rather than the panic a NaN vertex used to reach in `normalize`.
+    #[test]
+    fn test_non_finite_coordinates_rejected() {
+        for lon in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let bad = Polygon::new([
+                (Degrees(0.0), Degrees(0.0)),
+                (Degrees(10.0), Degrees(lon)),
+                (Degrees(10.0), Degrees(10.0)),
+            ]);
+            assert!(
+                matches!(bad, Err(Error::Aoi(super::Error::NotFinite { .. }))),
+                "longitude {lon} was not rejected"
+            );
+        }
+
+        for lat in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let bad = Polygon::new([
+                (Degrees(0.0), Degrees(0.0)),
+                (Degrees(lat), Degrees(10.0)),
+                (Degrees(10.0), Degrees(10.0)),
+            ]);
+            assert!(
+                matches!(bad, Err(Error::Aoi(super::Error::Latitude(_)))),
+                "latitude {lat} was not rejected"
+            );
+        }
     }
 
     #[test]

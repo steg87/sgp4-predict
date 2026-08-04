@@ -188,8 +188,8 @@ impl Observer for Geodetic {
 /// Vermeille's (2002) closed-form inverse of the geodetic-to-ECEF transform.
 ///
 /// Chosen over Bowring's single iteration because it stays exact at orbital
-/// altitude, which is where Bowring degrades. Degenerate only within a few
-/// kilometres of Earth's centre, which is guarded below.
+/// altitude, which is where Bowring degrades. Degenerate only within about
+/// 43 km of Earth's centre, which is guarded below.
 fn geodetic_from_ecef(x: f64, y: f64, z: f64) -> Geodetic {
     const E4: f64 = WGS84_E2 * WGS84_E2;
 
@@ -199,7 +199,9 @@ fn geodetic_from_ecef(x: f64, y: f64, z: f64) -> Geodetic {
     let r = (p + q - E4) / 6.0;
 
     // Inside the ellipsoid's evolute the cube root below is not defined. No
-    // orbit reaches it; return a well-formed value rather than NaN.
+    // orbit reaches it; return a well-formed value rather than NaN. The
+    // signature cannot report the failure, and 0°/0° is the one answer
+    // indistinguishable from a real one — only the -a altitude marks it.
     if r <= 0.0 {
         return Geodetic {
             latitude: Degrees(0.0),
