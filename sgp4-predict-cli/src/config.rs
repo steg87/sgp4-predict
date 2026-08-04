@@ -17,38 +17,38 @@ const CONFIG_FILE: &str = "config.yaml";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Ground stations keyed by the id passed to `--gs`.
-    /// Omitted when empty, so a config with only areas does not grow a stub.
+    /// Omitted when empty, so a config with only AOIs does not grow a stub.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub groundstations: BTreeMap<String, GroundStation>,
-    /// Areas of interest keyed by the id passed to `--area`.
+    /// Areas of interest keyed by the id passed to `--aoi`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub areas: BTreeMap<String, AreaDef>,
+    pub aois: BTreeMap<String, AoiDef>,
 }
 
 /// A region on the ground, as written in the config file.
 ///
-/// Internally tagged on `shape`, so each area is a flat map of named fields:
+/// Internally tagged on `shape`, so each AOI is a flat map of named fields:
 ///
 /// ```yaml
-/// areas:
+/// aois:
 ///   scotland:
 ///     shape: box
-///     latitude: 57.0
-///     longitude: -4.5
-///     width: 7.0
-///     height: 6.0
+///     south: 54.0
+///     north: 60.0
+///     west: -8.0
+///     east: -1.0
 /// ```
 ///
 /// Externally tagged (`box: { ... }`) would read as well, but serde_yaml
 /// represents that with a `!Box` YAML tag rather than a nested map, which is
 /// not something to hand-write.
 ///
-/// This is the *stored* form. [`AreaDef::build`] turns it into the library
+/// This is the *stored* form. [`AoiDef::build`] turns it into the library
 /// shape, which is where the geometry is validated.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "shape", rename_all = "lowercase")]
-pub enum AreaDef {
-    /// A latitude/longitude box, given by its centre and extents.
+pub enum AoiDef {
+    /// A latitude/longitude box, given by its bounds.
     Box(BoxDef),
     Ellipse(EllipseDef),
     Circle(CircleDef),
@@ -59,15 +59,15 @@ pub enum AreaDef {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BoxDef {
-    /// Centre latitude in degrees.
-    pub latitude: f64,
-    /// Centre longitude in degrees.
-    pub longitude: f64,
-    /// Full extent in **longitude**, degrees. The ground width therefore
-    /// shrinks with the cosine of the latitude.
-    pub width: f64,
-    /// Full extent in latitude, degrees.
-    pub height: f64,
+    /// Southern latitude bound in degrees.
+    pub south: f64,
+    /// Northern latitude bound in degrees.
+    pub north: f64,
+    /// Western longitude bound in degrees.
+    pub west: f64,
+    /// Eastern longitude bound in degrees. The box runs **eastward** from
+    /// `west`, so an `east` at a smaller longitude wraps the antimeridian.
+    pub east: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -144,15 +144,15 @@ groundstations:
       longitude: -4.25
       altitude: 40
 
-# Areas of interest. Select one with `--area <id>`.
-# All extents are in degrees of arc — about 111.2 km per degree.
-areas:
+# Areas of interest. Select one with `--aoi <id>`.
+# All coordinates are in degrees — about 111.2 km per degree of arc.
+aois:
   scotland:
     shape: box
-    latitude: 57.0
-    longitude: -4.5
-    width: 7.0
-    height: 6.0
+    south: 54.0
+    north: 60.0
+    west: -8.0
+    east: -1.0
 ";
 
 /// Load the config from `path`, or from [`default_path`] when `path` is `None`.
@@ -219,7 +219,7 @@ fn write_template(path: &Path) -> anyhow::Result<()> {
 
 /// Header re-emitted on every save, since serialising drops YAML comments.
 const SAVED_HEADER: &str = "\
-# sgp4-predict ground stations (`--gs <id>`) and areas of interest (`--area <id>`).
+# sgp4-predict ground stations (`--gs <id>`) and areas of interest (`--aoi <id>`).
 # Managed by `sgp4-predict gs add|remove|list` and `sgp4-predict aoi add|remove|list`;
 # hand edits are preserved, but comments are not.
 ";
@@ -333,35 +333,35 @@ impl Config {
         }
     }
 
-    /// Look up an area by id, without building or validating its geometry.
+    /// Look up an AOI by id, without building or validating its geometry.
     ///
     /// `aoi remove` uses this, for the same reason [`Config::find`] exists: a
-    /// hand-edited area that no longer builds is still listed, so it must be
+    /// hand-edited AOI that no longer builds is still listed, so it must be
     /// removable without editing the YAML by hand.
-    pub fn find_area(&self, id: &str) -> anyhow::Result<&AreaDef> {
-        self.areas.get(id).ok_or_else(|| {
-            if self.areas.is_empty() {
-                anyhow::anyhow!("unknown area '{id}'; the config defines none")
+    pub fn find_aoi(&self, id: &str) -> anyhow::Result<&AoiDef> {
+        self.aois.get(id).ok_or_else(|| {
+            if self.aois.is_empty() {
+                anyhow::anyhow!("unknown aoi '{id}'; the config defines none")
             } else {
                 anyhow::anyhow!(
-                    "unknown area '{id}'; known ids: {}",
-                    self.area_ids().join(", ")
+                    "unknown aoi '{id}'; known ids: {}",
+                    self.aoi_ids().join(", ")
                 )
             }
         })
     }
 
-    /// Area ids in sorted order.
-    pub fn area_ids(&self) -> Vec<&str> {
-        self.areas.keys().map(String::as_str).collect()
+    /// AOI ids in sorted order.
+    pub fn aoi_ids(&self) -> Vec<&str> {
+        self.aois.keys().map(String::as_str).collect()
     }
 
-    /// `" (known areas: a, b)"`, or empty when the config defines none.
-    pub fn area_ids_hint(&self) -> String {
-        if self.areas.is_empty() {
+    /// `" (known aois: a, b)"`, or empty when the config defines none.
+    pub fn aoi_ids_hint(&self) -> String {
+        if self.aois.is_empty() {
             String::new()
         } else {
-            format!(" (known areas: {})", self.area_ids().join(", "))
+            format!(" (known aois: {})", self.aoi_ids().join(", "))
         }
     }
 }

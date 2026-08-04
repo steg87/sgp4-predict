@@ -133,24 +133,24 @@ pub enum AoiCommand {
 
 #[derive(clap::Args)]
 pub struct AoiAddArgs {
-    /// Area id, used later as `--area <ID>`; prompted for if omitted
+    /// AOI id, used later as `--aoi <ID>`; prompted for if omitted
     #[arg(value_name = "ID")]
     pub id: Option<String>,
 
-    /// Which shape the area takes; prompted for if omitted
+    /// Which shape the AOI takes; prompted for if omitted
     #[arg(long, value_enum, long_help = SHAPE_LONG_HELP)]
     pub shape: Option<Shape>,
 
-    /// Replace an existing area with this id
+    /// Replace an existing AOI with this id
     #[arg(short, long)]
     pub force: bool,
 }
 
-/// The shape an area takes. Its *definition* is always prompted for — there is
+/// The shape an AOI takes. Its *definition* is always prompted for — there is
 /// deliberately no flag carrying coordinates, matching `gs add`.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Shape {
-    /// Latitude/longitude box, given by its centre and extents
+    /// Latitude/longitude box, given by its south/north/west/east bounds
     Box,
     /// Ellipse, given by its centre, semi-axes and bearing
     Ellipse,
@@ -161,16 +161,16 @@ pub enum Shape {
 }
 
 const SHAPE_LONG_HELP: &str = "\
-Which shape the area takes.
+Which shape the AOI takes.
 
 Only the shape is taken here; its coordinates are always prompted for, as they
-are for `gs add`. Edit the config file directly to write an area out by hand.
+are for `gs add`. Edit the config file directly to write an AOI out by hand.
 
     sgp4-predict aoi add scotland --shape box";
 
 #[derive(clap::Args)]
 pub struct AoiRemoveArgs {
-    /// Area id to remove
+    /// AOI id to remove
     #[arg(value_name = "ID")]
     pub id: String,
 
@@ -356,22 +356,22 @@ pub struct AoiWindowsArgs {
     pub common: CommonArgs,
 
     #[command(flatten)]
-    pub area: AreaArgs,
+    pub aoi: AoiArgs,
 }
 
 /// Area-of-interest selection, the counterpart of [`ObserverArgs`].
 ///
-/// `AreaArgs::validate` enforces that `--area` is present and names an area
-/// the config can build; `AreaArgs::resolve` returns the built shape.
+/// `AoiArgs::validate` enforces that `--aoi` is present and names an AOI the
+/// config can build; `AoiArgs::resolve` returns the built shape.
 #[derive(clap::Args)]
-pub struct AreaArgs {
+pub struct AoiArgs {
     /// Area of interest id from the config file
-    #[arg(long, value_name = "ID", long_help = AREA_LONG_HELP)]
-    pub area: Option<String>,
+    #[arg(long = "aoi", value_name = "ID", long_help = AOI_LONG_HELP)]
+    pub id: Option<String>,
 }
 
-const AREA_LONG_HELP: &str = "\
-Area of interest id, looked up in the `areas` map of the config file
+const AOI_LONG_HELP: &str = "\
+Area of interest id, looked up in the `aois` map of the config file
 (see --config).
 
 Required. If the id is missing or unknown, the error lists the ids the config
