@@ -10,10 +10,9 @@ use chrono::{DateTime, Duration, Utc};
 use crate::{
     Error, Predictor, Result,
     angle::{Degrees, Radians},
-    frames::{EcefState, WGS84_A, WGS84_E2},
+    frames::EcefState,
     predict::PredictionIter,
     time::IntervalRange,
-    vectors::{Position, StateVector, Velocity},
 };
 
 /// A fixed point on Earth's surface from which satellite passes are observed.
@@ -30,25 +29,7 @@ pub trait Observer {
 
 pub(crate) trait ObserverExt: Observer {
     fn to_ecef(&self) -> EcefState {
-        let h = self.altitude();
-        let a = WGS84_A;
-        let e2 = WGS84_E2;
-
-        let sin_lat = self.latitude().to_radians().to_f64().sin();
-        let cos_lat = self.latitude().to_radians().to_f64().cos();
-        let sin_lon = self.longitude().to_radians().to_f64().sin();
-        let cos_lon = self.longitude().to_radians().to_f64().cos();
-
-        let n = a / (1.0 - e2 * sin_lat * sin_lat).sqrt();
-
-        StateVector::new(
-            Position::new(
-                (n + h) * cos_lat * cos_lon,
-                (n + h) * cos_lat * sin_lon,
-                (n * (1.0 - e2) + h) * sin_lat,
-            ),
-            Velocity::default(),
-        )
+        crate::frames::ecef_from_geodetic(self.latitude(), self.longitude(), self.altitude())
     }
 }
 

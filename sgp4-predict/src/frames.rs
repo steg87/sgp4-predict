@@ -164,11 +164,9 @@ impl From<(Degrees, Degrees)> for LatLon {
 ///
 /// Altitude is in **metres**. Longitude is in `(-180, 180]`.
 ///
-/// This implements [`Observer`](crate::Observer), so a sub-satellite point can
-/// be passed straight to [`Predictor::observe_at`](crate::Predictor::observe_at)
-/// or [`transits_iter`](crate::Predictor::transits_iter) — note that this puts
-/// the observer at the satellite's own altitude, not on the ground. For a
-/// ground station, set `altitude` to the site's elevation.
+/// This is a position. To observe satellites *from* a point on the ground, use
+/// [`GroundObserver`](crate::GroundObserver) or implement
+/// [`Observer`](crate::Observer) on your own type.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Geodetic {
     /// Geodetic latitude (positive north).
@@ -179,16 +177,33 @@ pub struct Geodetic {
     pub altitude: f64,
 }
 
-impl Observer for Geodetic {
-    fn latitude(&self) -> Degrees {
-        self.latitude
+impl Geodetic {
+    /// Convert to an ECEF position, the inverse of
+    /// [`EcefState::to_geodetic`]. Velocity is zero.
+    pub fn to_ecef(&self) -> EcefState {
+        ecef_from_geodetic(self.latitude, self.longitude, self.altitude)
     }
-    fn longitude(&self) -> Degrees {
-        self.longitude
-    }
-    fn altitude(&self) -> f64 {
-        self.altitude
-    }
+}
+
+/// Geodetic to ECEF. The forward transform [`geodetic_from_ecef`] inverts.
+pub(crate) fn ecef_from_geodetic(
+    latitude: Degrees,
+    longitude: Degrees,
+    altitude: f64,
+) -> EcefState {
+    let (sin_lat, cos_lat) = latitude.radians().sin_cos();
+    let (sin_lon, cos_lon) = longitude.radians().sin_cos();
+
+    let n = WGS84_A / (1.0 - WGS84_E2 * sin_lat * sin_lat).sqrt();
+
+    StateVector::new(
+        Position::new(
+            (n + altitude) * cos_lat * cos_lon,
+            (n + altitude) * cos_lat * sin_lon,
+            (n * (1.0 - WGS84_E2) + altitude) * sin_lat,
+        ),
+        Velocity::default(),
+    )
 }
 
 /// Vermeille's (2002) closed-form inverse of the geodetic-to-ECEF transform.
@@ -369,7 +384,6 @@ mod markers {
 mod tests {
     use super::{EcefState, EnuState, Geodetic, WGS84_A, gmst, julian_date, sun_position_eci};
     use crate::angle::Degrees;
-    use crate::observe::ObserverExt;
     use crate::vectors::{Position, Velocity};
     use chrono::{TimeZone, Utc};
 
