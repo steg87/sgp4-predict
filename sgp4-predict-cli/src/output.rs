@@ -437,23 +437,23 @@ where
     out.finish()
 }
 
-const AREA_COLUMNS: &[Column] = &[
+const AOI_LIST_COLUMNS: &[Column] = &[
     left("id", "id", 16),
     left("shape", "shape", 8),
     left("definition", "definition", 64),
 ];
 
-/// Render the config's areas, in id order.
+/// Render the config's AOIs, in id order.
 ///
 /// `definition` uses the config file's own field names, so a listing reads the
 /// same way the YAML does.
-pub fn write_areas<'a, W, I>(w: W, format: Format, areas: I) -> anyhow::Result<()>
+pub fn write_aois<'a, W, I>(w: W, format: Format, aois: I) -> anyhow::Result<()>
 where
     W: Write,
-    I: Iterator<Item = (&'a str, &'a crate::config::AreaDef)>,
+    I: Iterator<Item = (&'a str, &'a crate::config::AoiDef)>,
 {
-    let mut out = RowWriter::new(w, format, AREA_COLUMNS);
-    for (id, def) in areas {
+    let mut out = RowWriter::new(w, format, AOI_LIST_COLUMNS);
+    for (id, def) in aois {
         out.write_row(&[text(id), text(def.kind()), text(def.describe())])?;
     }
     out.finish()

@@ -2,7 +2,7 @@
 //!
 //! `aoi add` prompts field by field like `gs add`. The id and the shape may be
 //! given on the command line, but the coordinates never are — hand-writing an
-//! area is what editing the config file is for. A polygon has no fixed field
+//! AOI is what editing the config file is for. A polygon has no fixed field
 //! count, so its vertices are read in a numbered loop that a blank line ends.
 //! Prompts and confirmations go to stderr, so `aoi list` stays pipeable.
 
@@ -13,9 +13,9 @@ use std::{
 
 use super::{confirm, echo, prompt, prompt_f64, prompt_retry};
 use crate::{
-    area::AreaShape,
+    aoi::AoiShape,
     cli::{AoiAddArgs, AoiCommand, AoiListArgs, AoiRemoveArgs, Shape},
-    config::{self, AreaDef, BoxDef, CircleDef, Config, EllipseDef, PolygonDef, Vertex},
+    config::{self, AoiDef, BoxDef, CircleDef, Config, EllipseDef, PolygonDef, Vertex},
     output,
 };
 
@@ -44,17 +44,17 @@ fn add(mut config: Config, path: &Path, args: AoiAddArgs) -> anyhow::Result<()> 
 
     let id = match args.id {
         Some(id) => {
-            echo("Area id", &id);
+            echo("AOI id", &id);
             id
         }
-        None => prompt(&mut lines, "Area id")?,
+        None => prompt(&mut lines, "AOI id")?,
     };
     // Checked before the shape, so a clashing id is not discovered only after
     // every coordinate has been typed in.
-    anyhow::ensure!(!id.is_empty(), "area id cannot be empty");
+    anyhow::ensure!(!id.is_empty(), "aoi id cannot be empty");
     anyhow::ensure!(
-        args.force || !config.areas.contains_key(&id),
-        "area '{id}' already exists; pass --force to replace it, or pick another id"
+        args.force || !config.aois.contains_key(&id),
+        "aoi '{id}' already exists; pass --force to replace it, or pick another id"
     );
 
     let shape_kind = match args.shape {
@@ -69,14 +69,14 @@ fn add(mut config: Config, path: &Path, args: AoiAddArgs) -> anyhow::Result<()> 
     // rather than on the next lookup.
     let shape = def.build()?;
 
-    config.areas.insert(id.clone(), def);
+    config.aois.insert(id.clone(), def);
     config.save(path)?;
 
     if !existed {
         eprintln!("created {}", path.display());
     }
     eprintln!(
-        "added area '{id}' ({}) to {}",
+        "added aoi '{id}' ({}) to {}",
         summarise(&shape),
         path.display()
     );
@@ -103,21 +103,16 @@ fn prompt_shape(lines: &mut Lines) -> anyhow::Result<Shape> {
 
 /// Ask for the shape's coordinates. Always prompted — there is no flag
 /// carrying them, so ranges are checked here rather than in a value parser.
-fn prompt_definition(lines: &mut Lines, shape: Shape) -> anyhow::Result<AreaDef> {
+fn prompt_definition(lines: &mut Lines, shape: Shape) -> anyhow::Result<AoiDef> {
     Ok(match shape {
-        Shape::Box => AreaDef::Box(BoxDef {
-            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
-            longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
-            width: prompt_bounded(lines, "Width (degrees of longitude)", 360.0)?,
-            height: prompt_bounded(lines, "Height (degrees of latitude)", 180.0)?,
-        }),
+        Shape::Box => prompt_box(lines)?,
         Shape::Ellipse => prompt_ellipse(lines)?,
-        Shape::Circle => AreaDef::Circle(CircleDef {
-            latitude: prompt_f64(lines, "Centre latitude (degrees)", None)?,
+        Shape::Circle => AoiDef::Circle(CircleDef {
+            latitude: prompt_latitude(lines, "Centre latitude (degrees)")?,
             longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
             radius: prompt_bounded(lines, "Radius (degrees)", 90.0)?,
         }),
-        Shape::Polygon => AreaDef::Polygon(PolygonDef {
+        Shape::Polygon => AoiDef::Polygon(PolygonDef {
             vertices: prompt_vertices(lines)?,
         }),
     })
@@ -146,14 +141,64 @@ fn prompt_bounded(lines: &mut Lines, label: &str, limit: f64) -> anyhow::Result<
     })
 }
 
+/// Prompt for a latitude in `[-90, 90]`.
+fn prompt_latitude(lines: &mut Lines, label: &str) -> anyhow::Result<f64> {
+    prompt_retry(lines, label, latitude)
+}
+
+fn latitude(input: &str) -> anyhow::Result<f64> {
+    let value = number(input)?;
+    anyhow::ensure!(
+        (-90.0..=90.0).contains(&value),
+        "latitude must be between -90 and 90 degrees, got {value}"
+    );
+    Ok(value)
+}
+
+/// Ask for a box, as the four bounds the library itself takes.
+///
+/// Each bound is checked against the field it was typed into: unlike a centre
+/// with extents, there is nothing derived here, so "which value was wrong" is
+/// never ambiguous.
+fn prompt_box(lines: &mut Lines) -> anyhow::Result<AoiDef> {
+    let south = prompt_latitude(lines, "South latitude (degrees)")?;
+    let north = prompt_retry(lines, "North latitude (degrees)", |input| {
+        let value = latitude(input)?;
+        anyhow::ensure!(
+            value > south,
+            "must lie north of the south bound of {south}"
+        );
+        Ok(value)
+    })?;
+
+    let west = prompt_f64(lines, "West longitude (degrees)", None)?;
+    // The box runs eastward from `west`, so two bounds on the same meridian
+    // are a box with no width rather than one wrapping the whole world.
+    let east = prompt_retry(lines, "East longitude (degrees)", |input| {
+        let value = number(input)?;
+        anyhow::ensure!(
+            (value - west).rem_euclid(360.0) > 1e-7,
+            "is the same meridian as the west bound of {west}, so the box has no width"
+        );
+        Ok(value)
+    })?;
+
+    Ok(AoiDef::Box(BoxDef {
+        south,
+        north,
+        west,
+        east,
+    }))
+}
+
 /// Ask for an ellipse, **bearing first**.
 ///
 /// The semi-axes are not latitude and longitude extents — semi-major is simply
 /// the longer one, and the bearing is what points it. Asking for the bearing
 /// first means the two axes can be described as along and across it, rather
 /// than leaving the reader to work out which is which.
-fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AreaDef> {
-    let latitude = prompt_f64(lines, "Centre latitude (degrees)", None)?;
+fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AoiDef> {
+    let latitude = prompt_latitude(lines, "Centre latitude (degrees)")?;
     let longitude = prompt_f64(lines, "Centre longitude (degrees)", None)?;
     let bearing = prompt_f64(
         lines,
@@ -184,13 +229,13 @@ fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AreaDef> {
             anyhow::ensure!(
                 value <= semi_major,
                 "cannot exceed the semi-major axis of {semi_major}; for a wider-than-long \
-                 area, swap the two and turn the bearing by 90 degrees"
+                 AOI, swap the two and turn the bearing by 90 degrees"
             );
             Ok(value)
         },
     )?;
 
-    Ok(AreaDef::Ellipse(EllipseDef {
+    Ok(AoiDef::Ellipse(EllipseDef {
         latitude,
         longitude,
         semi_major,
@@ -248,48 +293,48 @@ fn initial(word: &str) -> String {
 }
 
 fn parse_vertex(input: &str) -> anyhow::Result<Vertex> {
-    let (latitude, longitude) = input
+    let (lat, lon) = input
         .split_once(',')
         .ok_or_else(|| anyhow::anyhow!("expected `lat,lon`, got '{input}'"))?;
     Ok(Vertex {
-        latitude: number(latitude.trim())?,
-        longitude: number(longitude.trim())?,
+        latitude: latitude(lat.trim())?,
+        longitude: number(lon.trim())?,
     })
 }
 
 fn remove(mut config: Config, path: &Path, args: AoiRemoveArgs) -> anyhow::Result<()> {
-    // find_area(), not a build: removal must not require a valid shape, or a
+    // find_aoi(), not a build: removal must not require a valid shape, or a
     // hand-edited bad entry could only be deleted by editing the YAML.
-    let def = config.find_area(&args.id)?;
+    let def = config.find_aoi(&args.id)?;
 
     if !args.force {
         eprintln!("{}: {} {}", args.id, def.kind(), def.describe());
-        if !confirm(&format!("Remove area '{}'?", args.id))? {
+        if !confirm(&format!("Remove aoi '{}'?", args.id))? {
             eprintln!("aborted; nothing was changed");
             return Ok(());
         }
     }
 
-    config.areas.remove(&args.id);
+    config.aois.remove(&args.id);
     config.save(path)?;
 
-    eprintln!("removed area '{}' from {}", args.id, path.display());
+    eprintln!("removed aoi '{}' from {}", args.id, path.display());
     Ok(())
 }
 
 fn list(config: &Config, path: &Path, args: AoiListArgs) -> anyhow::Result<()> {
     let stdout = std::io::stdout();
-    output::write_areas(
+    output::write_aois(
         stdout.lock(),
         args.format,
-        config.areas.iter().map(|(id, def)| (id.as_str(), def)),
+        config.aois.iter().map(|(id, def)| (id.as_str(), def)),
     )?;
 
     // An empty table on a machine with no config looks like "you have no
-    // areas" when the file simply is not there yet. Say which it is.
-    if config.areas.is_empty() && !path.is_file() {
+    // AOIs" when the file simply is not there yet. Say which it is.
+    if config.aois.is_empty() && !path.is_file() {
         eprintln!(
-            "no config at {}; add an area with `sgp4-predict aoi add`",
+            "no config at {}; add an aoi with `sgp4-predict aoi add`",
             path.display()
         );
     }
@@ -299,14 +344,14 @@ fn list(config: &Config, path: &Path, args: AoiListArgs) -> anyhow::Result<()> {
 /// The built shape's extent, for the confirmation line — derived from the
 /// library types, so it reports what was actually constructed rather than what
 /// was typed.
-fn summarise(shape: &AreaShape) -> String {
+fn summarise(shape: &AoiShape) -> String {
     // Bounds round-trip through radians, so trim the float noise rather than
     // reporting a box as "54..59.99999999999999".
     fn deg(value: sgp4_predict::Degrees) -> f64 {
         (value.to_f64() * 1e6).round() / 1e6
     }
     match shape {
-        AreaShape::Rectangle(r) => {
+        AoiShape::Rectangle(r) => {
             let (south, north) = r.latitudes();
             let (west, span) = r.longitudes();
             format!(
@@ -317,7 +362,7 @@ fn summarise(shape: &AreaShape) -> String {
                 deg(west)
             )
         }
-        AreaShape::Ellipse(e) => {
+        AoiShape::Ellipse(e) => {
             let centre = e.centre();
             let (a, b) = e.semi_axes();
             format!(
@@ -329,6 +374,6 @@ fn summarise(shape: &AreaShape) -> String {
                 deg(e.bearing())
             )
         }
-        AreaShape::Polygon(p) => format!("{} vertices", p.vertices().len()),
+        AoiShape::Polygon(p) => format!("{} vertices", p.vertices().len()),
     }
 }

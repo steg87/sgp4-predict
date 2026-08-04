@@ -120,18 +120,18 @@ config that fails to parse is never overwritten.
 
 ## Areas of interest
 
-`aoi-windows` needs a region on the ground, given as `--area <id>` naming an entry in the same
-config file. Areas live under `areas:` alongside `groundstations:`, and each is a flat map of named
+`aoi-windows` needs a region on the ground, given as `--aoi <id>` naming an entry in the same
+config file. AOIs live under `aois:` alongside `groundstations:`, and each is a flat map of named
 fields tagged with its `shape`:
 
 ```yaml
-areas:
+aois:
   scotland:
     shape: box
-    latitude: 57.0
-    longitude: -4.5
-    width: 7.0
-    height: 6.0
+    south: 54.0
+    north: 60.0
+    west: -8.0
+    east: -1.0
   north-sea:
     shape: ellipse
     latitude: 56.0
@@ -154,15 +154,28 @@ areas:
 
 | `shape`   | Fields                                                          |
 |-----------|-----------------------------------------------------------------|
-| `box`     | `latitude`, `longitude` (centre), `width`, `height`             |
+| `box`     | `south`, `north`, `west`, `east` — the box's bounds             |
 | `ellipse` | `latitude`, `longitude` (centre), `semi_major`, `semi_minor`, `bearing` (default 0) |
 | `circle`  | `latitude`, `longitude` (centre), `radius`                       |
 | `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
 
-**Every extent is in degrees of arc**, about 111.2 km per degree. A box's `width` is an extent in
-*longitude* and its `height` an extent in latitude, so its ground width shrinks with the cosine of
-its latitude; its north and south edges follow their parallels exactly. Polygon edges are
-great-circle arcs, so they are not lines of constant latitude — use `box` when the region really is a
+**Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
+
+A box is given by its four bounds, the same two corners the library's `Rectangle` takes. Its north
+and south edges follow their parallels exactly. It runs **eastward** from `west`, so an `east` at a
+smaller longitude wraps across the antimeridian rather than being an error:
+
+```yaml
+  pacific:              # 160°E round to 160°W, across the dateline
+    shape: box
+    south: -20.0
+    north: 20.0
+    west: 160.0
+    east: -160.0
+```
+
+Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — four
+vertices at 60°N bulge to roughly 68°N between them. Use `box` when the region really is a
 latitude/longitude box.
 
 An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the length of
@@ -187,46 +200,49 @@ runs it east–west:
     bearing: 90.0
 ```
 
-### Managing areas
+### Managing AOIs
 
 Edit the file by hand, or use `sgp4-predict aoi`.
 
-| Command                           | Description                          |
-|-----------------------------------|--------------------------------------|
-| `aoi add [id] [--shape S]`        | Add an area, prompting for its coordinates |
-| `aoi list` (`aoi ls`)             | List the configured areas            |
-| `aoi remove <id>` (`aoi rm <id>`) | Remove an area, after confirmation   |
+| Command                                   | Description                          |
+|-------------------------------------------|--------------------------------------|
+| `aoi add [id] [--shape S]`                | Add an AOI, prompting for its coordinates |
+| `aoi add [id] --force`                    | Replace an existing AOI              |
+| `aoi list` (`aoi ls`)                     | List the configured AOIs             |
+| `aoi remove <id>` (`aoi rm <id>`)         | Remove an AOI, after confirmation    |
 
 `aoi add` prompts field by field, like `gs add`. The underlined initial is accepted on its own, so
 the shape can be picked with a single key:
 
 ```
 $ sgp4-predict aoi add
-Area id: scotland
+AOI id: scotland
 Shape (box, ellipse, circle, polygon): b
-Centre latitude (degrees): 57
-Centre longitude (degrees): -4.5
-Width (degrees of longitude): 7
-Height (degrees of latitude): 6
-added area 'scotland' (54..60, 7 eastward from -8) to /home/you/.sgp4-predict/config.yaml
+South latitude (degrees): 54
+North latitude (degrees): 60
+West longitude (degrees): -8
+East longitude (degrees): -1
+added aoi 'scotland' (54..60, 7 eastward from -8) to /home/you/.sgp4-predict/config.yaml
 ```
 
 A polygon has no fixed number of fields, so its vertices are read one per line until a blank line:
 
 ```
 $ sgp4-predict aoi add corridor
+AOI id: corridor
 Shape (box, ellipse, circle, polygon): p
 Vertices, one per line as `lat,lon`. Blank line when done.
 Vertex 1 lat,lon (degrees): 54,-8
 Vertex 2 lat,lon (degrees): 54,-1
 Vertex 3 lat,lon (degrees): 60,-1
 Vertex 4 lat,lon (degrees):
-added area 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
+added aoi 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
 ```
 
 A line that does not parse is reported and asked for again, so a typo costs one line rather than
-everything entered before it. The same is true of a blank line before the third vertex, and of an
-out-of-range extent.
+everything entered before it. The same is true of a blank line before the third vertex, of a
+latitude past a pole, and of a bound that contradicts one already given — a `north` below the
+`south`, or a semi-minor axis above the semi-major.
 
 The id and the shape may be given as arguments, in which case they are echoed as though they had been
 typed and only the coordinates are asked for:
@@ -236,7 +252,7 @@ sgp4-predict aoi add scotland
 sgp4-predict aoi add scotland --shape box
 ```
 
-**Coordinates are never taken as arguments.** As with `gs add`, an area is either entered at the
+**Coordinates are never taken as arguments.** As with `gs add`, an AOI is either entered at the
 prompts or written into the config file by hand — a positional coordinate syntax would be both
 verbose and easy to get the wrong way round. Adding over an existing id needs `-f` / `--force`.
 
@@ -247,7 +263,7 @@ sgp4-predict gs add glasgow
 sgp4-predict gs add glasgow --force
 ```
 
-`aoi list` honours `--format` and shows each area by its config field names:
+`aoi list` honours `--format` and shows each AOI by its config field names:
 
 ```
 id               shape    definition
@@ -255,7 +271,7 @@ id               shape    definition
 cape-town        circle   latitude=-33.9 longitude=18.4 radius=2.25
 corridor         polygon  (54, -8) (54, -1) (60, -1)
 north-sea        ellipse  latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45
-scotland         box      latitude=57 longitude=-4.5 width=7 height=6
+scotland         box      south=54 north=60 west=-8 east=-1
 ```
 
 ## Subcommands
@@ -347,11 +363,11 @@ datetime                  lat [deg]   lon [deg]  altitude [km]
 
 ### `aoi-windows` — overpasses of an area of interest
 
-The windows in which the ground track lies inside the area named by `--area <id>`, with the
+The windows in which the ground track lies inside the AOI named by `--aoi <id>`, with the
 sub-satellite point at each boundary crossing. See [Areas of interest](#areas-of-interest).
 
 ```sh
-sgp4-predict aoi-windows --tle-file sentinel.tle --area europe --duration 12h
+sgp4-predict aoi-windows --tle-file sentinel.tle --aoi europe --duration 12h
 ```
 
 ```

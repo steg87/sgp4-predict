@@ -15,11 +15,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 - `ground-track`, sampling the geodetic point directly beneath the satellite at `--step`.
 - `aoi-windows`, finding the windows in which the ground track lies inside an area of interest,
-  reporting the sub-satellite point at each boundary crossing. The area is named by `--area <id>`.
-- An `areas:` map in the config file, alongside `groundstations:`. Each area is tagged with its
-  `shape` — `box`, `ellipse`, `circle`, or `polygon` — and given as named fields; all extents are
-  in degrees of arc.
-- `aoi add|remove|list` (aliases `rm`, `ls`) to manage those areas. `aoi add` prompts field by field
+  reporting the sub-satellite point at each boundary crossing. The AOI is named by `--aoi <id>`.
+- An `aois:` map in the config file, alongside `groundstations:`. Each AOI is tagged with its
+  `shape` — `box`, `ellipse`, `circle`, or `polygon` — and given as named fields; everything is in
+  degrees. A `box` is its four bounds (`south`, `north`, `west`, `east`), running eastward from
+  `west` so that an `east` at a smaller longitude wraps the antimeridian.
+- `aoi add|remove|list` (aliases `rm`, `ls`) to manage those AOIs. `aoi add` prompts field by field
   like `gs add`, accepting each shape name's initial (`b`/`e`/`c`/`p`), and reads polygon vertices
   one per line until a blank line. The id and `--shape` may be given as arguments; coordinates never
   are. Geometry the library cannot build is refused before anything is written.
@@ -31,7 +32,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Changed
 
-- `groundstations:` is omitted from a saved config when empty, so a config holding only areas no
+- `groundstations:` is omitted from a saved config when empty, so a config holding only AOIs no
   longer grows an empty stub.
 
 ## [0.1.0] - 2026-07-28

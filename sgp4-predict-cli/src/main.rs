@@ -1,4 +1,4 @@
-mod area;
+mod aoi;
 mod cli;
 mod commands;
 mod config;
