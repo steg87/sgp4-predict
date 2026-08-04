@@ -63,11 +63,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 |---|---|
 | `propagate(t)` | TEME state vector at an instant |
 | `observe_at(t, observer)` | azimuth / elevation / range / range rate |
+| `sub_point(t)` | the geodetic point directly beneath the satellite |
 | `prediction_iter(interval, step)` | state vectors at a fixed cadence |
 | `observation_iter(observer, interval, step)` | observations at a fixed cadence |
+| `ground_track_iter(interval, step)` | sub-satellite points at a fixed cadence |
 | `transits_iter(observer, interval, min_elevation)` | passes above a minimum elevation |
 | `detect_transit(t, observer, min_elevation)` | the pass in progress at `t`, if any |
 | `max_elevation(interval, observer)` | the peak-elevation moment of a pass |
+| `aoi_iter(area, interval)` | windows with the ground track inside an area |
+| `detect_aoi(t, area)` | the area window in progress at `t`, if any |
 | `apsis_iter(interval)` | apogee and perigee events |
 | `illumination_iter(interval)` | sunlit and eclipse windows |
 | `illumination_state(t)` | sunlit or in eclipse at an instant |
@@ -75,6 +79,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Each detection method has a `_with_opts` sibling taking scan steps and other tuning knobs, and
 `Predictor::with_refinement` configures the root finder that pins down event times.
+
+## Areas of interest
+
+`Polygon` describes a region on the ground as a ring of latitude/longitude vertices — concave and
+self-intersecting rings are both fine, and the ring closes itself:
+
+```rust,no_run
+use chrono::{Duration, Utc};
+use sgp4_predict::{Degrees, LatLon, Polygon, Predictor, Tle};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tle: Tle = "\
+        SENTINEL-2C
+        1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
+        2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+        .parse()?;
+    let predictor = Predictor::from_tle(&tle)?;
+
+    let area = Polygon::new([
+        LatLon { latitude: Degrees(54.0), longitude: Degrees(-8.0) },
+        LatLon { latitude: Degrees(54.0), longitude: Degrees(-1.0) },
+        LatLon { latitude: Degrees(60.0), longitude: Degrees(-1.0) },
+        LatLon { latitude: Degrees(60.0), longitude: Degrees(-8.0) },
+    ])?;
+
+    let start = Utc::now();
+    for window in predictor.aoi_iter(&area, start..start + Duration::days(7)) {
+        let window = window?;
+        println!("overhead from {} to {}", window.start, window.end);
+    }
+    Ok(())
+}
+```
+
+Edges are **great-circle arcs**, so vertices at the same latitude are not joined along the parallel —
+the arc bows toward the nearer pole, growing with the square of the edge's longitude span. The 7° box
+above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would reach
+roughly 68°N, so densify edges that long. An area must also fit inside a hemisphere;
+this permits polar caps, equator-spanning and antimeridian-spanning areas, but not a region larger
+than half the globe. Implement `Area` on your own type for other shapes.
 
 ## Bring your own types
 

@@ -74,6 +74,7 @@
 struct Readme;
 
 mod angle;
+mod aoi;
 mod apsides;
 mod detect;
 mod frames;
@@ -94,12 +95,13 @@ pub use sgp4::{Classification, Elements};
 
 pub use crate::{
     angle::{Degrees, Radians},
+    aoi::{AoiIter, AoiIterOpts, AoiWindow, Area, Error as AoiError, FillRule, Polygon},
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
     detect::Error as DetectError,
-    frames::{EcefState, EnuState, TemeState},
+    frames::{EcefState, EnuState, Geodetic, LatLon, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationIterOpts, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
-    predict::PredictionIter,
+    predict::{GroundTrackIter, PredictionIter},
     roots::Refinement,
     time::{DateTimeIter, IntervalRange},
     transits::{MaxElevationOpts, Transit, TransitIter, TransitIterOpts},
@@ -121,8 +123,9 @@ pub use crate::detect::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        ApsisEvent, Classification, Degrees, Elements, Error, GroundObserver, IlluminationState,
-        Observation, Observer, Predictor, Radians, Result, Tle, TleRecord, Transit,
+        AoiWindow, ApsisEvent, Classification, Degrees, Elements, Error, GroundObserver,
+        IlluminationState, LatLon, Observation, Observer, Polygon, Predictor, Radians, Result, Tle,
+        TleRecord, Transit,
     };
 }
 
@@ -250,6 +253,14 @@ impl Predictor {
         Ok(prediction.into())
     }
 
+    /// The sub-satellite point at `t`: the geodetic position directly beneath
+    /// the satellite, with `altitude` its height above the WGS-84 ellipsoid.
+    ///
+    /// Sampling this over an interval traces the ground track.
+    pub fn sub_point(&self, t: DateTime<Utc>) -> Result<Geodetic> {
+        Ok(self.propagate(t)?.to_ecef(t).to_geodetic())
+    }
+
     /// Return the epoch of the TLE.
     pub fn epoch(&self) -> DateTime<Utc> {
         DateTime::<Utc>::from_naive_utc_and_offset(self.elements.datetime, Utc)
@@ -280,6 +291,8 @@ pub enum Error {
     Roots(#[from] roots::Error),
     #[error("Detection error: {0}")]
     Detect(#[from] detect::Error),
+    #[error("Area of interest error: {0}")]
+    Aoi(#[from] aoi::Error),
     /// Escape hatch for custom `EventFunction` implementations (`generics`
     /// feature) whose failures don't fit another variant.
     #[error("{0}")]

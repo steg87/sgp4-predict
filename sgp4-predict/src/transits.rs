@@ -37,7 +37,7 @@ use crate::{
 ///
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific pass.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transit {
     /// Acquisition of Signal: when the satellite rises above `min_elevation`.
     pub start: DateTime<Utc>,

@@ -86,6 +86,66 @@ The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `D
 
 Brent's method refines the crossing time (no derivative needed; bracket is already known).
 
+### Area-of-interest detection (`aoi.rs`)
+
+`AoiIter` finds the windows in which the sub-satellite point is inside an `Area`. `Polygon` is the
+only built-in implementation; rectangles and ellipses are intended to follow behind the same trait.
+
+**The event function is one signed scalar and is a pure function of `t`.** This is the load-bearing
+decision. The alternative — track which edge was crossed, keeping an edge index and an inside/outside
+flag — fails precisely at a vertex: the in-arc test `(a×foot)·n >= 0 && (foot×b)·n >= 0` is exactly
+zero for *both* adjoining edges there, so floating point arbitrarily produces zero crossings or two,
+and one desync inverts the flag permanently. Determinism is what rules that out; `walk_to_crossing`
+already guarantees the same crossing is never re-detected, because `resume_from` is an
+already-sampled point and the refined root is never re-sampled. Do not introduce state into
+`GroundTrackInside::sample` — in particular, do not make it sub-sample internally to "improve"
+resolution. Refinement samples out of order, so any call-history dependence breaks it.
+
+**`Area`'s contract is a bound, not an equality**, and deliberately does not require continuity:
+`|value|` must never *exceed* the true angular distance to the boundary. Under-reporting is always
+safe; over-reporting breaks the step guarantee. This is what legitimises the bounding-cap early
+return, which jumps discontinuously. `detect.rs` only ever tests `value < 0.0`, so a
+sign-preserving magnitude jump is harmless — but the cap branch must never return exactly `0.0`,
+since zero counts as inside.
+
+**The hemisphere restriction is a correctness requirement, not a convenience.** The tangent-plane
+signed-angle sum measures degree on `S² ∖ {p, −p}`, not a planar winding number, so without the
+bounding-cap gate the *antipode* of the polygon also winds to ±1 and reads as inside — roughly half
+the emitted windows would be on the far side of the Earth. The cap is only sound if the region fits
+inside it, hence `Error::LargerThanHemisphere`. Do not "simplify" the cap away as a mere fast path.
+Note this restriction is narrower than it sounds: equator-crossing, antimeridian-spanning and
+pole-containing areas are all fine, and a full-longitude ring is accepted as the polar cap on its
+centroid's side. The centroid axis is not the minimal enclosing cap, so the check is conservative.
+
+**Vertex order is ignored** (`NonZero`/`EvenOdd` both derive from `|k|`), which is what makes a
+reversed ring identical. Orientation-sensitivity and the cap prefilter are mutually incompatible:
+resolving "which side is inside" by winding order requires admitting regions the cap cannot contain.
+
+**`ProximityStep` is what makes narrow areas safe.** Step `|value| / ω_max` and the boundary cannot
+be reached within the step, so no chord is ever jumped. `max_sub_point_rate` derives `ω_max` in
+closed form from the element set — perigee angular rate `n√(1−e²)/(1−e)²`, plus `ω_E` because the
+ground point is in ECEF, times `1/(1−e²_WGS84)` for the geodetic-latitude stretch, times 1.05. Deriving
+it beats sampling the orbit: sampling costs propagations and can miss the maximum, whereas this is a
+bound by construction. The empirical cross-check lives in `tests/aoi.rs` instead.
+
+Known limits: the `min_step` floor voids the guarantee below its own scale, and the `WindowIter`
+boundary walk uses a fixed `walk_step`, so a concave notch crossed in under `walk_step` is absorbed
+into the surrounding window. Fixing the walk properly needs a signed walk strategy in `detect.rs` —
+the walk runs in both directions while `StepStrategy::next_time` returns an absolute forward time —
+which is a public API break under `generics` for little gain. Revisit only if a real notch bug
+appears.
+
+The `min_step` floor is a knob rather than a fixed limit, though: it is floored at `MIN_AOI_STEP`
+(1 ms), deliberately **not** at `detect::MIN_POSITIVE_STEP` (1 s), because it bounds the shortest
+crossing the scan can see and a 1 s floor would cap that at ~6.6 km of track. `max_step` is raised to
+the resolved `min` rather than to a constant, so a wholly sub-second pair is honoured. This is the
+same distinction `DateTimeIter` draws below; do not "make it consistent" with the coarse scans that
+clamp at a second.
+
+Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
+a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for
+larger areas over a single day.
+
 ### Transit detection (`transits.rs`)
 
 `TransitIter` uses an adaptive step-size strategy: large steps when the satellite is descending or far from `min_elevation`, smaller steps when approaching. Step bounds, the boundary-walk step, and the max transit duration are configurable via `TransitIterOpts`. On detecting an Outside→Inside transition, it refines the exact crossing time using root finding (`roots.rs`):
