@@ -301,7 +301,7 @@ impl Area for Polygon {
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific
 /// overpass.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AoiWindow {
     /// When the ground track crosses into the area.
     pub start: DateTime<Utc>,
@@ -437,6 +437,11 @@ pub struct AoiIterOpts {
     /// Unlike the coarse scan this has no skip guarantee, so for a **concave**
     /// area a notch the ground track leaves and re-enters within `walk_step`
     /// is absorbed into the surrounding window. A convex area is unaffected.
+    ///
+    /// Floored at 1 s, unlike `min_step`. That does not limit which windows are
+    /// found: the walk brackets outward from a coarse-scan sample already known
+    /// to be inside, and both ends are refined, so a sub-second window is still
+    /// resolved exactly. It bounds only the notch width above.
     pub walk_step: Duration,
     /// A window longer than this is reported as
     /// [`DetectError::WindowTooLong`](crate::DetectError::WindowTooLong).
@@ -952,6 +957,36 @@ mod geometry_tests {
         out
     }
 
+    /// True angular distance from `p` to the polygon's boundary, to machine
+    /// precision.
+    ///
+    /// Not a `min` over sampled boundary points: that *over*-estimates by up
+    /// to half the sample spacing near the boundary — 2e-4 rad on `octant()`'s
+    /// 90° edges, which would swamp any tolerance worth asserting — and
+    /// closing that by sampling alone needs ~800k points per edge. Each edge
+    /// is minimised directly instead. Distance along a great-circle arc is
+    /// `cos d = cos d₀ cos(s − s₀)`, so on an arc under 180° it has a single
+    /// interior minimum or none, which is what ternary search needs; the
+    /// endpoints are included for the case where the extremum is a maximum.
+    fn distance_to_boundary(poly: &Polygon, p: [f64; 3]) -> f64 {
+        let mut best = f64::INFINITY;
+        for (&a, &b) in poly.verts.iter().zip(cycled(&poly.verts)) {
+            let f = |t: f64| angle_between(p, slerp(a, b, t));
+            let (mut lo, mut hi) = (0.0, 1.0);
+            // (2/3)^100 is far below f64 resolution on [0, 1].
+            for _ in 0..100 {
+                let third = (hi - lo) / 3.0;
+                if f(lo + third) < f(hi - third) {
+                    hi -= third;
+                } else {
+                    lo += third;
+                }
+            }
+            best = best.min(f(0.0)).min(f(1.0)).min(f(0.5 * (lo + hi)));
+        }
+        best
+    }
+
     /// Deterministic uniform points on the sphere, so failures reproduce.
     fn sphere_points(n: usize) -> Vec<[f64; 3]> {
         let mut state = 0x2545_F491_4F6C_DD1D_u64;
@@ -981,15 +1016,14 @@ mod geometry_tests {
     #[test]
     fn test_offset_never_exceeds_true_distance() {
         for poly in [octant(), scotland()] {
-            let boundary = boundary(&poly, 4000);
             for p in sphere_points(500) {
                 let reported = offset(&poly, p).abs();
-                let truth = boundary
-                    .iter()
-                    .map(|&b| angle_between(p, b))
-                    .fold(f64::INFINITY, f64::min);
+                let truth = distance_to_boundary(&poly, p);
+                // A real bound on the over-report, not the discretisation error
+                // of the reference. Worst observed is ~2e-16, so the slack here
+                // is for the `offset` helper's unit-vector round-trip.
                 assert!(
-                    reported <= truth + 1e-6,
+                    reported <= truth + 1e-9,
                     "reported {reported} exceeds true distance {truth} at {p:?}"
                 );
             }

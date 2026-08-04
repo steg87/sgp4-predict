@@ -163,6 +163,12 @@ impl From<(Degrees, Degrees)> for LatLon {
 /// A geodetic position on or above the WGS-84 ellipsoid.
 ///
 /// Altitude is in **metres**. Longitude is in `(-180, 180]`.
+///
+/// This implements [`Observer`](crate::Observer), so a sub-satellite point can
+/// be passed straight to [`Predictor::observe_at`](crate::Predictor::observe_at)
+/// or [`transits_iter`](crate::Predictor::transits_iter) — note that this puts
+/// the observer at the satellite's own altitude, not on the ground. For a
+/// ground station, set `altitude` to the site's elevation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Geodetic {
     /// Geodetic latitude (positive north).
