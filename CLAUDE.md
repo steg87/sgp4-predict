@@ -167,6 +167,11 @@ there; the sign is still right, and under-reporting is what the contract allows.
 for every other box. Note it does not stop a whole-Earth aoi hitting `WindowTooLong`: the track never
 leaves, which is true of any near-global area and not specific to this one.
 
+Relatedly, `build` widens `lon_span` to exactly `TAU` whenever it drops the sides, rather than storing
+the span it was given. The two have to agree: a span within `COINCIDENT` of full has no meridian edges
+but would still leave `contains` excluding a sliver up to 1e-9 rad wide, and a point there has no edge
+to be measured against — it would report the distance to the nearest *parallel*, which over-reports.
+
 `Ellipse` is the two-foci definition (`d(F₁,p) + d(F₂,p) <= 2a`), not a projected planar ellipse.
 The value returned is `a − (d₁ + d₂)/2`, and the **halving is what makes it legal**: each distance is
 1-Lipschitz along the surface, so the sum is 2-Lipschitz, and only half the shortfall is guaranteed

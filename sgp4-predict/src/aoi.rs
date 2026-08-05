@@ -422,6 +422,12 @@ impl Rectangle {
             }
         });
 
+        // Dropping the sides has to widen the span to match. Left as given, a
+        // near-full box keeps a sliver that `contains` excludes but no edge
+        // measures, so a point in it reports the distance to the nearest
+        // parallel — an over-report, which the contract forbids.
+        let lon_span = if sides.is_some() { lon_span } else { TAU };
+
         Ok(Self {
             south,
             north,
@@ -1318,6 +1324,26 @@ mod rectangle_tests {
         assert!(offset(&cap, 90.0, 0.0) > 0.0, "the pole is inside the cap");
         assert!(offset(&cap, 70.0, 123.0) > 0.0);
         assert!(offset(&cap, 60.0, 123.0) < 0.0);
+    }
+
+    /// A span within `COINCIDENT` of full loses its side edges, so it has to
+    /// lose the sliver between them too — nothing is left to measure the
+    /// distance to it, and a point there would report the distance to the
+    /// nearest parallel instead.
+    #[test]
+    fn test_near_full_span_widens_to_a_band() {
+        let rect = Rectangle::new(
+            (Degrees(-10.0), Degrees(0.0)),
+            (Degrees(10.0), Degrees(-1e-8)),
+        )
+        .expect("valid box");
+
+        let (_, span) = rect.longitudes();
+        assert!((span.to_f64() - 360.0).abs() < 1e-12, "got {span:?}");
+        for lon in [-1e-9, -0.5e-8, 0.0, 90.0, -179.0] {
+            let v = offset(&rect, 0.0, lon);
+            assert!(v > 0.0, "lon {lon} should be inside, got {v}");
+        }
     }
 
     /// A pole-to-pole band is the one box with no boundary at all, so nothing
