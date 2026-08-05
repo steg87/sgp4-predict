@@ -8,8 +8,10 @@
 //! the windows are where it is positive.
 //!
 //! [`Polygon`] is the general shape — an arbitrary ring of latitude/longitude
-//! vertices, which may be concave or self-intersecting. Implement [`Area`] on
-//! your own type for shapes this crate does not provide.
+//! vertices, which may be concave or self-intersecting. [`Rectangle`] is a
+//! plain latitude/longitude box, and [`Ellipse`] covers circular footprints
+//! and oriented elliptical ones. Implement [`Area`] on your own type for
+//! shapes this crate does not provide.
 //!
 //! An [`AoiWindow`] implements [`IntervalRange`], so it can be passed directly
 //! to [`Predictor::prediction_iter`] or [`Predictor::observation_iter`] to
@@ -17,20 +19,31 @@
 //!
 //! # Geometry
 //!
-//! Polygon edges are **great-circle arcs**, in the sphere obtained by treating
-//! geodetic latitude as spherical latitude — the same convention as S2,
-//! BigQuery GIS, and GeoJSON-on-a-sphere. They are neither rhumb lines nor
-//! lines of constant latitude: an edge joining two vertices at the same
-//! latitude bows toward the nearer pole, by an amount growing with the square
-//! of its longitude span. At 60°N a 5° edge bulges 0.02° (under 3 km) and a
-//! 10° edge 0.09°, while vertices a quarter of the globe apart reach roughly
-//! 68°N. Densify the long edges; a box a few degrees wide needs nothing.
+//! [`Polygon`] edges are **great-circle arcs**, in the sphere obtained by
+//! treating geodetic latitude as spherical latitude — the same convention as
+//! S2 and BigQuery GIS. They are neither rhumb lines nor lines of constant
+//! latitude: an edge joining two vertices at the same latitude bows toward the
+//! nearer pole, by an amount growing with the square of its longitude span. At
+//! 60°N a 5° edge bulges 0.02° (under 3 km) and a 10° edge 0.09°, while
+//! vertices a quarter of the globe apart reach roughly 68°N.
+//!
+//! The bow is always toward the *nearer* pole, so both horizontal edges of a
+//! "box" shift the same way. The region is displaced poleward rather than
+//! simply enlarged: it takes in ground beyond the far edge and gives up ground
+//! just inside the near one. Either densify the long edges — a box a few
+//! degrees wide needs nothing — or use [`Rectangle`], whose north and south
+//! edges follow their parallels exactly.
+//!
+//! Note that this differs from GeoJSON: RFC 7946 §3.1.1 defines an edge as a
+//! straight line in longitude/latitude. That convention cannot represent a
+//! polygon containing a pole, and needs explicit unwrapping at the
+//! antimeridian; great-circle edges need neither.
 //!
 //! [`IntervalRange`]: crate::IntervalRange
 //! [`Predictor::prediction_iter`]: crate::Predictor::prediction_iter
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
-use std::f64::consts::{FRAC_PI_2, TAU};
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::Elements;
@@ -38,7 +51,7 @@ use thiserror::Error as ThisError;
 
 use crate::{
     Predictor, Result,
-    angle::Radians,
+    angle::{Degrees, Radians},
     detect::{self, EventFunction, Sample, StepStrategy, WindowIter},
     frames::{LatLon, WGS84_E2},
     roots::Refinement,
@@ -60,8 +73,9 @@ const MIN_AOI_STEP: Duration = Duration::milliseconds(1);
 
 /// A region on Earth's surface that a ground track can pass over.
 ///
-/// Implemented here by [`Polygon`]. Implement it on your own type to detect
-/// windows over a shape this crate does not provide.
+/// Implemented here by [`Polygon`], [`Rectangle`] and [`Ellipse`]. Implement
+/// it on your own type to detect windows over a shape this crate does not
+/// provide.
 pub trait Area {
     /// Signed angular offset of `point` from this area's boundary, in radians:
     /// positive inside, negative outside, exactly zero on the boundary.
@@ -292,6 +306,380 @@ impl Area for Polygon {
             FillRule::EvenOdd => k % 2 != 0,
         };
         Radians(if inside { d } else { -d })
+    }
+}
+
+/// A latitude/longitude box.
+///
+/// Unlike a four-vertex [`Polygon`], the north and south edges follow their
+/// parallels **exactly** — no great-circle bulge — so `Rectangle` is what you
+/// want whenever the region really is "these latitudes by these longitudes".
+///
+/// # Examples
+///
+/// ```
+/// use sgp4_predict::{Degrees, LatLon, Rectangle};
+///
+/// let scotland = Rectangle::new(
+///     LatLon { latitude: Degrees(54.0), longitude: Degrees(-8.0) },
+///     LatLon { latitude: Degrees(60.0), longitude: Degrees(-1.0) },
+/// )?;
+///
+/// // The box runs eastward from the south-west corner, so a north-east corner
+/// // west of it wraps across the antimeridian.
+/// let pacific = Rectangle::new(
+///     (Degrees(-20.0), Degrees(160.0)),
+///     (Degrees(20.0), Degrees(-160.0)),
+/// )?;
+///
+/// // Bands and polar caps span every longitude.
+/// let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
+/// # Ok::<(), sgp4_predict::Error>(())
+/// ```
+#[derive(Debug, Clone)]
+pub struct Rectangle {
+    south: f64,
+    north: f64,
+    west: f64,
+    /// Longitude extent eastward from `west`, in `(0, 2π]`.
+    lon_span: f64,
+    /// `None` when the box spans every longitude, so it has no side edges.
+    sides: Option<Sides>,
+}
+
+#[derive(Debug, Clone)]
+struct Sides {
+    corners: [[f64; 3]; 4],
+    meridians: [Meridian; 2],
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Meridian {
+    /// Normal of the meridian's great-circle plane.
+    normal: [f64; 3],
+    /// Point on the equator at this longitude. Distinguishes this meridian
+    /// from the antimeridian sharing its plane.
+    equator: [f64; 3],
+}
+
+impl Rectangle {
+    /// Build a box from its south-west and north-east corners.
+    ///
+    /// The box runs **eastward** from the south-west corner, so a north-east
+    /// corner at a smaller longitude wraps across the antimeridian. Use
+    /// [`latitude_band`](Rectangle::latitude_band) for a box spanning every
+    /// longitude.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Latitude`] if a latitude is outside `[-90, 90]`.
+    /// - [`Error::NotFinite`] if a longitude is NaN or infinite. Longitude
+    ///   itself is unbounded — it wraps — so only finiteness is checked.
+    /// - [`Error::EmptyRectangle`] if the box has no extent in either axis.
+    pub fn new(south_west: impl Into<LatLon>, north_east: impl Into<LatLon>) -> Result<Self> {
+        let (sw, ne) = (south_west.into(), north_east.into());
+        let (south, north) = (
+            checked_latitude(sw.latitude)?,
+            checked_latitude(ne.latitude)?,
+        );
+        let west = wrap_pi(checked_angle(sw.longitude, "rectangle west longitude")?);
+        let east = wrap_pi(checked_angle(ne.longitude, "rectangle east longitude")?);
+        let lon_span = match wrap_tau(east - west) {
+            // The corners share a longitude. Read as zero width rather than
+            // full width; a full-width box goes through `latitude_band`.
+            span if span < COINCIDENT => 0.0,
+            span => span,
+        };
+        Self::build(south, north, west, lon_span)
+    }
+
+    /// Build a box spanning every longitude between two latitudes — a band, or
+    /// a polar cap when one latitude is a pole.
+    pub fn latitude_band(south: Degrees, north: Degrees) -> Result<Self> {
+        Self::build(checked_latitude(south)?, checked_latitude(north)?, -PI, TAU)
+    }
+
+    fn build(south: f64, north: f64, west: f64, lon_span: f64) -> Result<Self> {
+        if north - south < COINCIDENT || lon_span < COINCIDENT {
+            return Err(Error::EmptyRectangle {
+                south: Radians(south).degrees(),
+                north: Radians(north).degrees(),
+            }
+            .into());
+        }
+
+        let sides = (lon_span < TAU - COINCIDENT).then(|| {
+            let east = west + lon_span;
+            let corner = |lat: f64, lon: f64| unit_from_radians(lat, lon);
+            Sides {
+                corners: [
+                    corner(south, west),
+                    corner(south, east),
+                    corner(north, east),
+                    corner(north, west),
+                ],
+                meridians: [meridian(west), meridian(east)],
+            }
+        });
+
+        // Dropping the sides has to widen the span to match. Left as given, a
+        // near-full box keeps a sliver that `contains` excludes but no edge
+        // measures, so a point in it reports the distance to the nearest
+        // parallel — an over-report, which the contract forbids.
+        let lon_span = if sides.is_some() { lon_span } else { TAU };
+
+        Ok(Self {
+            south,
+            north,
+            west,
+            lon_span,
+            sides,
+        })
+    }
+
+    /// The southern and northern latitude bounds.
+    pub fn latitudes(&self) -> (Degrees, Degrees) {
+        (
+            Radians(self.south).to_degrees(),
+            Radians(self.north).to_degrees(),
+        )
+    }
+
+    /// The western bound and the extent eastward from it. The extent is 360°
+    /// for a box built by [`latitude_band`](Rectangle::latitude_band).
+    pub fn longitudes(&self) -> (Degrees, Degrees) {
+        (
+            Radians(self.west).to_degrees(),
+            Radians(self.lon_span).to_degrees(),
+        )
+    }
+
+    /// Strict on both axes: a point within `ON_BOUNDARY` of an edge never
+    /// reaches this test, having already short-circuited to zero.
+    fn contains(&self, lat: f64, lon: f64) -> bool {
+        (self.south..=self.north).contains(&lat) && wrap_tau(lon - self.west) <= self.lon_span
+    }
+}
+
+impl Area for Rectangle {
+    fn signed_angular_offset(&self, point: LatLon) -> Radians {
+        let lat = point.latitude.radians();
+        let lon = point.longitude.radians();
+        let p = unit_from_lat_lon(point);
+
+        let mut d = f64::INFINITY;
+
+        // North and south edges are parallels, so the distance to them is the
+        // latitude difference measured along a meridian — exact, with none of
+        // a great circle's bulge. It only applies within the longitude range:
+        // a point at the same latitude but half a world away is close to the
+        // *parallel*, not to this box. A bound at a pole is not an edge at all
+        // — the parallel there is a single point, interior to the box unless
+        // meridian edges meet at it, and those are handled as corners below.
+        if self.sides.is_none() || wrap_tau(lon - self.west) <= self.lon_span {
+            if self.south > -FRAC_PI_2 + COINCIDENT {
+                d = d.min((lat - self.south).abs());
+            }
+            if self.north < FRAC_PI_2 - COINCIDENT {
+                d = d.min((self.north - lat).abs());
+            }
+        }
+
+        if let Some(sides) = &self.sides {
+            for &c in &sides.corners {
+                d = d.min(angle_between(p, c));
+            }
+            for m in &sides.meridians {
+                let foot = reject(p, m.normal);
+                // Reject the antimeridian half of the same plane, then keep
+                // only feet that land within the edge's latitude span. Without
+                // both checks a point on the far side of the Earth would
+                // report a near-zero distance to this edge.
+                if dot(foot, m.equator) <= 0.0 {
+                    continue;
+                }
+                let foot_lat = match normalize(foot) {
+                    Some(f) => f[2].clamp(-1.0, 1.0).asin(),
+                    None => continue,
+                };
+                if (self.south..=self.north).contains(&foot_lat) {
+                    d = d.min(dot(p, m.normal).abs().clamp(0.0, 1.0).asin());
+                }
+            }
+        }
+
+        // A pole-to-pole band has no edge of any kind, leaving `d` infinite. π
+        // is the widest separation on a sphere, so the clamp under-reports,
+        // which the contract permits; every other box is already below it.
+        let d = d.min(PI);
+
+        if d < ON_BOUNDARY {
+            return Radians(0.0);
+        }
+        Radians(if self.contains(lat, lon) { d } else { -d })
+    }
+}
+
+/// An ellipse on Earth's surface.
+///
+/// The set of points whose great-circle distances to two foci sum to at most
+/// twice the semi-major axis — the spherical reading of the planar definition.
+/// A [`circle`](Ellipse::circle) is the case where the two foci coincide.
+///
+/// Semi-axes are **angular**, like every other measurement here. A degree of
+/// arc is about 111.2 km on the ground, so a 300 km semi-major axis is roughly
+/// `Degrees(2.7)`.
+///
+/// # Examples
+///
+/// ```
+/// use sgp4_predict::{Degrees, Ellipse, LatLon};
+///
+/// // Roughly 300 km by 120 km, major axis pointing north-east.
+/// let north_sea = Ellipse::new(
+///     LatLon { latitude: Degrees(56.0), longitude: Degrees(2.0) },
+///     Degrees(2.7),
+///     Degrees(1.1),
+///     Degrees(45.0),
+/// )?;
+///
+/// // A circular area 500 km across.
+/// let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
+/// # Ok::<(), sgp4_predict::Error>(())
+/// ```
+#[derive(Debug, Clone)]
+pub struct Ellipse {
+    centre: [f64; 3],
+    /// Both equal to `centre` when the ellipse is a circle.
+    foci: [[f64; 3]; 2],
+    semi_major: f64,
+    semi_minor: f64,
+    /// Normalized into `[0, 2π)`.
+    bearing: f64,
+}
+
+impl Ellipse {
+    /// Build an ellipse from its centre, semi-axes, and the bearing of its
+    /// major axis — degrees clockwise from north, so `0` aims the major axis
+    /// at the pole and `90` aims it east.
+    ///
+    /// At a pole, where north is undefined, the bearing is measured from the
+    /// direction of the prime meridian instead.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Latitude`] if the centre's latitude is outside `[-90, 90]`.
+    /// - [`Error::NotFinite`] if the centre's longitude, either semi-axis, or
+    ///   the bearing is NaN or infinite. Longitude and bearing are themselves
+    ///   unbounded — they wrap — so only finiteness is checked.
+    /// - [`Error::EllipseAxes`] unless `0 < semi_minor <= semi_major < 90°`.
+    pub fn new(
+        centre: impl Into<LatLon>,
+        semi_major: Degrees,
+        semi_minor: Degrees,
+        bearing: Degrees,
+    ) -> Result<Self> {
+        let centre = centre.into();
+        checked_latitude(centre.latitude)?;
+        checked_angle(centre.longitude, "ellipse centre longitude")?;
+        let bearing_rad = checked_angle(bearing, "ellipse bearing")?;
+
+        let (a, b) = (
+            checked_angle(semi_major, "ellipse semi-major axis")?,
+            checked_angle(semi_minor, "ellipse semi-minor axis")?,
+        );
+        if !(b > 0.0 && b <= a + COINCIDENT && a < FRAC_PI_2 - COINCIDENT) {
+            return Err(Error::EllipseAxes {
+                semi_major_deg: semi_major.to_f64(),
+                semi_minor_deg: semi_minor.to_f64(),
+            }
+            .into());
+        }
+        let b = b.min(a);
+
+        // Half the focal separation, from the spherical right triangle joining
+        // the centre, one focus and a minor-axis endpoint: `cos a = cos b cos c`.
+        // The endpoint is `a` from each focus, since the two distances there
+        // are equal and sum to `2a`.
+        let c = (a.cos() / b.cos()).clamp(-1.0, 1.0).acos();
+
+        let centre = unit_from_lat_lon(centre);
+        let (north, east) = local_frame(centre);
+        let (sin_brg, cos_brg) = bearing_rad.sin_cos();
+        let major = [
+            north[0] * cos_brg + east[0] * sin_brg,
+            north[1] * cos_brg + east[1] * sin_brg,
+            north[2] * cos_brg + east[2] * sin_brg,
+        ];
+        let (sin_c, cos_c) = c.sin_cos();
+        let focus = |sign: f64| {
+            [
+                centre[0] * cos_c + sign * major[0] * sin_c,
+                centre[1] * cos_c + sign * major[1] * sin_c,
+                centre[2] * cos_c + sign * major[2] * sin_c,
+            ]
+        };
+
+        Ok(Self {
+            centre,
+            foci: [focus(1.0), focus(-1.0)],
+            semi_major: a,
+            semi_minor: b,
+            bearing: bearing.normalized().radians(),
+        })
+    }
+
+    /// Build a circular area of angular `radius` — a spherical cap.
+    ///
+    /// # Errors
+    ///
+    /// As [`Ellipse::new`]: the radius must be positive and under 90°.
+    pub fn circle(centre: impl Into<LatLon>, radius: Degrees) -> Result<Self> {
+        Self::new(centre, radius, radius, Degrees(0.0))
+    }
+
+    /// The ellipse's centre.
+    pub fn centre(&self) -> LatLon {
+        lat_lon_from_unit(self.centre)
+    }
+
+    /// The semi-major and semi-minor axes, as angles.
+    pub fn semi_axes(&self) -> (Degrees, Degrees) {
+        (
+            Radians(self.semi_major).to_degrees(),
+            Radians(self.semi_minor).to_degrees(),
+        )
+    }
+
+    /// Bearing of the major axis, degrees clockwise from north.
+    pub fn bearing(&self) -> Degrees {
+        Radians(self.bearing).to_degrees()
+    }
+
+    /// The two foci, which coincide with the centre when the ellipse is a
+    /// circle.
+    pub fn foci(&self) -> (LatLon, LatLon) {
+        (
+            lat_lon_from_unit(self.foci[0]),
+            lat_lon_from_unit(self.foci[1]),
+        )
+    }
+}
+
+impl Area for Ellipse {
+    fn signed_angular_offset(&self, point: LatLon) -> Radians {
+        let p = unit_from_lat_lon(point);
+        let sum = angle_between(self.foci[0], p) + angle_between(self.foci[1], p);
+
+        // Each distance to a focus is 1-Lipschitz along the surface, so their
+        // sum is 2-Lipschitz and half the shortfall from `2a` can never exceed
+        // the distance to the boundary — an under-estimate for an eccentric
+        // ellipse, exact for a circle, where the two terms coincide.
+        let d = self.semi_major - sum / 2.0;
+        if d.abs() < ON_BOUNDARY {
+            return Radians(0.0);
+        }
+        Radians(d)
     }
 }
 
@@ -637,6 +1025,20 @@ pub enum Error {
          split it into smaller polygons, or describe the complementary region instead"
     )]
     LargerThanHemisphere { radius_deg: f64 },
+    #[error(
+        "rectangle is empty: south {south}° must lie below north {north}°, and the corners \
+         must differ in longitude — note that -180° and 180° are the same meridian, so use \
+         `Rectangle::latitude_band` for a box spanning every longitude"
+    )]
+    EmptyRectangle { south: f64, north: f64 },
+    #[error(
+        "ellipse semi-axes must satisfy 0 < semi-minor ({semi_minor_deg}°) <= semi-major \
+         ({semi_major_deg}°) < 90°"
+    )]
+    EllipseAxes {
+        semi_major_deg: f64,
+        semi_minor_deg: f64,
+    },
 }
 
 // --- unit-sphere helpers -------------------------------------------------
@@ -703,10 +1105,668 @@ fn unit_from_lat_lon(p: LatLon) -> [f64; 3] {
     [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat]
 }
 
+fn unit_from_radians(lat: f64, lon: f64) -> [f64; 3] {
+    let (sin_lat, cos_lat) = lat.sin_cos();
+    let (sin_lon, cos_lon) = lon.sin_cos();
+    [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat]
+}
+
+/// The great-circle plane through both poles at longitude `lon`, paired with
+/// the equator point that tells its two halves apart.
+fn meridian(lon: f64) -> Meridian {
+    let (sin_lon, cos_lon) = lon.sin_cos();
+    Meridian {
+        normal: [-sin_lon, cos_lon, 0.0],
+        equator: [cos_lon, sin_lon, 0.0],
+    }
+}
+
+/// North and east unit vectors at `p`. At a pole, where north is undefined,
+/// "north" points along the prime meridian instead.
+fn local_frame(p: [f64; 3]) -> ([f64; 3], [f64; 3]) {
+    let north = normalize(reject([0.0, 0.0, 1.0], p))
+        .or_else(|| normalize(reject([1.0, 0.0, 0.0], p)))
+        .expect("p cannot be parallel to both axes");
+    (north, cross(north, p))
+}
+
+fn checked_latitude(lat: Degrees) -> Result<f64> {
+    if !(-90.0..=90.0).contains(&lat.to_f64()) {
+        return Err(Error::Latitude(lat.to_f64()).into());
+    }
+    Ok(lat.radians())
+}
+
+/// Reject a non-finite angle, converting to radians. A NaN slips past every
+/// comparison below — `NaN < COINCIDENT` is false — so it would be built into
+/// the shape and make every offset NaN.
+fn checked_angle(angle: Degrees, what: &'static str) -> Result<f64> {
+    let value = angle.to_f64();
+    if !value.is_finite() {
+        return Err(Error::NotFinite { what, value }.into());
+    }
+    Ok(angle.radians())
+}
+
+/// Wrap an angle to `[-π, π)`.
+fn wrap_pi(x: f64) -> f64 {
+    x - TAU * ((x + PI) / TAU).floor()
+}
+
+/// Wrap an angle to `[0, 2π)`.
+fn wrap_tau(x: f64) -> f64 {
+    x.rem_euclid(TAU)
+}
+
 fn lat_lon_from_unit(v: [f64; 3]) -> LatLon {
     LatLon {
         latitude: Radians(v[2].clamp(-1.0, 1.0).asin()).to_degrees(),
         longitude: Radians(v[1].atan2(v[0])).to_degrees(),
+    }
+}
+
+#[cfg(test)]
+mod rectangle_tests {
+    use super::*;
+    use crate::Error;
+
+    fn scotland() -> Rectangle {
+        Rectangle::new(
+            (Degrees(54.0), Degrees(-8.0)),
+            (Degrees(60.0), Degrees(-1.0)),
+        )
+        .expect("valid box")
+    }
+
+    fn offset(r: &Rectangle, lat: f64, lon: f64) -> f64 {
+        r.signed_angular_offset(LatLon::new(Degrees(lat), Degrees(lon)))
+            .to_f64()
+    }
+
+    /// The whole reason `Rectangle` exists: its north and south edges sit on
+    /// their parallels exactly, where a four-vertex `Polygon` bulges away.
+    #[test]
+    fn test_edges_follow_parallels_exactly() {
+        let rect = scotland();
+        let poly = Polygon::new([
+            (Degrees(54.0), Degrees(-8.0)),
+            (Degrees(54.0), Degrees(-1.0)),
+            (Degrees(60.0), Degrees(-1.0)),
+            (Degrees(60.0), Degrees(-8.0)),
+        ])
+        .expect("valid ring");
+
+        // Mid-edge, a hair north of 60°N: outside the rectangle by definition.
+        let (lat, lon) = (60.001, -4.5);
+        assert!(
+            offset(&rect, lat, lon) < 0.0,
+            "rectangle must not extend north of its stated latitude"
+        );
+        // The polygon's great-circle edge bows ~0.046° north here, so the same
+        // point falls inside it.
+        assert!(
+            poly.signed_angular_offset(LatLon::new(Degrees(lat), Degrees(lon)))
+                .to_f64()
+                > 0.0,
+            "the polygon edge is expected to bulge past the parallel"
+        );
+
+        // Every point on the parallel reads as exactly on the boundary.
+        for i in 0..=70 {
+            let lon = -8.0 + 7.0 * i as f64 / 70.0;
+            assert!(
+                offset(&rect, 60.0, lon).abs() < 1e-12,
+                "60°N at {lon}° should be on the boundary"
+            );
+            assert!(
+                offset(&rect, 54.0, lon).abs() < 1e-12,
+                "54°N at {lon}° should be on the boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn test_contains_and_excludes() {
+        let rect = scotland();
+        assert!(offset(&rect, 57.0, -4.5) > 0.0);
+        for (lat, lon) in [(53.9, -4.5), (60.1, -4.5), (57.0, -8.1), (57.0, -0.9)] {
+            assert!(
+                offset(&rect, lat, lon) < 0.0,
+                "({lat}, {lon}) should be outside"
+            );
+        }
+    }
+
+    /// Nothing on the far side of the Earth may report a near-zero offset —
+    /// a meridian's plane extends round the globe, and its antipodal half must
+    /// not be mistaken for the edge.
+    #[test]
+    fn test_far_side_of_the_earth_is_far() {
+        let rect = scotland();
+        for lat in [-80.0, -57.0, 0.0, 57.0, 80.0] {
+            for lon in [172.0, 175.5, 179.0, -180.0, -175.0] {
+                let v = offset(&rect, lat, lon);
+                assert!(v < 0.0, "({lat}, {lon}) should be outside");
+                assert!(
+                    v.abs() > 0.5,
+                    "({lat}, {lon}) reported only {v} rad from the box"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_offset_never_exceeds_true_distance() {
+        let rect = scotland();
+        // Dense boundary sample: the two parallels and the two meridians.
+        let mut boundary = Vec::new();
+        for i in 0..=2_000 {
+            let f = i as f64 / 2_000.0;
+            boundary.push(super::unit_from_radians(
+                Degrees(54.0).radians(),
+                Degrees(-8.0 + 7.0 * f).radians(),
+            ));
+            boundary.push(super::unit_from_radians(
+                Degrees(60.0).radians(),
+                Degrees(-8.0 + 7.0 * f).radians(),
+            ));
+            boundary.push(super::unit_from_radians(
+                Degrees(54.0 + 6.0 * f).radians(),
+                Degrees(-8.0).radians(),
+            ));
+            boundary.push(super::unit_from_radians(
+                Degrees(54.0 + 6.0 * f).radians(),
+                Degrees(-1.0).radians(),
+            ));
+        }
+
+        for p in super::geometry_tests::sphere_points(500) {
+            let ll = lat_lon_from_unit(p);
+            let reported = rect.signed_angular_offset(ll).to_f64().abs();
+            let truth = boundary
+                .iter()
+                .map(|&b| angle_between(p, b))
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                reported <= truth + 1e-6,
+                "reported {reported} exceeds true distance {truth} at {ll:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_antimeridian_box_wraps_eastward() {
+        let rect = Rectangle::new(
+            (Degrees(-20.0), Degrees(160.0)),
+            (Degrees(20.0), Degrees(-160.0)),
+        )
+        .expect("valid box");
+
+        for lon in [160.0, 175.0, 180.0, -180.0, -170.0, -160.0] {
+            assert!(offset(&rect, 0.0, lon) >= 0.0, "lon {lon} should be inside");
+        }
+        for lon in [159.0, 0.0, -159.0] {
+            assert!(offset(&rect, 0.0, lon) < 0.0, "lon {lon} should be outside");
+        }
+    }
+
+    #[test]
+    fn test_latitude_band_and_polar_cap() {
+        let band = Rectangle::latitude_band(Degrees(-10.0), Degrees(10.0)).expect("valid band");
+        for lon in [-180.0, -90.0, 0.0, 90.0, 179.0] {
+            assert!(offset(&band, 0.0, lon) > 0.0, "equator at {lon} is inside");
+            assert!(offset(&band, 20.0, lon) < 0.0, "20°N at {lon} is outside");
+        }
+        // Inside a band, the distance is purely the latitude difference.
+        assert!((offset(&band, 5.0, 42.0) - Degrees(5.0).radians()).abs() < 1e-12);
+
+        let cap = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0)).expect("valid cap");
+        assert!(offset(&cap, 90.0, 0.0) > 0.0, "the pole is inside the cap");
+        assert!(offset(&cap, 70.0, 123.0) > 0.0);
+        assert!(offset(&cap, 60.0, 123.0) < 0.0);
+    }
+
+    /// A span within `COINCIDENT` of full loses its side edges, so it has to
+    /// lose the sliver between them too — nothing is left to measure the
+    /// distance to it, and a point there would report the distance to the
+    /// nearest parallel instead.
+    #[test]
+    fn test_near_full_span_widens_to_a_band() {
+        let rect = Rectangle::new(
+            (Degrees(-10.0), Degrees(0.0)),
+            (Degrees(10.0), Degrees(-1e-8)),
+        )
+        .expect("valid box");
+
+        let (_, span) = rect.longitudes();
+        assert!((span.to_f64() - 360.0).abs() < 1e-12, "got {span:?}");
+        for lon in [-1e-9, -0.5e-8, 0.0, 90.0, -179.0] {
+            let v = offset(&rect, 0.0, lon);
+            assert!(v > 0.0, "lon {lon} should be inside, got {v}");
+        }
+    }
+
+    /// A pole-to-pole band is the one box with no boundary at all, so nothing
+    /// constrains the distance to it. The reported offset must still be a
+    /// number: an infinity would be baked into every sample.
+    #[test]
+    fn test_whole_sphere_band_is_finite() {
+        let all = Rectangle::latitude_band(Degrees(-90.0), Degrees(90.0)).expect("valid band");
+        for (lat, lon) in [(0.0, 0.0), (90.0, 0.0), (-90.0, 45.0), (57.0, -179.0)] {
+            let v = offset(&all, lat, lon);
+            assert!(v.is_finite(), "({lat}, {lon}) reported {v}");
+            assert!(v > 0.0, "({lat}, {lon}) should be inside");
+        }
+    }
+
+    #[test]
+    fn test_pole_to_pole_wedge() {
+        // A lune. `Polygon` rejects this as larger than a hemisphere, but a
+        // rectangle needs no such restriction: containment is exact.
+        let wedge = Rectangle::new(
+            (Degrees(-90.0), Degrees(0.0)),
+            (Degrees(90.0), Degrees(90.0)),
+        )
+        .expect("valid wedge");
+
+        assert!(offset(&wedge, 0.0, 45.0) > 0.0);
+        assert!(offset(&wedge, 60.0, 45.0) > 0.0);
+        assert!(offset(&wedge, 0.0, -45.0) < 0.0);
+        assert!(offset(&wedge, 0.0, 135.0) < 0.0);
+
+        // A pole is where the two meridian edges meet, so it is a boundary
+        // point however the wedge is entered. `dot(foot, equator)` is
+        // identically zero there and skips both meridians, but the corners
+        // stand in: at a latitude bound of ±90° every corner *is* the pole.
+        for lon in [0.0, 45.0, 90.0, -170.0] {
+            assert!(
+                offset(&wedge, 90.0, lon).abs() < 1e-12,
+                "north pole at {lon}° should read as on the boundary"
+            );
+            assert!(
+                offset(&wedge, -90.0, lon).abs() < 1e-12,
+                "south pole at {lon}° should read as on the boundary"
+            );
+        }
+
+        // The same holds when only one bound is a pole.
+        let north = Rectangle::new((Degrees(0.0), Degrees(0.0)), (Degrees(90.0), Degrees(90.0)))
+            .expect("valid wedge");
+        assert!(offset(&north, 90.0, 45.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_empty_and_invalid_rectangles() {
+        // South at or above north.
+        assert!(matches!(
+            Rectangle::new(
+                (Degrees(60.0), Degrees(0.0)),
+                (Degrees(54.0), Degrees(10.0))
+            ),
+            Err(Error::Aoi(super::Error::EmptyRectangle { .. }))
+        ));
+        // Zero height.
+        assert!(matches!(
+            Rectangle::new(
+                (Degrees(54.0), Degrees(0.0)),
+                (Degrees(54.0), Degrees(10.0))
+            ),
+            Err(Error::Aoi(super::Error::EmptyRectangle { .. }))
+        ));
+        // Zero width.
+        assert!(matches!(
+            Rectangle::new((Degrees(54.0), Degrees(5.0)), (Degrees(60.0), Degrees(5.0))),
+            Err(Error::Aoi(super::Error::EmptyRectangle { .. }))
+        ));
+        // -180° and 180° are the same meridian, so this reads as zero width
+        // rather than full width. The error has to say so — it is where
+        // someone writing a band the obvious way actually lands.
+        let err = Rectangle::new(
+            (Degrees(-10.0), Degrees(-180.0)),
+            (Degrees(10.0), Degrees(180.0)),
+        )
+        .expect_err("±180° is a single meridian");
+        assert!(matches!(
+            err,
+            Error::Aoi(super::Error::EmptyRectangle { .. })
+        ));
+        assert!(
+            err.to_string().contains("latitude_band"),
+            "the error should point at the band constructor: {err}"
+        );
+        // Out-of-range latitude.
+        assert!(matches!(
+            Rectangle::new(
+                (Degrees(-91.0), Degrees(0.0)),
+                (Degrees(60.0), Degrees(10.0))
+            ),
+            Err(Error::Aoi(super::Error::Latitude(_)))
+        ));
+    }
+
+    /// A non-finite latitude fails the range test; a non-finite longitude has
+    /// no range to fail, so it needs its own check. Unchecked, a NaN reaches
+    /// `signed_angular_offset` and every sample is NaN, which `ProximityStep`
+    /// floors to `min_step` — the whole interval scanned at a millisecond,
+    /// with no error ever surfacing.
+    #[test]
+    fn test_non_finite_coordinates_rejected() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(
+                matches!(
+                    Rectangle::new(
+                        (Degrees(54.0), Degrees(bad)),
+                        (Degrees(60.0), Degrees(-1.0))
+                    ),
+                    Err(Error::Aoi(super::Error::NotFinite { .. }))
+                ),
+                "west longitude {bad} was not rejected"
+            );
+            assert!(
+                matches!(
+                    Rectangle::new(
+                        (Degrees(54.0), Degrees(-8.0)),
+                        (Degrees(60.0), Degrees(bad))
+                    ),
+                    Err(Error::Aoi(super::Error::NotFinite { .. }))
+                ),
+                "east longitude {bad} was not rejected"
+            );
+            assert!(
+                matches!(
+                    Rectangle::new(
+                        (Degrees(bad), Degrees(-8.0)),
+                        (Degrees(60.0), Degrees(-1.0))
+                    ),
+                    Err(Error::Aoi(super::Error::Latitude(_)))
+                ),
+                "south latitude {bad} was not rejected"
+            );
+            assert!(
+                matches!(
+                    Rectangle::latitude_band(Degrees(-10.0), Degrees(bad)),
+                    Err(Error::Aoi(super::Error::Latitude(_)))
+                ),
+                "band latitude {bad} was not rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_accessors_round_trip() {
+        let rect = scotland();
+        let (south, north) = rect.latitudes();
+        assert!((south.to_f64() - 54.0).abs() < 1e-12);
+        assert!((north.to_f64() - 60.0).abs() < 1e-12);
+        let (west, span) = rect.longitudes();
+        assert!((west.to_f64() - -8.0).abs() < 1e-12);
+        assert!((span.to_f64() - 7.0).abs() < 1e-12);
+    }
+}
+
+#[cfg(test)]
+mod ellipse_tests {
+    use super::*;
+    use crate::Error;
+
+    /// Roughly 300 km by 120 km over the North Sea, major axis north-east.
+    fn north_sea() -> Ellipse {
+        Ellipse::new(
+            (Degrees(56.0), Degrees(2.0)),
+            Degrees(2.7),
+            Degrees(1.1),
+            Degrees(45.0),
+        )
+        .expect("valid ellipse")
+    }
+
+    /// The point `distance` away from `centre` along `bearing`, degrees
+    /// clockwise from north.
+    fn destination(centre: LatLon, distance: Degrees, bearing: Degrees) -> LatLon {
+        let c = unit_from_lat_lon(centre);
+        let (north, east) = local_frame(c);
+        let (sin_b, cos_b) = bearing.radians().sin_cos();
+        let (sin_d, cos_d) = distance.radians().sin_cos();
+        lat_lon_from_unit(
+            [0, 1, 2].map(|i| c[i] * cos_d + (north[i] * cos_b + east[i] * sin_b) * sin_d),
+        )
+    }
+
+    fn offset(e: &Ellipse, p: LatLon) -> f64 {
+        e.signed_angular_offset(p).to_f64()
+    }
+
+    /// A circle is the one case where the offset is the exact signed distance,
+    /// not merely a lower bound.
+    #[test]
+    fn test_circle_offset_is_the_exact_signed_distance() {
+        let centre = LatLon::new(Degrees(-33.9), Degrees(18.4));
+        let radius = Degrees(2.25);
+        let circle = Ellipse::circle(centre, radius).expect("valid circle");
+
+        let (f1, f2) = circle.foci();
+        assert!(coincident(unit_from_lat_lon(f1), unit_from_lat_lon(f2)));
+
+        let c = unit_from_lat_lon(centre);
+        for p in super::geometry_tests::sphere_points(500) {
+            let truth = radius.radians() - angle_between(c, p);
+            assert!(
+                (offset(&circle, lat_lon_from_unit(p)) - truth).abs() < 1e-12,
+                "circle offset should equal {truth} at {:?}",
+                lat_lon_from_unit(p)
+            );
+        }
+    }
+
+    /// The four axis endpoints define the ellipse, so all four must read as
+    /// exactly on the boundary.
+    #[test]
+    fn test_axis_endpoints_are_on_the_boundary() {
+        let e = north_sea();
+        let centre = e.centre();
+        let (a, b) = e.semi_axes();
+        let brg = e.bearing().to_f64();
+
+        for (distance, bearing) in [
+            (a, brg),
+            (a, brg + 180.0),
+            (b, brg + 90.0),
+            (b, brg + 270.0),
+        ] {
+            let p = destination(centre, distance, Degrees(bearing));
+            assert!(
+                offset(&e, p).abs() < 1e-9,
+                "{distance:?} at bearing {bearing}° should be on the boundary, got {}",
+                offset(&e, p)
+            );
+        }
+        assert!(offset(&e, centre) > 0.0, "the centre must be inside");
+    }
+
+    /// Bearing orients the major axis: the ellipse reaches further along it
+    /// than across it.
+    #[test]
+    fn test_bearing_orients_the_major_axis() {
+        let e = north_sea();
+        let centre = e.centre();
+        // Between the two semi-axes, so inside along the major axis and
+        // outside across it.
+        let between = Degrees(1.9);
+
+        assert!(offset(&e, destination(centre, between, Degrees(45.0))) > 0.0);
+        assert!(offset(&e, destination(centre, between, Degrees(225.0))) > 0.0);
+        assert!(offset(&e, destination(centre, between, Degrees(135.0))) < 0.0);
+        assert!(offset(&e, destination(centre, between, Degrees(315.0))) < 0.0);
+    }
+
+    #[test]
+    fn test_offset_never_exceeds_true_distance() {
+        let e = north_sea();
+        let centre = e.centre();
+        let (a, b) = e.semi_axes();
+
+        // Boundary sample by bisecting the radius at each bearing: the offset
+        // is monotone in distance from the centre, so the crossing is unique.
+        let mut boundary = Vec::new();
+        for i in 0..2_000 {
+            let bearing = Degrees(360.0 * i as f64 / 2_000.0);
+            let (mut lo, mut hi) = (0.0, a.to_f64() + 1e-9);
+            for _ in 0..60 {
+                let mid = 0.5 * (lo + hi);
+                if offset(&e, destination(centre, Degrees(mid), bearing)) > 0.0 {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            boundary.push(unit_from_lat_lon(destination(
+                centre,
+                Degrees(0.5 * (lo + hi)),
+                bearing,
+            )));
+            assert!(
+                0.5 * (lo + hi) >= b.to_f64() - 1e-9,
+                "no boundary point may lie inside the semi-minor axis"
+            );
+        }
+
+        for p in super::geometry_tests::sphere_points(500) {
+            let ll = lat_lon_from_unit(p);
+            let reported = offset(&e, ll).abs();
+            let truth = boundary
+                .iter()
+                .map(|&q| angle_between(p, q))
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                reported <= truth + 1e-6,
+                "reported {reported} exceeds true distance {truth} at {ll:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_far_side_of_the_earth_is_far() {
+        let e = north_sea();
+        let antipode = LatLon::new(Degrees(-56.0), Degrees(-178.0));
+        assert!(offset(&e, antipode) < -3.0);
+        for (lat, lon) in [(0.0, 0.0), (56.0, 90.0), (-40.0, 2.0), (89.0, 2.0)] {
+            let v = offset(&e, LatLon::new(Degrees(lat), Degrees(lon)));
+            assert!(v < 0.0, "({lat}, {lon}) should be outside, got {v}");
+        }
+    }
+
+    /// North is undefined at a pole, so the bearing falls back to the prime
+    /// meridian. The geometry must still be well formed.
+    #[test]
+    fn test_pole_centred_ellipse() {
+        let e = Ellipse::new(
+            (Degrees(90.0), Degrees(0.0)),
+            Degrees(10.0),
+            Degrees(4.0),
+            Degrees(0.0),
+        )
+        .expect("valid ellipse");
+
+        assert!(offset(&e, LatLon::new(Degrees(90.0), Degrees(0.0))) > 0.0);
+        // The major axis runs down the prime meridian and its antimeridian.
+        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(0.0))) > 0.0);
+        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(180.0))) > 0.0);
+        // The minor axis, a quarter turn away, falls short.
+        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(90.0))) < 0.0);
+        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(-90.0))) < 0.0);
+    }
+
+    #[test]
+    fn test_invalid_axes_rejected() {
+        let centre = (Degrees(56.0), Degrees(2.0));
+        for (major, minor) in [
+            (1.0, 2.0),  // minor exceeds major
+            (1.0, 0.0),  // degenerate
+            (1.0, -1.0), // negative
+            (90.0, 1.0), // a hemisphere across
+            (120.0, 1.0),
+        ] {
+            let err = Ellipse::new(centre, Degrees(major), Degrees(minor), Degrees(0.0))
+                .expect_err("should be rejected");
+            assert!(
+                matches!(err, Error::Aoi(super::Error::EllipseAxes { .. })),
+                "{major}/{minor} gave {err}"
+            );
+        }
+        assert!(matches!(
+            Ellipse::circle((Degrees(91.0), Degrees(0.0)), Degrees(1.0)).expect_err("bad latitude"),
+            Error::Aoi(super::Error::Latitude(_))
+        ));
+    }
+
+    /// The latitude range test rejects a non-finite latitude on its own; the
+    /// longitude, the bearing and the axes have no range that does. Unchecked,
+    /// a NaN is built into the foci and every offset is NaN, which
+    /// `ProximityStep` floors to `min_step` — the whole interval scanned at a
+    /// millisecond, with no error ever surfacing.
+    #[test]
+    fn test_non_finite_arguments_rejected() {
+        let centre = (Degrees(56.0), Degrees(2.0));
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for (label, err) in [
+                (
+                    "centre longitude",
+                    Ellipse::new(
+                        (Degrees(56.0), Degrees(bad)),
+                        Degrees(2.7),
+                        Degrees(1.1),
+                        Degrees(45.0),
+                    ),
+                ),
+                (
+                    "bearing",
+                    Ellipse::new(centre, Degrees(2.7), Degrees(1.1), Degrees(bad)),
+                ),
+                (
+                    "semi-major",
+                    Ellipse::new(centre, Degrees(bad), Degrees(1.1), Degrees(45.0)),
+                ),
+                (
+                    "semi-minor",
+                    Ellipse::new(centre, Degrees(2.7), Degrees(bad), Degrees(45.0)),
+                ),
+                ("radius", Ellipse::circle(centre, Degrees(bad))),
+            ] {
+                assert!(
+                    matches!(err, Err(Error::Aoi(super::Error::NotFinite { .. }))),
+                    "{label} {bad} was not rejected"
+                );
+            }
+            assert!(
+                matches!(
+                    Ellipse::circle((Degrees(bad), Degrees(2.0)), Degrees(1.0)),
+                    Err(Error::Aoi(super::Error::Latitude(_)))
+                ),
+                "centre latitude {bad} was not rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_accessors_round_trip() {
+        let e = north_sea();
+        let centre = e.centre();
+        assert!((centre.latitude.to_f64() - 56.0).abs() < 1e-12);
+        assert!((centre.longitude.to_f64() - 2.0).abs() < 1e-12);
+        let (a, b) = e.semi_axes();
+        assert!((a.to_f64() - 2.7).abs() < 1e-12);
+        assert!((b.to_f64() - 1.1).abs() < 1e-12);
+        assert!((e.bearing().to_f64() - 45.0).abs() < 1e-12);
+
+        // A bearing outside [0, 360) reads back normalized.
+        let wrapped = Ellipse::new(
+            (Degrees(0.0), Degrees(0.0)),
+            Degrees(2.0),
+            Degrees(1.0),
+            Degrees(-90.0),
+        )
+        .expect("valid ellipse");
+        assert!((wrapped.bearing().to_f64() - 270.0).abs() < 1e-12);
     }
 }
 
@@ -988,7 +2048,7 @@ mod geometry_tests {
     }
 
     /// Deterministic uniform points on the sphere, so failures reproduce.
-    fn sphere_points(n: usize) -> Vec<[f64; 3]> {
+    pub(super) fn sphere_points(n: usize) -> Vec<[f64; 3]> {
         let mut state = 0x2545_F491_4F6C_DD1D_u64;
         let mut next = || {
             state ^= state << 13;

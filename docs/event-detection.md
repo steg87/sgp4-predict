@@ -146,8 +146,32 @@ boundary walk uses a fixed `walk_step` rather than the adaptive one, so for a **
 notch the ground track leaves and re-enters within `walk_step` is absorbed into the surrounding
 window; a convex area is unaffected. Both are configurable via `AoiIterOpts`.
 
-Polygon edges are great-circle arcs in the sphere obtained by treating geodetic latitude as spherical
-latitude — the S2 and GeoJSON-on-a-sphere convention. They are not lines of constant latitude: an edge
-between two vertices at 60°N bows poleward by about 0.02° over a 5° longitude span and 0.09° over 10°,
-growing with the square of the span, so a four-vertex ring with vertices a quarter of the globe apart
-reaches roughly 68°N.
+`Polygon` edges are great-circle arcs in the sphere obtained by treating geodetic latitude as
+spherical latitude — the S2 and BigQuery GIS convention, and *not* GeoJSON's, which RFC 7946 §3.1.1
+defines as straight in longitude/latitude. Great-circle edges are what make the distance a single
+`asin` and remove every antimeridian and pole special case; the cost is that they are not lines of
+constant latitude: an edge between two vertices at 60°N bows poleward by about 0.02° over a 5°
+longitude span and 0.09° over 10°, growing with the square of the span, so a four-vertex ring with
+vertices a quarter of the globe apart reaches roughly 68°N. Since a great circle always bows toward
+the nearer pole, both horizontal edges of a box shift the same way, displacing the region poleward
+rather than enlarging it.
+
+`Rectangle` is the answer for a region that genuinely is a latitude/longitude box. Its north and south
+edges are parallels, whose distance is exactly the latitude difference along a meridian, and its east
+and west edges are meridian arcs, whose distance is a plane `asin` as before. Containment is four
+inequalities rather than a winding number, so it needs no bounding cap and has no hemisphere
+restriction — a pole-to-pole wedge is fine. Two details earn their keep: a bound sitting on a pole is
+not an edge (the parallel degenerates to a point interior to the box), and each meridian edge is
+tested against its own half of the plane, or a point on the far side of the Earth would report itself
+a few kilometres from the boundary.
+
+`Ellipse` is the two-foci definition read on the sphere: inside where the great-circle distances to
+the two foci sum to at most twice the semi-major axis. The foci are placed from the spherical right
+triangle `cos a = cos b cos c`, which is what fixes their separation from the two semi-axes. Each
+distance to a focus is 1-Lipschitz along the surface, so their sum is 2-Lipschitz and *half* the
+shortfall from `2a` is a valid lower bound on the distance to the boundary — an under-estimate for an
+eccentric ellipse, and exact for a circle, where the two foci coincide and the formula collapses to
+`radius − distance`. Under-reporting only costs smaller steps, which is why the `Area` contract asks
+for a bound rather than the true distance. There is no winding number and no antipodal component (an
+ellipse under 90° across cannot reach the far side), so like `Rectangle` it needs no bounding cap and
+carries no hemisphere restriction.
