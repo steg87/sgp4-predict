@@ -152,11 +152,20 @@ collapse the step size; and each meridian edge is tested against its own half of
 (`dot(foot, equator) > 0` plus the foot's latitude), because a meridian plane wraps round the globe
 and its antipodal half would otherwise report a near-zero distance for points on the far side.
 
-That second detail has a known limit, documented rather than fixed: at a point sitting *exactly* on a
-pole, `dot(foot, m.equator)` is identically zero for both meridians, so both are skipped and a wedge
-reports the pole as deep inside when it is actually a boundary point. It is measure-zero — 89.999999°
-engages the meridian term correctly — and no ground track lands on a pole to f64 precision, so the
-special case would be pure cost. Do not "fix" it without a reproducer.
+That second detail looks like it should break at a pole, and does not. `dot(foot, m.equator)` is
+identically zero there, so both meridians are skipped — but a pole is only interior in latitude when
+the bound *is* ±90°, and then `corner(north, west)` and `corner(north, east)` both **are** the pole to
+within `cos(π/2) = 6.1e-17` rad. The corner term reports that, `d` falls under `ON_BOUNDARY`, and the
+answer is `0.0`, which is correct: the pole is where the two meridian edges meet.
+`test_pole_to_pole_wedge` pins it. The remaining case, `sides == None`, is a full-longitude band that
+genuinely has no meridian edges, where `|lat − south|` is exact.
+
+The whole-sphere band (`latitude_band(-90°, 90°)`) is the one box with no boundary at all: `sides` is
+`None` and both parallel terms are gated off, so `d` is left at its `f64::INFINITY` seed. It is
+clamped to π — the widest separation on a sphere — because only the *magnitude* is unconstrained
+there; the sign is still right, and under-reporting is what the contract allows. The clamp is inert
+for every other box. Note it does not stop a whole-Earth aoi hitting `WindowTooLong`: the track never
+leaves, which is true of any near-global area and not specific to this one.
 
 `Ellipse` is the two-foci definition (`d(F₁,p) + d(F₂,p) <= 2a`), not a projected planar ellipse.
 The value returned is `a − (d₁ + d₂)/2`, and the **halving is what makes it legal**: each distance is

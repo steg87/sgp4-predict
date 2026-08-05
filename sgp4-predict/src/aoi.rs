@@ -43,7 +43,7 @@
 //! [`Predictor::prediction_iter`]: crate::Predictor::prediction_iter
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
-use std::f64::consts::{FRAC_PI_2, TAU};
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::Elements;
@@ -396,12 +396,7 @@ impl Rectangle {
     /// Build a box spanning every longitude between two latitudes — a band, or
     /// a polar cap when one latitude is a pole.
     pub fn latitude_band(south: Degrees, north: Degrees) -> Result<Self> {
-        Self::build(
-            checked_latitude(south)?,
-            checked_latitude(north)?,
-            -std::f64::consts::PI,
-            TAU,
-        )
+        Self::build(checked_latitude(south)?, checked_latitude(north)?, -PI, TAU)
     }
 
     fn build(south: f64, north: f64, west: f64, lon_span: f64) -> Result<Self> {
@@ -453,9 +448,10 @@ impl Rectangle {
         )
     }
 
+    /// Strict on both axes: a point within `ON_BOUNDARY` of an edge never
+    /// reaches this test, having already short-circuited to zero.
     fn contains(&self, lat: f64, lon: f64) -> bool {
-        (self.south..=self.north).contains(&lat)
-            && wrap_tau(lon - self.west) <= self.lon_span + ON_BOUNDARY
+        (self.south..=self.north).contains(&lat) && wrap_tau(lon - self.west) <= self.lon_span
     }
 }
 
@@ -505,6 +501,11 @@ impl Area for Rectangle {
                 }
             }
         }
+
+        // A pole-to-pole band has no edge of any kind, leaving `d` infinite. π
+        // is the widest separation on a sphere, so the clamp under-reports,
+        // which the contract permits; every other box is already below it.
+        let d = d.min(PI);
 
         if d < ON_BOUNDARY {
             return Radians(0.0);
@@ -1020,7 +1021,8 @@ pub enum Error {
     LargerThanHemisphere { radius_deg: f64 },
     #[error(
         "rectangle is empty: south {south}° must lie below north {north}°, and the corners \
-         must differ in longitude"
+         must differ in longitude — note that -180° and 180° are the same meridian, so use \
+         `Rectangle::latitude_band` for a box spanning every longitude"
     )]
     EmptyRectangle { south: f64, north: f64 },
     #[error(
@@ -1142,7 +1144,7 @@ fn checked_angle(angle: Degrees, what: &'static str) -> Result<f64> {
 
 /// Wrap an angle to `[-π, π)`.
 fn wrap_pi(x: f64) -> f64 {
-    x - TAU * ((x + std::f64::consts::PI) / TAU).floor()
+    x - TAU * ((x + PI) / TAU).floor()
 }
 
 /// Wrap an angle to `[0, 2π)`.
@@ -1318,6 +1320,19 @@ mod rectangle_tests {
         assert!(offset(&cap, 60.0, 123.0) < 0.0);
     }
 
+    /// A pole-to-pole band is the one box with no boundary at all, so nothing
+    /// constrains the distance to it. The reported offset must still be a
+    /// number: an infinity would be baked into every sample.
+    #[test]
+    fn test_whole_sphere_band_is_finite() {
+        let all = Rectangle::latitude_band(Degrees(-90.0), Degrees(90.0)).expect("valid band");
+        for (lat, lon) in [(0.0, 0.0), (90.0, 0.0), (-90.0, 45.0), (57.0, -179.0)] {
+            let v = offset(&all, lat, lon);
+            assert!(v.is_finite(), "({lat}, {lon}) reported {v}");
+            assert!(v > 0.0, "({lat}, {lon}) should be inside");
+        }
+    }
+
     #[test]
     fn test_pole_to_pole_wedge() {
         // A lune. `Polygon` rejects this as larger than a hemisphere, but a
@@ -1332,6 +1347,26 @@ mod rectangle_tests {
         assert!(offset(&wedge, 60.0, 45.0) > 0.0);
         assert!(offset(&wedge, 0.0, -45.0) < 0.0);
         assert!(offset(&wedge, 0.0, 135.0) < 0.0);
+
+        // A pole is where the two meridian edges meet, so it is a boundary
+        // point however the wedge is entered. `dot(foot, equator)` is
+        // identically zero there and skips both meridians, but the corners
+        // stand in: at a latitude bound of ±90° every corner *is* the pole.
+        for lon in [0.0, 45.0, 90.0, -170.0] {
+            assert!(
+                offset(&wedge, 90.0, lon).abs() < 1e-12,
+                "north pole at {lon}° should read as on the boundary"
+            );
+            assert!(
+                offset(&wedge, -90.0, lon).abs() < 1e-12,
+                "south pole at {lon}° should read as on the boundary"
+            );
+        }
+
+        // The same holds when only one bound is a pole.
+        let north = Rectangle::new((Degrees(0.0), Degrees(0.0)), (Degrees(90.0), Degrees(90.0)))
+            .expect("valid wedge");
+        assert!(offset(&north, 90.0, 45.0).abs() < 1e-12);
     }
 
     #[test]
@@ -1357,6 +1392,22 @@ mod rectangle_tests {
             Rectangle::new((Degrees(54.0), Degrees(5.0)), (Degrees(60.0), Degrees(5.0))),
             Err(Error::Aoi(super::Error::EmptyRectangle { .. }))
         ));
+        // -180° and 180° are the same meridian, so this reads as zero width
+        // rather than full width. The error has to say so — it is where
+        // someone writing a band the obvious way actually lands.
+        let err = Rectangle::new(
+            (Degrees(-10.0), Degrees(-180.0)),
+            (Degrees(10.0), Degrees(180.0)),
+        )
+        .expect_err("±180° is a single meridian");
+        assert!(matches!(
+            err,
+            Error::Aoi(super::Error::EmptyRectangle { .. })
+        ));
+        assert!(
+            err.to_string().contains("latitude_band"),
+            "the error should point at the band constructor: {err}"
+        );
         // Out-of-range latitude.
         assert!(matches!(
             Rectangle::new(
