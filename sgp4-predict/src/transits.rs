@@ -303,13 +303,16 @@ impl Predictor {
 
     /// Find the peak elevation of the satellite over an observer within a time interval.
     ///
-    /// Built on [`EventIter`]: the event function is the elevation rate, and
-    /// interior peaks are its falling zero crossings (ascending →
-    /// descending), refined with the bracketed hybrid solver
-    /// ([`Refinement`]). The global maximum over the interval is attained
-    /// either at one of these interior peaks or at an interval boundary, so
-    /// every candidate — each falling crossing plus both endpoints — is
-    /// compared and the highest returned.
+    /// The event function is the elevation rate, and interior peaks are its
+    /// falling zero crossings (ascending → descending), refined with the
+    /// bracketed hybrid solver ([`Refinement`]). The global maximum over the
+    /// interval is attained either at one of these interior peaks or at an
+    /// interval boundary, so every candidate — each falling crossing plus
+    /// both endpoints — is compared and the highest returned.
+    // `EventIter` is only public under the `generics` feature; linking to it
+    // unconditionally makes this public doc link to a private item.
+    #[cfg_attr(feature = "generics", doc = "")]
+    #[cfg_attr(feature = "generics", doc = "Built on [`EventIter`].")]
     pub fn max_elevation<O: Observer>(
         &self,
         interval: impl IntervalRange,

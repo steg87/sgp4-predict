@@ -33,9 +33,6 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 - `Transit::clamp` and `AoiWindow::clamp` moved from inherent methods to the `TimeWindow` trait;
   callers now need `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged.
-
-### Changed
-
 - `DetectError::WindowTooLong` renders its limit as a humantime span (`1h`) rather than chrono's
   ISO-8601 `Display` (`PT3600S`), so the message names the value in the spelling callers pass back
   in. This promotes `humantime` from a dev-dependency to a dependency.
