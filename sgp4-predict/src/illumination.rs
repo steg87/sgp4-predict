@@ -67,6 +67,11 @@ pub enum IlluminationState {
 }
 
 /// A contiguous window of constant illumination state.
+///
+/// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
+/// directly to prediction and observation iterators, and
+/// [`TimeWindow`](crate::TimeWindow) for
+/// [`clamp`](crate::TimeWindow::clamp), which preserves the `state`.
 #[derive(Debug, Clone, Copy)]
 pub struct Illumination {
     /// Start of the window (inclusive).
@@ -83,6 +88,16 @@ impl time::IntervalRange for Illumination {
     }
     fn end(&self) -> DateTime<Utc> {
         self.end
+    }
+}
+
+impl time::TimeWindow for Illumination {
+    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        Self {
+            start,
+            end,
+            ..*self
+        }
     }
 }
 

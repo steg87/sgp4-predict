@@ -539,6 +539,25 @@ pub struct Window {
     pub positive: bool,
 }
 
+impl IntervalRange for Window {
+    fn start(&self) -> DateTime<Utc> {
+        self.start
+    }
+    fn end(&self) -> DateTime<Utc> {
+        self.end
+    }
+}
+
+impl time::TimeWindow for Window {
+    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        Self {
+            start,
+            end,
+            ..*self
+        }
+    }
+}
+
 /// A [`Detector`] that pairs the zero crossings of an [`EventFunction`] into
 /// [`Window`]s. Build one with [`WindowIter::builder`].
 ///

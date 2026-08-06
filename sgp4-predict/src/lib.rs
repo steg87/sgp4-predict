@@ -106,7 +106,7 @@ pub use crate::{
     observe::{Observation, ObservationIter, Observer},
     predict::{GroundTrackIter, PredictionIter},
     roots::Refinement,
-    time::{DateTimeIter, IntervalRange},
+    time::{DateTimeIter, IntervalRange, TimeWindow},
     transits::{MaxElevationOpts, Transit, TransitIter, TransitIterOpts},
     types::{GroundObserver, Tle, TleParseError},
     vectors::{Position, StateVector, Velocity},
@@ -127,8 +127,8 @@ pub use crate::detect::{
 pub mod prelude {
     pub use crate::{
         AoiWindow, ApsisEvent, Classification, Degrees, Elements, Error, GroundObserver,
-        IlluminationState, LatLon, Observation, Observer, Polygon, Predictor, Radians, Result, Tle,
-        TleRecord, Transit,
+        IlluminationState, LatLon, Observation, Observer, Polygon, Predictor, Radians, Result,
+        TimeWindow, Tle, TleRecord, Transit,
     };
 }
 
