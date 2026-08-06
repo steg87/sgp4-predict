@@ -31,6 +31,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Changed
 
+- The public `Error` enums (`sgp4_predict::Error`, `aoi::Error`, `roots::Error`, `DetectError`) are
+  `#[non_exhaustive]`, so adding a variant is no longer a breaking change. A downstream `match` on
+  one now needs a `_` arm. The `*Opts` structs stay exhaustive, so `..Default::default()` keeps
+  working.
+- Every iterator and builder type is `#[must_use]`. Dropping the result of a `*_iter` call, or of a
+  builder chain that never reaches `.build()`, now warns instead of silently doing nothing.
 - `Transit::clamp` and `AoiWindow::clamp` moved from inherent methods to the `TimeWindow` trait;
   callers now need `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged.
 - `DetectError::WindowTooLong` renders its limit as a humantime span (`1h`) rather than chrono's

@@ -155,6 +155,7 @@ impl Default for MaxElevationOpts {
 /// Iterator over satellite passes visible to an observer within a time interval.
 ///
 /// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct TransitIter<'a, O: Observer> {
     inner: WindowIter<ElevationAboveMin<'a, O>, ThresholdStep>,
 }

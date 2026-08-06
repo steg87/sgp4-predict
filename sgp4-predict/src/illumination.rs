@@ -125,6 +125,7 @@ impl EventFunction for ShadowFunction {
 /// Windows that extend beyond the search interval are clamped to its boundaries:
 /// the first window always starts at `interval.start` and the last always ends at
 /// `interval.end`, regardless of when the illumination state actually changed.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct IlluminationIter {
     inner: WindowIter<ShadowFunction, FixedStep>,
 }

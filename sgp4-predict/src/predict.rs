@@ -13,6 +13,7 @@ use crate::{
 /// Iterator over time-stamped TEME state vectors at regular intervals.
 ///
 /// Created by [`Predictor::prediction_iter`](crate::Predictor::prediction_iter).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct PredictionIter {
     predictor: Predictor,
     dt_iter: DateTimeIter,
@@ -69,6 +70,7 @@ impl Iterator for PredictionIter {
 /// points at regular intervals.
 ///
 /// Created by [`Predictor::ground_track_iter`](crate::Predictor::ground_track_iter).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct GroundTrackIter {
     predictor: Predictor,
     dt_iter: DateTimeIter,

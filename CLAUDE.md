@@ -68,6 +68,35 @@ The two traits are deliberately separate. `IntervalRange` only _reads_ an interv
 - **Tests**: cover every code path, not every option. One test per branch, error variant and early return; do not add a test per field, per builder knob or per combination of them. When adding a knob, exercise it only where it changes behaviour.
 - `sgp4-predict/README.md` is compiled as a doctest via the `Readme` struct in `lib.rs`, so its examples cannot drift. `cargo test --all-targets` does **not** run doctests — `make test` and `test.yml` run `cargo test --doc` as a separate step for exactly this reason.
 
+### `#[must_use]` and `#[non_exhaustive]`
+
+**`#[must_use]` sits on the iterator and builder _structs_, not their methods.** `Iterator`'s own
+`#[must_use]` propagates only through `impl Iterator` return position, so a named struct like
+`PredictionIter` warns about nothing — and every `*_iter` call is lazy, making a dropped one a
+silent no-op. Putting the attribute on the type covers the constructor, every `-> Self` method
+(`include_end`, and every builder setter), and any future method returning it, from one
+line. `DetectIter` covers the `EventIter` and `WindowIter` aliases too. Do not "complete" this by
+adding method-level attributes to those types; they are already covered and would be redundant.
+
+Method-level `#[must_use]` is only for methods whose _type_ should not be must-use:
+`TimeWindow::clamp` and `IntervalRange::intersection` (`Option` is not must-use), and
+`TimeWindow::with_bounds`, `Predictor::with_refinement` and `Polygon::with_fill_rule` (the
+receiving type is normally stored, not consumed), and both
+`Angle::normalized`s (which read like in-place mutators).
+
+Clippy's `must_use_candidate` also flags every pure getter — `Degrees::to_f64`, `Ellipse::foci`,
+`Predictor::epoch`, and ~30 more. Those were considered and deliberately left off: they catch no
+real bug and the churn is not worth it. Adding one is fine; a mass sweep changes the policy and
+should be a decision, not a drive-by.
+
+**`#[non_exhaustive]` is on the four public `Error` enums and deliberately _not_ on the `*Opts`
+structs.** On a struct it forbids struct expressions from other crates entirely, _including_
+functional-update syntax — so `AoiIterOpts { min_step: x, ..Default::default() }`, the documented
+way to use them, would stop compiling downstream. Adding an `Opts` field stays a breaking change;
+forcing a builder API on them is the worse trade. The cost on the error enums is that a downstream
+`match` needs a `_` arm: `sgp4-predict-py/src/errors.rs` has one, mapping unknown variants to
+`PyRuntimeError` since a new variant is likelier a runtime failure than bad input.
+
 ## Repo infrastructure
 
 - **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.

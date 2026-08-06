@@ -53,6 +53,7 @@ pub trait IntervalRange {
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
     /// assert!(a.intersection(&c).is_none());
     /// ```
+    #[must_use]
     fn intersection(&self, other: &impl IntervalRange) -> Option<Range<DateTime<Utc>>> {
         let start = self.start().max(other.start());
         let end = self.end().min(other.end());
@@ -85,6 +86,7 @@ impl IntervalRange for Range<DateTime<Utc>> {
 pub trait TimeWindow: IntervalRange + Sized {
     /// Returns a copy of this window spanning `start..end`, leaving every
     /// other field unchanged.
+    #[must_use = "returns the rebounded copy; the receiver is unchanged"]
     fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self;
 
     /// Returns a copy of this window clamped to `interval`, or `None` if it
@@ -112,6 +114,7 @@ pub trait TimeWindow: IntervalRange + Sized {
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
     /// assert!(transit.clamp(&disjoint).is_none());
     /// ```
+    #[must_use = "returns the clamped copy; the receiver is unchanged"]
     fn clamp(&self, interval: &impl IntervalRange) -> Option<Self> {
         self.intersection(interval)
             .map(|r| self.with_bounds(r.start, r.end))
@@ -128,6 +131,7 @@ pub trait TimeWindow: IntervalRange + Sized {
 /// advance and would iterate forever. Any positive step is used as given —
 /// this is a sampling iterator, so sub-second steps are meaningful here even
 /// though they are not for the coarse detection scans.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
     next_time: DateTime<Utc>,

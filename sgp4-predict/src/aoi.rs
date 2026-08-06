@@ -233,6 +233,7 @@ impl Polygon {
 
     /// Set how a self-intersecting ring's interior is determined. Has no
     /// effect on a simple (non-self-intersecting) polygon.
+    #[must_use = "returns a reconfigured Polygon; the receiver is unchanged"]
     pub fn with_fill_rule(mut self, fill: FillRule) -> Self {
         self.fill = fill;
         self
@@ -870,6 +871,7 @@ fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
 /// inside an area.
 ///
 /// Created by [`Predictor::aoi_iter`](crate::Predictor::aoi_iter).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct AoiIter<'a, A: Area> {
     inner: WindowIter<GroundTrackInside<'a, A>, ProximityStep>,
 }
@@ -1011,6 +1013,7 @@ impl Predictor {
 
 /// Errors from constructing an [`Area`].
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     #[error("polygon needs at least 3 distinct vertices, got {0}")]
     TooFewVertices(usize),

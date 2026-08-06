@@ -152,6 +152,7 @@ impl Refinement {
 
 /// Errors returned by the root-finding algorithms.
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     #[error("failed to converge after {iterations} iterations")]
     FailedToConverge {
