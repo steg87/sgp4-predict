@@ -163,6 +163,8 @@ impl From<FillRule> for sgp4_predict::FillRule {
 #[derive(Clone)]
 pub struct Polygon {
     inner: sgp4_predict::Polygon,
+    // Kept alongside `inner`, which has no accessor for it. Only `new` writes
+    // either, so the two cannot diverge.
     fill_rule: FillRule,
 }
 
@@ -287,8 +289,9 @@ impl Rectangle {
 /// the bearing turns the major axis clockwise from north. At a pole, where north is
 /// undefined, the bearing is measured from the prime meridian instead.
 ///
-/// Raises `ValueError` unless `0 < semi_minor_deg <= semi_major_deg < 90`, if the
-/// centre's latitude is outside [-90, 90], or if any argument is `nan` or infinite.
+/// Raises `ValueError` if `0 < semi_minor_deg <= semi_major_deg < 90` does not
+/// hold, if the centre's latitude is outside [-90, 90], or if any argument is
+/// `nan` or infinite.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Clone)]
@@ -386,6 +389,14 @@ pub(crate) enum AreaKind {
     Ellipse(sgp4_predict::Ellipse),
 }
 
+/// The borrowed counterpart, for the one-shot paths that don't outlive the
+/// argument and so need no clone.
+pub(crate) enum AreaRef<'a> {
+    Polygon(&'a sgp4_predict::Polygon),
+    Rectangle(&'a sgp4_predict::Rectangle),
+    Ellipse(&'a sgp4_predict::Ellipse),
+}
+
 impl Area for AreaKind {
     fn signed_angular_offset(&self, point: sgp4_predict::LatLon) -> Radians {
         match self {
@@ -396,15 +407,35 @@ impl Area for AreaKind {
     }
 }
 
+impl Area for AreaRef<'_> {
+    fn signed_angular_offset(&self, point: sgp4_predict::LatLon) -> Radians {
+        match self {
+            Self::Polygon(a) => a.signed_angular_offset(point),
+            Self::Rectangle(a) => a.signed_angular_offset(point),
+            Self::Ellipse(a) => a.signed_angular_offset(point),
+        }
+    }
+}
+
 pub(crate) fn extract_area(area: &Bound<'_, PyAny>) -> PyResult<AreaKind> {
-    if let Ok(a) = area.extract::<Polygon>() {
-        return Ok(AreaKind::Polygon(a.inner));
+    Ok(match extract_area_ref(area)? {
+        AreaRef::Polygon(a) => AreaKind::Polygon(a.clone()),
+        AreaRef::Rectangle(a) => AreaKind::Rectangle(a.clone()),
+        AreaRef::Ellipse(a) => AreaKind::Ellipse(a.clone()),
+    })
+}
+
+// All three shapes are `frozen`, so `get()` hands back a reference without a
+// clone — unlike `extract`, which would copy the whole vertex list.
+pub(crate) fn extract_area_ref<'a>(area: &'a Bound<'_, PyAny>) -> PyResult<AreaRef<'a>> {
+    if let Ok(a) = area.cast::<Polygon>() {
+        return Ok(AreaRef::Polygon(&a.get().inner));
     }
-    if let Ok(a) = area.extract::<Rectangle>() {
-        return Ok(AreaKind::Rectangle(a.inner));
+    if let Ok(a) = area.cast::<Rectangle>() {
+        return Ok(AreaRef::Rectangle(&a.get().inner));
     }
-    if let Ok(a) = area.extract::<Ellipse>() {
-        return Ok(AreaKind::Ellipse(a.inner));
+    if let Ok(a) = area.cast::<Ellipse>() {
+        return Ok(AreaRef::Ellipse(&a.get().inner));
     }
     Err(PyTypeError::new_err(
         "expected a Polygon, Rectangle, or Ellipse",
@@ -413,11 +444,13 @@ pub(crate) fn extract_area(area: &Bound<'_, PyAny>) -> PyResult<AreaKind> {
 
 /// A `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple.
 pub(crate) fn extract_lat_lon(point: &Bound<'_, PyAny>) -> PyResult<sgp4_predict::LatLon> {
-    if let Ok(p) = point.extract::<LatLon>() {
-        return Ok(p.inner);
+    // `downcast` rather than `extract`: a miss here is the common case for the
+    // tuple form, and only `downcast` misses without building an exception.
+    if let Ok(p) = point.cast::<LatLon>() {
+        return Ok(p.get().inner);
     }
-    if let Ok(p) = point.extract::<Geodetic>() {
-        return Ok(p.inner.into());
+    if let Ok(p) = point.cast::<Geodetic>() {
+        return Ok(p.get().inner.into());
     }
     let (latitude_deg, longitude_deg) = point.extract::<(f64, f64)>().map_err(|_| {
         PyTypeError::new_err(

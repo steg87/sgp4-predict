@@ -156,6 +156,23 @@ A malformed area raises `ValueError` — fewer than three distinct vertices, a l
 `[-90, 90]`, a `nan` or infinite coordinate, a polygon larger than a hemisphere, an empty box, or
 ellipse semi-axes outside `0 < semi_minor_deg <= semi_major_deg < 90`.
 
+A window longer than `max_window_duration` — one hour by default — raises `RuntimeError` instead of
+being yielded, on the assumption that a window that long means the area is bigger than intended. A
+near-global area really is that big: a LEO satellite is inside `Rectangle.latitude_band(-90.0, 60.0)`
+for about 85 minutes of each 100-minute orbit, so raise the cap for one. The other knob is
+`min_step`, the lower bound of the adaptive coarse scan and so the shortest crossing the scan is
+guaranteed to see; lower it below the default second for an area the ground track crosses faster
+than that.
+
+```python
+band = Rectangle.latitude_band(-90.0, 60.0)
+predictor.aoi_iter(band, window, max_window_duration=timedelta(hours=2))
+predictor.detect_aoi(t, band, max_window_duration=timedelta(hours=2))
+```
+
+An area the ground track never leaves at all — a whole-Earth box, or a band wider than the orbit's
+inclination reaches — has no window end to find, so it raises whatever the cap is set to.
+
 `Polygon` edges are **great-circle arcs**, so vertices at the same latitude are not joined along the
 parallel — the arc bows toward the nearer pole, growing with the square of the edge's longitude span.
 The 7° box above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would

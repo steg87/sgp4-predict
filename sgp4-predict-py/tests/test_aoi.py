@@ -31,6 +31,16 @@ INTERVAL = Interval(START, END)
 # Wide enough to be overflown several times a day, so a single day suffices.
 EUROPE_CORNERS = [(40.0, -10.0), (40.0, 30.0), (65.0, 30.0), (65.0, -10.0)]
 
+# A five-pointed star on the equator, 10° across: every other vertex of a
+# pentagon, so the ring self-intersects and winds twice around the centre.
+PENTAGRAM = [
+    (10.00, 0.00),
+    (-8.09, -5.88),
+    (3.09, 9.51),
+    (3.09, -9.51),
+    (-8.09, 5.88),
+]
+
 
 def make_predictor() -> Predictor:
     return Predictor.from_tle(Tle(TLE_ID, TLE_L1, TLE_L2))
@@ -38,6 +48,10 @@ def make_predictor() -> Predictor:
 
 def europe_polygon() -> Polygon:
     return Polygon(EUROPE_CORNERS)
+
+
+# Big enough that a single window outlives the default one-hour cap.
+SOUTH_OF_60N = Rectangle.latitude_band(-90.0, 60.0)
 
 
 # ── LatLon / Geodetic ──────────────────────────────────────────────────────────
@@ -98,6 +112,22 @@ def test_polygon_fill_rule_defaults_to_non_zero():
     assert Polygon(EUROPE_CORNERS, FillRule.EvenOdd).fill_rule == FillRule.EvenOdd
 
 
+def test_polygon_fill_rule_changes_the_interior():
+    """The centre of a pentagram is wound twice: non-zero, but even.
+
+    The accessor above only round-trips the argument — this pins that
+    `with_fill_rule` is actually applied to the underlying shape.
+    """
+    non_zero = Polygon(PENTAGRAM, FillRule.NonZero)
+    even_odd = Polygon(PENTAGRAM, FillRule.EvenOdd)
+    assert non_zero.signed_angular_offset_deg((0.0, 0.0)) > 0.0
+    assert even_odd.signed_angular_offset_deg((0.0, 0.0)) < 0.0
+    # A single-wound spike is inside under either rule.
+    spike = (8.0, 0.0)
+    assert non_zero.signed_angular_offset_deg(spike) > 0.0
+    assert even_odd.signed_angular_offset_deg(spike) > 0.0
+
+
 def test_polygon_rejects_too_few_vertices():
     with pytest.raises(ValueError):
         Polygon([(0.0, 0.0), (1.0, 1.0)])
@@ -128,6 +158,19 @@ def test_rectangle_latitude_band_spans_every_longitude():
     assert abs(arctic.longitudes_deg[1] - 360.0) < 1e-12
     assert arctic.signed_angular_offset_deg((80.0, 120.0)) > 0.0
     assert arctic.signed_angular_offset_deg((60.0, 120.0)) < 0.0
+
+
+def test_rectangle_wraps_the_antimeridian():
+    """The box runs eastward from the south-west corner, so this one wraps."""
+    pacific = Rectangle((-20.0, 160.0), (20.0, -160.0))
+    west, span = pacific.longitudes_deg
+    assert abs(west - 160.0) < 1e-12
+    assert abs(span - 40.0) < 1e-12
+    assert pacific.signed_angular_offset_deg((0.0, 175.0)) > 0.0
+    assert pacific.signed_angular_offset_deg((0.0, -175.0)) > 0.0
+    # The other 320° of longitude is outside, not inside.
+    assert pacific.signed_angular_offset_deg((0.0, 0.0)) < 0.0
+    assert pacific.signed_angular_offset_deg((0.0, 150.0)) < 0.0
 
 
 def test_rectangle_rejects_empty_box():
@@ -204,12 +247,15 @@ def test_signed_angular_offset_accepts_every_point_form():
     assert inside > 0.0
     assert rect.signed_angular_offset_deg(LatLon(57.0, -4.5)) == inside
     assert rect.signed_angular_offset_deg(Geodetic(57.0, -4.5, 0.0)) == inside
+    # An area is a region on the ground: a Geodetic's altitude is ignored.
+    assert rect.signed_angular_offset_deg(Geodetic(57.0, -4.5, 500e3)) == inside
 
 
 def test_area_rejects_a_non_area():
     p = make_predictor()
+    # Raised eagerly by aoi_iter, not on the first next().
     with pytest.raises(TypeError):
-        list(p.aoi_iter("not-an-area", INTERVAL))
+        p.aoi_iter("not-an-area", INTERVAL)
 
 
 # ── Detection ──────────────────────────────────────────────────────────────────
@@ -321,6 +367,50 @@ def test_reversed_ring_gives_the_same_windows():
     for a, b in zip(forward, reverse):
         assert abs((a.start - b.start).total_seconds()) < 1e-6
         assert abs((a.end - b.end).total_seconds()) < 1e-6
+
+
+def test_near_global_area_needs_a_raised_max_window_duration():
+    """Everything south of 60°N: inside for ~85 of each 100-minute orbit.
+
+    That exceeds the default one-hour cap, so the iterator raises; the point of
+    the keyword argument is that Python can raise the cap and get windows.
+    """
+    p = make_predictor()
+    interval = Interval(START, START + timedelta(hours=6))
+
+    with pytest.raises(RuntimeError):
+        list(p.aoi_iter(SOUTH_OF_60N, interval))
+
+    windows = list(
+        p.aoi_iter(SOUTH_OF_60N, interval, max_window_duration=timedelta(hours=2))
+    )
+    assert len(windows) > 0
+    for w in windows:
+        assert w.duration_seconds > 3600.0
+
+
+def test_detect_aoi_max_window_duration_is_configurable():
+    p = make_predictor()
+    t = START + timedelta(hours=2)
+
+    with pytest.raises(RuntimeError):
+        p.detect_aoi(t, SOUTH_OF_60N)
+
+    window = p.detect_aoi(t, SOUTH_OF_60N, max_window_duration=timedelta(hours=2))
+    assert window is not None
+    assert window.start <= t <= window.end
+    assert window.duration_seconds > 3600.0
+
+
+def test_aoi_iter_accepts_a_sub_second_min_step():
+    p = make_predictor()
+    area = europe_polygon()
+    coarse = list(p.aoi_iter(area, INTERVAL))
+    fine = list(p.aoi_iter(area, INTERVAL, min_step=timedelta(milliseconds=100)))
+    assert len(fine) == len(coarse)
+    for a, b in zip(coarse, fine):
+        assert abs((a.start - b.start).total_seconds()) < 1.0
+        assert abs((a.end - b.end).total_seconds()) < 1.0
 
 
 def test_aoi_iter_over_an_area_never_overflown_is_empty():

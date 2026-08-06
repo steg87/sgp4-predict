@@ -5,7 +5,7 @@ use pyo3_stub_gen::derive::*;
 use sgp4_predict::Degrees;
 
 use crate::{
-    area::{AreaKind, Geodetic, extract_area},
+    area::{AreaKind, Geodetic, extract_area, extract_area_ref},
     elements::Elements,
     errors::to_py_err,
     observer::GroundObserver,
@@ -288,6 +288,19 @@ fn extract_interval(interval: &Bound<'_, PyAny>) -> PyResult<(DateTime<Utc>, Dat
     Ok((start, end))
 }
 
+/// The two fields the bindings expose; everything else keeps its library default.
+fn aoi_opts(
+    min_step: Option<Duration>,
+    max_window_duration: Option<Duration>,
+) -> sgp4_predict::AoiIterOpts {
+    let defaults = sgp4_predict::AoiIterOpts::default();
+    sgp4_predict::AoiIterOpts {
+        min_step: min_step.unwrap_or(defaults.min_step),
+        max_window_duration: max_window_duration.unwrap_or(defaults.max_window_duration),
+        ..defaults
+    }
+}
+
 // ── Predictor ──────────────────────────────────────────────────────────────────
 
 /// Parsed TLE with pre-computed SGP4 constants, ready for propagation.
@@ -439,13 +452,34 @@ impl Predictor {
     ///
     /// `area` is a `Polygon`, `Rectangle`, or `Ellipse`.
     /// `interval` must expose `.start` and `.end` datetime properties.
-    fn aoi_iter(&self, area: &Bound<'_, PyAny>, interval: &Bound<'_, PyAny>) -> PyResult<AoiIter> {
+    ///
+    /// `min_step` is the lower bound of the adaptive coarse-scan step, and also the
+    /// shortest crossing the scan is guaranteed to see; lower it below the default
+    /// second for an area the ground track can cross faster than that. Floored at
+    /// 1 ms.
+    ///
+    /// `max_window_duration` caps how long a single window may run; the default is
+    /// one hour. A window longer than the cap raises `RuntimeError`, so raise it for
+    /// a continental-scale area — a LEO satellite is inside something like
+    /// `Rectangle.latitude_band(-90.0, 60.0)` for most of each orbit.
+    #[pyo3(signature = (area, interval, *, min_step = None, max_window_duration = None))]
+    fn aoi_iter(
+        &self,
+        area: &Bound<'_, PyAny>,
+        interval: &Bound<'_, PyAny>,
+        min_step: Option<Duration>,
+        max_window_duration: Option<Duration>,
+    ) -> PyResult<AoiIter> {
         let (start, end) = extract_interval(interval)?;
+        let opts = aoi_opts(min_step, max_window_duration);
         let predictor = self.inner.clone();
+        let refinement = self.inner.refinement();
         Ok(AoiIter {
             inner: AoiIterOwnedBuilder {
                 area: extract_area(area)?,
-                iter_builder: move |area| predictor.aoi_iter(area, start..end),
+                iter_builder: move |area| {
+                    predictor.aoi_iter_with_opts(area, start..end, opts, refinement)
+                },
             }
             .build(),
         })
@@ -455,10 +489,19 @@ impl Predictor {
     ///
     /// Returns `None` if it is outside. Otherwise searches backward and forward to
     /// bracket the entry and exit crossings.
-    fn detect_aoi(&self, t: DateTime<Utc>, area: &Bound<'_, PyAny>) -> PyResult<Option<AoiWindow>> {
-        let area = extract_area(area)?;
+    ///
+    /// Raises `RuntimeError` if the window turns out to be longer than
+    /// `max_window_duration`, which defaults to one hour. See `aoi_iter`.
+    #[pyo3(signature = (t, area, *, max_window_duration = None))]
+    fn detect_aoi(
+        &self,
+        t: DateTime<Utc>,
+        area: &Bound<'_, PyAny>,
+        max_window_duration: Option<Duration>,
+    ) -> PyResult<Option<AoiWindow>> {
+        let area = extract_area_ref(area)?;
         self.inner
-            .detect_aoi(t, &area)
+            .detect_aoi_with_opts(t, &area, aoi_opts(None, max_window_duration))
             .map(|opt| {
                 opt.map(|w| AoiWindow {
                     start: w.start,
