@@ -1,6 +1,6 @@
 [package]
 name = "sgp4-predict-py"
-version = "0.1.0"       # never released; see docs/RELEASING.md
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"   # time/time-core floor, above the edition-2024 minimum
 publish = false          # ships to PyPI as `sgp4-predict`, never to crates.io
