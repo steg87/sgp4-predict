@@ -55,8 +55,12 @@ Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Trans
 
 ## Conventions
 
-- **Code comments**: keep terse. State the non-obvious fact, not the reasoning behind it or alternatives considered.
-- **User-facing docs** (READMEs, `docs/`, docstrings) are for someone picking the library up, not a record of how it got here. No "this used to be X", no rationale for rejected alternatives, no edge cases that only came up in review. Design rationale belongs in this file instead.
+- **Code comments**: terse, and only where the code is non-obvious. Explain *why* the code is the way it is — never how it used to be, why it changed, what was tried instead, or anything that reads as a transcript of the discussion that produced it. Describe what is there, in the present tense, as if it had always been that way.
+- **User-facing docs** (READMEs, `docs/`, docstrings) are for someone picking the library up, not a record of how it got here. Same rule: no history, no rejected alternatives, no edge cases that only came up in review. Design rationale belongs in this file instead.
+- **Standalone docs** (`docs/`, READMEs) have exactly two jobs: get a new user to their first working prediction, and take an existing user up to the advanced `generics` surface. They are not a feature tour and not an API reference — rustdoc and `examples/` are. Never enumerate a type's methods, a module's exports or an enum's variants: rustdoc already lists them, users find them without help, and the copy goes stale. If a concept is already explained in a docstring or demonstrated by an example, link to it rather than restating it.
+
+  **Every sentence must earn its place — if it does not, cut it.** Prefer a runnable snippet to prose describing one. No design decisions or rationale in the docs at all; that goes in this file. Edge cases go in a `//` comment at the code, or in the function's docstring when a caller could actually hit one — never in a standalone page.
+- **Tests**: cover every code path, not every option. One test per branch, error variant and early return; do not add a test per field, per builder knob or per combination of them. When adding a knob, exercise it only where it changes behaviour.
 - `sgp4-predict/README.md` is compiled as a doctest via the `Readme` struct in `lib.rs`, so its examples cannot drift. `cargo test --all-targets` does **not** run doctests — `make test` and `test.yml` run `cargo test --doc` as a separate step for exactly this reason.
 
 ## Repo infrastructure
