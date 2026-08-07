@@ -78,5 +78,4 @@ Three things to know before reading the code:
   [event-detection.md](event-detection.md).
 - `Transit`, `Illumination` and `AoiWindow` implement `IntervalRange`, as does
   `Range<DateTime<Utc>>`, so a discovered event can be handed straight back to `prediction_iter` or
-  `observation_iter` as the window to sample. They also implement `TimeWindow`, which supplies
-  `clamp` — narrowing a window while keeping its other fields.
+  `observation_iter` as the window to sample.

@@ -7,12 +7,8 @@ use crate::detect::MIN_POSITIVE_STEP;
 
 /// A half-open time interval `[start, end)`.
 ///
-/// Implemented for `Range<DateTime<Utc>>` and for [`Transit`] and
-/// [`Illumination`], so either can be passed directly to the prediction and
-/// observation iterators.
-///
-/// [`Transit`]: crate::Transit
-/// [`Illumination`]: crate::Illumination
+/// Anything that spans time can implement it, and any implementor can be
+/// passed directly to the prediction and observation iterators.
 pub trait IntervalRange {
     /// Inclusive start of the interval.
     fn start(&self) -> DateTime<Utc>;
@@ -119,12 +115,6 @@ pub trait TimeWindow: IntervalRange + Sized {
     fn clamp(&self, interval: &impl IntervalRange) -> Option<Self> {
         self.intersection(interval)
             .map(|r| self.with_bounds(r.start, r.end))
-    }
-}
-
-impl TimeWindow for Range<DateTime<Utc>> {
-    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
-        start..end
     }
 }
 

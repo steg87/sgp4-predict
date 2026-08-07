@@ -57,6 +57,11 @@ jobs:
           enable-cache: false
       - name: Build the docs a contributor gets
         run: cargo doc --all-features --no-deps
+      - name: Build the docs a user gets by default
+        # Every other job passes --all-features, so nothing else compiles the
+        # crate with `generics` off — where an intra-doc link to a gated item
+        # resolves to a private one and rustdoc rejects it.
+        run: cargo doc -p sgp4-predict --no-deps
       - name: Build the docs docs.rs gets
         # Only this step compiles the `cfg_attr(docsrs, ...)` block, because
         # only this one passes --cfg docsrs — and docs.rs builds on nightly, so

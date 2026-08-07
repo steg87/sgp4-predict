@@ -64,7 +64,12 @@ use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 use thiserror::Error as ThisError;
 
-use crate::{Result, roots::Refinement, time, time::IntervalRange};
+use crate::{
+    Result,
+    roots::Refinement,
+    time,
+    time::{IntervalRange, TimeWindow},
+};
 
 /// One evaluation of an [`EventFunction`].
 #[derive(Debug, Clone, Copy)]
@@ -548,7 +553,7 @@ impl IntervalRange for Window {
     }
 }
 
-impl time::TimeWindow for Window {
+impl TimeWindow for Window {
     fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self {
             start,
