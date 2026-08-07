@@ -57,28 +57,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## What else `Predictor` can do
-
-| Method | Yields |
-|---|---|
-| `propagate(t)` | TEME state vector at an instant |
-| `observe_at(t, observer)` | azimuth / elevation / range / range rate |
-| `sub_point(t)` | the geodetic point directly beneath the satellite |
-| `prediction_iter(interval, step)` | state vectors at a fixed cadence |
-| `observation_iter(observer, interval, step)` | observations at a fixed cadence |
-| `ground_track_iter(interval, step)` | sub-satellite points at a fixed cadence |
-| `transits_iter(observer, interval, min_elevation)` | passes above a minimum elevation |
-| `detect_transit(t, observer, min_elevation)` | the pass in progress at `t`, if any |
-| `max_elevation(interval, observer)` | the peak-elevation moment of a pass |
-| `aoi_iter(area, interval)` | windows with the ground track inside an area |
-| `detect_aoi(t, area)` | the area window in progress at `t`, if any |
-| `apsis_iter(interval)` | apogee and perigee events |
-| `illumination_iter(interval)` | sunlit and eclipse windows |
-| `illumination_state(t)` | sunlit or in eclipse at an instant |
-| `tle_age(now)` | how stale the elements are |
-
-Each detection method has a `_with_opts` sibling taking scan steps and other tuning knobs, and
-`Predictor::with_refinement` configures the root finder that pins down event times.
+`Predictor` also finds apsides (`apsis_iter`), sunlit and eclipse windows (`illumination_iter`) and
+area-of-interest overpasses (`aoi_iter`), and answers point queries such as `propagate`,
+`observe_at` and `sub_point`. Each detection method has a `_with_opts` sibling taking scan steps and
+other tuning knobs, and `Predictor::with_refinement` configures the root finder that pins down event
+times. See the [`Predictor` docs](https://docs.rs/sgp4-predict/latest/sgp4_predict/struct.Predictor.html).
 
 ## Areas of interest
 
@@ -113,13 +96,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Edges are **great-circle arcs**, so vertices at the same latitude are not joined along the parallel —
-the arc bows toward the nearer pole, growing with the square of the edge's longitude span. The 7° box
-above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would reach
-roughly 68°N, so densify edges that long. Since the bow is always toward the *nearer* pole, both
-horizontal edges of a box shift the same way: the region ends up displaced poleward, not merely
-enlarged. A polygon must also fit inside a hemisphere; this permits polar caps, equator-spanning and
-antimeridian-spanning areas, but not a region larger than half the globe.
+Edges are **great-circle arcs**, so two vertices at the same latitude are not joined along the
+parallel: the arc bows toward the nearer pole, by about 0.05° for the 7° box above and roughly 8°
+for vertices a quarter of the globe apart. Densify edges that long. A polygon must also fit inside a
+hemisphere — polar caps, equator-spanning and antimeridian-spanning areas are all fine, a region
+larger than half the globe is not.
 
 When the region really is "these latitudes by these longitudes", use `Rectangle` instead — its north
 and south edges follow their parallels exactly, it has no hemisphere restriction, and it wraps across
@@ -167,7 +148,8 @@ let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?
 # }
 ```
 
-Implement `Area` on your own type for other shapes.
+Implement `Area` on your own type for other shapes; the docs for the trait give the contract its
+`signed_angular_offset` must satisfy.
 
 ## Bring your own types
 

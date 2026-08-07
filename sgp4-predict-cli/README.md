@@ -61,8 +61,7 @@ Error: unknown ground station 'glasgo'; known ids: glasgow, svalbard
 
 `--config <path>` selects a file; otherwise `~/.sgp4-predict/config.yaml` is used
 (`%USERPROFILE%\.sgp4-predict\config.yaml` on Windows). The default path is created and seeded with
-an example station on first run. A `--config` path that does not exist is an error, so a typo
-cannot quietly succeed against an empty config.
+an example station on first run; a `--config` path that does not exist is an error.
 
 ```yaml
 groundstations:
@@ -87,15 +86,8 @@ Unrecognised fields are rejected, so typos surface as errors.
 
 ### Managing stations
 
-Edit the file by hand, or use `sgp4-predict gs`. All three operate on `--config`, or the default
-path when it is omitted.
-
-| Command                         | Description                             |
-|---------------------------------|-----------------------------------------|
-| `gs add [id]`                   | Add a station, prompting for each field |
-| `gs add [id] --force`           | Replace an existing station             |
-| `gs list` (`gs ls`)             | List the configured stations            |
-| `gs remove <id>` (`gs rm <id>`) | Remove a station, after confirmation    |
+Edit the file by hand, or use `sgp4-predict gs add|list|remove`. All three operate on `--config`, or
+the default path when it is omitted.
 
 ```
 $ sgp4-predict gs add
@@ -161,9 +153,8 @@ aois:
 
 **Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
 
-A box is given by its four bounds, the same two corners the library's `Rectangle` takes. Its north
-and south edges follow their parallels exactly. It runs **eastward** from `west`, so an `east` at a
-smaller longitude wraps across the antimeridian rather than being an error:
+A box's north and south edges follow their parallels exactly. It runs **eastward** from `west`, so
+an `east` at a smaller longitude wraps across the antimeridian rather than being an error:
 
 ```yaml
   pacific:              # 160°E round to 160°W, across the dateline
@@ -174,15 +165,13 @@ smaller longitude wraps across the antimeridian rather than being an error:
     east: -160.0
 ```
 
-Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — four
-vertices at 60°N bulge to roughly 68°N between them. Use `box` when the region really is a
-latitude/longitude box.
+Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — over
+a wide span they bow toward the nearer pole. Use `box` when the region really is a latitude/longitude
+box.
 
-An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the length of
-the *longer* axis and `semi_minor` half the *shorter* — they must satisfy
-`0 < semi_minor <= semi_major < 90` — and `bearing` is what points them, turning the major axis
-clockwise from north. So `bearing: 0` (the default) runs the long axis north–south, and `bearing: 90`
-runs it east–west:
+An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the *longer*
+axis and `semi_minor` half the *shorter* (`0 < semi_minor <= semi_major < 90`), and `bearing` turns
+the major axis clockwise from north — `bearing: 0` runs it north–south, `bearing: 90` east–west:
 
 ```yaml
   tall:                 # 10 degrees north-south by 2 east-west
@@ -202,14 +191,7 @@ runs it east–west:
 
 ### Managing AOIs
 
-Edit the file by hand, or use `sgp4-predict aoi`.
-
-| Command                                   | Description                          |
-|-------------------------------------------|--------------------------------------|
-| `aoi add [id] [--shape S]`                | Add an AOI, prompting for its coordinates |
-| `aoi add [id] --force`                    | Replace an existing AOI              |
-| `aoi list` (`aoi ls`)                     | List the configured AOIs             |
-| `aoi remove <id>` (`aoi rm <id>`)         | Remove an AOI, after confirmation    |
+Edit the file by hand, or use `sgp4-predict aoi add|list|remove`, which mirrors `gs`.
 
 `aoi add` prompts field by field, like `gs add`. The underlined initial is accepted on its own, so
 the shape can be picked with a single key:
@@ -239,10 +221,9 @@ Vertex 4 lat,lon (degrees):
 added aoi 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
 ```
 
-A line that does not parse is reported and asked for again, so a typo costs one line rather than
-everything entered before it. The same is true of a blank line before the third vertex, of a
-latitude past a pole, and of a bound that contradicts one already given — a `north` below the
-`south`, or a semi-minor axis above the semi-major.
+Any prompt that is answered with a bad value is asked again rather than aborting — a line that does
+not parse, a blank line before the third vertex, a latitude past a pole, or a bound that contradicts
+one already given, such as a `north` below the `south`.
 
 The id and the shape may be given as arguments, in which case they are echoed as though they had been
 typed and only the coordinates are asked for:
@@ -253,15 +234,7 @@ sgp4-predict aoi add scotland --shape box
 ```
 
 **Coordinates are never taken as arguments.** As with `gs add`, an AOI is either entered at the
-prompts or written into the config file by hand — a positional coordinate syntax would be both
-verbose and easy to get the wrong way round. Adding over an existing id needs `-f` / `--force`.
-
-`gs add` takes its id the same way, and `-f` / `--force` replaces an existing station:
-
-```sh
-sgp4-predict gs add glasgow
-sgp4-predict gs add glasgow --force
-```
+prompts or written into the config file by hand.
 
 `aoi list` honours `--format` and shows each AOI by its config field names:
 
@@ -379,15 +352,10 @@ entry                    exit                     entry_lat [deg] entry_lon [deg
 
 ## Output
 
-| Flag                          | Description                                                       |
-|-------------------------------|-------------------------------------------------------------------|
-| `--format <text\|json\|csv>`  | Output format (default: `text`)                                   |
-| `-o <path>` / `--out <path>`  | Write to a file instead of stdout                                 |
-| `--output-args`               | Prepend the resolved inputs as `# key: value` lines (`text` only) |
-
-Every subcommand supports all three formats with the same columns. `text` is fixed-width with a
-header; `json` is newline-delimited, one object per row, so it streams into `jq`; `csv` is RFC 4180
-with a header row and the same field names as JSON.
+`--format` selects `text`, `json` or `csv`; `-o` / `--out` writes to a file instead of stdout. Every
+subcommand supports all three formats with the same columns. `text` is fixed-width with a header;
+`json` is newline-delimited, one object per row, so it streams into `jq`; `csv` is RFC 4180 with a
+header row and the same field names as JSON.
 
 ```sh
 sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
@@ -424,21 +392,14 @@ sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
 ```
 
 Every line names the flag that sets it, so a recorded run can be replayed by pasting its own header
-back onto the command line.
-
-It is rejected with `--format json` or `--format csv`, since `#` lines would make that output
-unparseable.
+back onto the command line. It is rejected with `--format json` or `--format csv`, where `#` lines
+would make the output unparseable.
 
 ## Logging
 
-Warnings and prompts go to stderr, so they never mix into piped output.
-
-| Flag                  | Effect               |
-|-----------------------|----------------------|
-| `-q` / `--quiet`      | Errors only          |
-| `-v` / `-vv` / `-vvv` | info / debug / trace |
-
-`RUST_LOG` overrides both if set.
+Warnings and prompts go to stderr, so they never mix into piped output. `-q` silences everything but
+errors, `-v` / `-vv` / `-vvv` raise the level to info / debug / trace, and `RUST_LOG` overrides both
+if set.
 
 ## Completions and man page
 

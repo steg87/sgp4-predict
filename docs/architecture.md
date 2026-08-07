@@ -71,26 +71,11 @@ flowchart LR
 (`propagate`, `observe_at`) returning a single value for an instant, and **iterators** that lazily
 scan a time window and yield events or samples.
 
-## Design notes
+Three things to know before reading the code:
 
-**Frames are checked at compile time.** `StateVector<Teme>` and `StateVector<Ecef>` are distinct
-types and conversions exist only in the valid direction, so a skipped or reordered conversion is a
-compile error rather than a plausible-looking wrong number. See
-[coordinate-frames.md](coordinate-frames.md).
-
-**SI units throughout.** `sgp4` returns kilometres and km/s; the `From<sgp4::Prediction>` impl in
-`predict.rs` converts once, at the boundary. Nothing downstream does unit bookkeeping.
-
-**Detection is one generic layer.** Transits, apsides, illumination, and areas of interest share
-a single skeleton —
-step through time, evaluate a scalar function, watch for a sign change, refine the crossing — which
-lives in `detect.rs`. The four built-in iterators are thin wrappers, and the `generics` feature
-exposes the same building blocks for detecting other event kinds. See
-[event-detection.md](event-detection.md).
-
-**Events are iterators.** Detection is lazy, composes with the standard iterator adaptors, and lets
-a caller looking for the next pass stop as soon as it finds one.
-
-**Events are intervals.** `Transit`, `Illumination`, and `AoiWindow` implement `IntervalRange`, as does
-`Range<DateTime<Utc>>`, so a discovered event can be handed straight back to `prediction_iter` or
-`observation_iter` as the window to sample.
+- Frames are checked at compile time — see [coordinate-frames.md](coordinate-frames.md).
+- Every detection iterator is a thin wrapper over one generic layer in `detect.rs` — see
+  [event-detection.md](event-detection.md).
+- `Transit`, `Illumination` and `AoiWindow` implement `IntervalRange`, as does
+  `Range<DateTime<Utc>>`, so a discovered event can be handed straight back to `prediction_iter` or
+  `observation_iter` as the window to sample.
