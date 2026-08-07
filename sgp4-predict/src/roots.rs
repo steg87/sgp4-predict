@@ -34,7 +34,7 @@ use thiserror::Error as ThisError;
 ///
 /// [`detect_transit`]: crate::Predictor::detect_transit
 /// [`max_elevation`]: crate::Predictor::max_elevation
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Refinement {
     /// Convergence threshold on the bracket width, in seconds: iteration
     /// stops once the crossing is pinned down to within this duration.
@@ -151,7 +151,7 @@ impl Refinement {
 }
 
 /// Errors returned by the root-finding algorithms.
-#[derive(Debug, ThisError)]
+#[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
     #[error("failed to converge after {iterations} iterations")]

@@ -11,7 +11,7 @@ use thiserror::Error as ThisError;
 use crate::{TleRecord, angle::Degrees, observe::Observer};
 
 /// Error returned when a [`Tle`] cannot be parsed from a string.
-#[derive(Debug, ThisError)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, ThisError)]
 #[error("invalid TLE: {0}")]
 pub struct TleParseError(pub(crate) String);
 
@@ -35,7 +35,7 @@ pub struct TleParseError(pub(crate) String);
 ///     .parse()
 ///     .unwrap();
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tle {
     /// Satellite name or NORAD catalog number string.
     pub satellite_name: String,
@@ -138,7 +138,7 @@ impl FromStr for Tle {
 /// // London, ~20 m ASL
 /// let london = GroundObserver::new(Degrees(51.5074), Degrees(-0.1278), 20.0);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GroundObserver {
     /// Geodetic latitude (positive north).
     latitude: Degrees,

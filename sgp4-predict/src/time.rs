@@ -105,17 +105,17 @@ pub trait TimeWindow: IntervalRange + Sized {
     /// let window = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
     ///
-    /// let clamped = transit.clamp(&window).unwrap();
+    /// let clamped = transit.clamp_to(&window).unwrap();
     /// assert_eq!(clamped.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
     /// assert_eq!(clamped.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
     ///
     /// // Fully outside returns None.
     /// let disjoint = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
-    /// assert!(transit.clamp(&disjoint).is_none());
+    /// assert!(transit.clamp_to(&disjoint).is_none());
     /// ```
     #[must_use = "returns the clamped copy; the receiver is unchanged"]
-    fn clamp(&self, interval: &impl IntervalRange) -> Option<Self> {
+    fn clamp_to(&self, interval: &impl IntervalRange) -> Option<Self> {
         self.intersection(interval)
             .map(|r| self.with_bounds(r.start, r.end))
     }
@@ -131,6 +131,7 @@ pub trait TimeWindow: IntervalRange + Sized {
 /// advance and would iterate forever. Any positive step is used as given —
 /// this is a sampling iterator, so sub-second steps are meaningful here even
 /// though they are not for the coarse detection scans.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
@@ -217,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_clamp_preserves_payload_fields() {
-        // The blanket clamp rebuilds via with_bounds, so fields other than the
+        // The blanket clamp_to rebuilds via with_bounds, so fields other than the
         // bounds must survive it.
         use crate::{Illumination, IlluminationState};
 
@@ -229,7 +230,7 @@ mod tests {
         };
 
         let clamped = window
-            .clamp(&(start + Duration::minutes(30)..start + Duration::hours(2)))
+            .clamp_to(&(start + Duration::minutes(30)..start + Duration::hours(2)))
             .unwrap();
         assert_eq!(clamped.start, start + Duration::minutes(30));
         assert_eq!(clamped.end, start + Duration::hours(1));
@@ -237,7 +238,7 @@ mod tests {
 
         assert!(
             window
-                .clamp(&(start + Duration::hours(3)..start + Duration::hours(4)))
+                .clamp_to(&(start + Duration::hours(3)..start + Duration::hours(4)))
                 .is_none()
         );
     }

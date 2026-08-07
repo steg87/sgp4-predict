@@ -23,6 +23,7 @@ use crate::{
 /// converging once the crossing is pinned down to `time_tolerance` seconds.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct Refinement {
     pub(crate) inner: sgp4_predict::Refinement,
 }
@@ -63,6 +64,7 @@ impl Refinement {
 /// Lazy iterator yielding `(datetime, StateVectorTeme)` at regular intervals.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
 pub struct PredictionIter {
     inner: sgp4_predict::PredictionIter,
 }
@@ -88,6 +90,7 @@ impl PredictionIter {
 /// Lazy iterator yielding `(datetime, Geodetic)` sub-satellite points at regular intervals.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
 pub struct GroundTrackIter {
     inner: sgp4_predict::GroundTrackIter,
 }
@@ -113,6 +116,7 @@ impl GroundTrackIter {
 /// Lazy iterator yielding apogee and perigee events within a time interval.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
 pub struct ApsisIter {
     inner: sgp4_predict::ApsisIter,
 }
@@ -145,6 +149,7 @@ impl ApsisIter {
 /// Lazy iterator yielding sunlit and eclipse windows within a time interval.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
 pub struct IlluminationIter {
     inner: sgp4_predict::IlluminationIter,
 }
@@ -309,6 +314,7 @@ fn aoi_opts(
 /// compute ground observations, detect passes, find apsides, and query illumination.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
 pub struct Predictor {
     inner: sgp4_predict::Predictor,
 }

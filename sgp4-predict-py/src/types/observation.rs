@@ -7,6 +7,7 @@ use pyo3_stub_gen::derive::*;
 /// Range is in metres, range rate in m/s (positive = receding).
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct Observation {
     pub azimuth: f64,
     pub elevation: f64,

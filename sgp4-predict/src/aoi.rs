@@ -95,7 +95,7 @@ impl<A: Area + ?Sized> Area for &A {
 }
 
 /// How the interior of a self-intersecting [`Polygon`] is determined.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum FillRule {
     /// Inside wherever the winding number is non-zero. A ring that crosses
     /// itself stays filled.
@@ -135,7 +135,7 @@ pub enum FillRule {
 /// ])?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Polygon {
     /// Vertices as unit vectors, deduplicated, ring closing implicitly.
     verts: Vec<[f64; 3]>,
@@ -337,7 +337,7 @@ impl Area for Polygon {
 /// let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rectangle {
     south: f64,
     north: f64,
@@ -348,13 +348,13 @@ pub struct Rectangle {
     sides: Option<Sides>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct Sides {
     corners: [[f64; 3]; 4],
     meridians: [Meridian; 2],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Meridian {
     /// Normal of the meridian's great-circle plane.
     normal: [f64; 3],
@@ -548,7 +548,7 @@ impl Area for Rectangle {
 /// let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Ellipse {
     centre: [f64; 3],
     /// Both equal to `centre` when the ellipse is a circle.
@@ -690,8 +690,8 @@ impl Area for Ellipse {
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific
 /// overpass, and [`TimeWindow`](crate::TimeWindow) for
-/// [`clamp`](crate::TimeWindow::clamp).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// [`clamp_to`](crate::TimeWindow::clamp_to).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AoiWindow {
     /// When the ground track crosses into the area.
     pub start: DateTime<Utc>,
@@ -727,6 +727,7 @@ impl time::TimeWindow for AoiWindow {
 /// No rate is supplied: the offset is not differentiable across the medial
 /// axis or a vertex bisector, which is exactly the geometry that matters here,
 /// and the bracketed solver converges on the time bracket regardless.
+#[derive(Debug, Clone)]
 pub(crate) struct GroundTrackInside<'a, A: Area> {
     predictor: Predictor,
     area: &'a A,
@@ -755,7 +756,7 @@ impl<'a, A: Area> EventFunction for GroundTrackInside<'a, A> {
 /// The `min` floor is the one exception, and the reason it exists: without it
 /// the step collapses to zero at the boundary and the scan stalls. A chord the
 /// ground track traverses in less than `min` can still be missed.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ProximityStep {
     min: Duration,
     max: Duration,
@@ -812,7 +813,7 @@ fn max_sub_point_rate(elements: &Elements) -> f64 {
 ///
 /// Pass a customised value to
 /// [`Predictor::aoi_iter_with_opts`](crate::Predictor::aoi_iter_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AoiIterOpts {
     /// Lower bound of the adaptive coarse-scan step. Also the shortest
     /// crossing the scan is guaranteed to see, so lower it for an area the
@@ -871,6 +872,7 @@ fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
 /// inside an area.
 ///
 /// Created by [`Predictor::aoi_iter`](crate::Predictor::aoi_iter).
+#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct AoiIter<'a, A: Area> {
     inner: WindowIter<GroundTrackInside<'a, A>, ProximityStep>,
@@ -1012,7 +1014,7 @@ impl Predictor {
 }
 
 /// Errors from constructing an [`Area`].
-#[derive(Debug, ThisError)]
+#[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
     #[error("polygon needs at least 3 distinct vertices, got {0}")]

@@ -38,8 +38,8 @@ use crate::{
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific pass,
 /// and [`TimeWindow`](crate::TimeWindow) for
-/// [`clamp`](crate::TimeWindow::clamp).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// [`clamp_to`](crate::TimeWindow::clamp_to).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Transit {
     /// Acquisition of Signal: when the satellite rises above `min_elevation`.
     pub start: DateTime<Utc>,
@@ -71,6 +71,7 @@ impl time::TimeWindow for Transit {
 /// Event function: the satellite's elevation above `min_elevation`, with its
 /// rate of change as the derivative (enabling Newton-Raphson refinement and
 /// adaptive stepping).
+#[derive(Debug, Clone)]
 pub(crate) struct ElevationAboveMin<'a, O: Observer> {
     predictor: Predictor,
     observer: &'a O,
@@ -97,7 +98,7 @@ impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
 ///
 /// Pass a customised value to
 /// [`Predictor::transits_iter_with_opts`](crate::Predictor::transits_iter_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TransitIterOpts {
     /// Lower bound of the adaptive coarse-scan step (`ThresholdStep::min`).
     pub min_step: Duration,
@@ -138,7 +139,7 @@ impl Default for TransitIterOpts {
 ///
 /// Pass a customised value to
 /// [`Predictor::max_elevation_with_opts`](crate::Predictor::max_elevation_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaxElevationOpts {
     /// Fixed step used to scan for elevation-rate zero crossings.
     pub scan_step: Duration,
@@ -155,6 +156,7 @@ impl Default for MaxElevationOpts {
 /// Iterator over satellite passes visible to an observer within a time interval.
 ///
 /// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
+#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct TransitIter<'a, O: Observer> {
     inner: WindowIter<ElevationAboveMin<'a, O>, ThresholdStep>,

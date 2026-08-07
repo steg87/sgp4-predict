@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 /// Backing 3-component vector type, parameterised by kind `K` and frame `F`.
 ///
 /// Not used directly; prefer the [`Position`] and [`Velocity`] type aliases.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Vec3<K, F> {
     /// X component.
     pub x: f64,
@@ -54,7 +54,7 @@ impl<K, F> std::ops::Sub for Vec3<K, F> {
 /// [`TemeState`]: crate::TemeState
 /// [`EcefState`]: crate::EcefState
 /// [`EnuState`]: crate::EnuState
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct StateVector<F> {
     pub position: Position<F>,
     pub velocity: Velocity<F>,
@@ -83,10 +83,10 @@ pub type Position<F> = Vec3<markers::Position, F>;
 pub type Velocity<F> = Vec3<markers::Velocity, F>;
 
 mod markers {
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Position;
 
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Velocity;
 }
 

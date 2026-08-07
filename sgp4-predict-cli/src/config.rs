@@ -13,7 +13,7 @@ use std::{
 const CONFIG_DIR: &str = ".sgp4-predict";
 const CONFIG_FILE: &str = "config.yaml";
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Ground stations keyed by the id passed to `--gs`.
@@ -45,7 +45,7 @@ pub struct Config {
 ///
 /// This is the *stored* form. [`AoiDef::build`] turns it into the library
 /// shape, which is where the geometry is validated.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "shape", rename_all = "lowercase")]
 pub enum AoiDef {
     /// A latitude/longitude box, given by its bounds.
@@ -56,7 +56,7 @@ pub enum AoiDef {
     Polygon(PolygonDef),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BoxDef {
     /// Southern latitude bound in degrees.
@@ -70,7 +70,7 @@ pub struct BoxDef {
     pub east: f64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EllipseDef {
     /// Centre latitude in degrees.
@@ -86,7 +86,7 @@ pub struct EllipseDef {
     pub bearing: f64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CircleDef {
     /// Centre latitude in degrees.
@@ -99,26 +99,26 @@ pub struct CircleDef {
 
 /// Wraps the vertex list in a struct because an internally tagged enum cannot
 /// carry a bare sequence — the tag has nowhere to live.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolygonDef {
     pub vertices: Vec<Vertex>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Vertex {
     pub latitude: f64,
     pub longitude: f64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GroundStation {
     pub location: Location,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Location {
     pub latitude: f64,
@@ -226,7 +226,7 @@ const SAVED_HEADER: &str = "\
 ";
 
 /// Whether a `gs` subcommand may create the config it was pointed at.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Missing {
     /// `gs add` — a missing file is the empty starting point to write to.
     Create,

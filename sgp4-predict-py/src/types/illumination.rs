@@ -23,7 +23,7 @@ pub enum IlluminationState {
 /// A contiguous window of constant illumination state.
 #[gen_stub_pyclass]
 #[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Illumination {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,

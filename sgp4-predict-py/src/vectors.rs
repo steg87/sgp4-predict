@@ -9,6 +9,7 @@ use crate::types::Observation;
 /// A 3-component vector (x, y, z).  Used for position (metres) and velocity (m/s).
 #[gen_stub_pyclass]
 #[pyclass(frozen, name = "Vec3", module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct PyVec3 {
     #[pyo3(get)]
     pub x: f64,
@@ -35,6 +36,7 @@ impl PyVec3 {
 /// Positions in metres, velocities in m/s.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct StateVectorTeme {
     pub(crate) inner: TemeState,
 }
@@ -80,6 +82,7 @@ impl StateVectorTeme {
 /// Positions in metres, velocities in m/s.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct StateVectorEcef {
     pub(crate) inner: EcefState,
 }
@@ -119,6 +122,7 @@ impl StateVectorEcef {
 /// Positions in metres, velocities in m/s.
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct StateVectorEnu {
     pub(crate) inner: EnuState,
 }

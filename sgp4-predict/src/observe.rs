@@ -40,7 +40,7 @@ impl<T: Observer> ObserverExt for T {}
 /// Range is in **metres**, range rate in **metres per second**. Use
 /// `.to_degrees()` on [`azimuth`](Observation::azimuth) or
 /// [`elevation`](Observation::elevation) for degree equivalents.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Observation {
     /// Azimuth from north, measured clockwise, in `(-π, π]`. Call
     /// [`normalized`](Radians::normalized) for the `[0, 2π)` convention.
@@ -56,6 +56,7 @@ pub struct Observation {
 /// Iterator over time-stamped [`Observation`]s at regular intervals.
 ///
 /// Created by [`Predictor::observation_iter`](crate::Predictor::observation_iter).
+#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ObservationIter<'a, O: Observer> {
     predict_iter: PredictionIter,

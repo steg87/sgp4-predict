@@ -25,8 +25,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - `Geodetic` and `LatLon` types, `EcefState::to_geodetic`, and `Predictor::sub_point` — the geodetic
   point directly beneath the satellite.
 - `Predictor::ground_track_iter`, sampling sub-satellite points at a fixed cadence.
+- The common derives across the public API: every type implements `Debug`, and `Clone`, `Copy`,
+  `Default`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash` are derived wherever the fields
+  support them. `Transit`, `AoiWindow`, `Illumination` and `Window` are `Ord`, so they sort and
+  serve as `BTreeMap`/`BTreeSet` keys; types holding an `f64` are `PartialOrd` at most.
 - `TimeWindow`, a trait over the concrete window types (`Transit`, `AoiWindow`, `Illumination`
-  and `Window`). Implementing `with_bounds` supplies `clamp`, so
+  and `Window`). Implementing `with_bounds` supplies `clamp_to`, so
   `Illumination` and `Window` gain it and it is written once rather than per type.
 
 ### Changed
@@ -37,8 +41,9 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   working.
 - Every iterator and builder type is `#[must_use]`. Dropping the result of a `*_iter` call, or of a
   builder chain that never reaches `.build()`, now warns instead of silently doing nothing.
-- `Transit::clamp` and `AoiWindow::clamp` moved from inherent methods to the `TimeWindow` trait;
-  callers now need `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged.
+- `Transit::clamp` and `AoiWindow::clamp` became `TimeWindow::clamp_to`; callers now need
+  `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged. The name avoids
+  `Ord::clamp`, which takes precedence in method resolution and would shadow it.
 - `DetectError::WindowTooLong` renders its limit as a humantime span (`1h`) rather than chrono's
   ISO-8601 `Display` (`PT3600S`), so the message names the value in the spelling callers pass back
   in. This promotes `humantime` from a dev-dependency to a dependency.

@@ -12,7 +12,7 @@ use sgp4_predict::{Degrees, Observer};
     from_py_object,
     module = "sgp4_predict._sgp4_predict"
 )]
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GroundObserver {
     latitude_deg: f64,
     longitude_deg: f64,

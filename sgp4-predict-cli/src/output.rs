@@ -16,6 +16,7 @@ use crate::cli::Format;
 
 /// A single output cell. Text and CSV render it as-is; JSON needs to know
 /// whether to quote it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Cell {
     Str(String),
     Num(String),
@@ -59,6 +60,7 @@ fn duration(start: DateTime<Utc>, end: DateTime<Utc>) -> Cell {
 
 /// A column: its header, its width in text mode, and whether text mode
 /// right-aligns it. JSON uses `key` for the field name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Column {
     header: &'static str,
     key: &'static str,
@@ -85,6 +87,7 @@ const fn right(header: &'static str, key: &'static str, width: usize) -> Column 
 }
 
 /// Writes rows in the selected format, emitting any header on the first row.
+#[derive(Debug)]
 struct RowWriter<'a, W: Write> {
     w: W,
     format: Format,
