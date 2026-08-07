@@ -80,6 +80,7 @@ impl EventFunction for RadialVelocity {
 /// Created by [`Predictor::apsis_iter`](crate::Predictor::apsis_iter).
 /// Scans in fixed steps (60 seconds by default) and refines each crossing
 /// with the bracketed hybrid solver.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ApsisIter {
     predictor: Predictor,
     inner: EventIter<RadialVelocity, FixedStep>,

@@ -13,5 +13,8 @@ pub fn to_py_err(e: Error) -> PyErr {
         Error::Sgp4(_) | Error::Roots(_) | Error::Detect(_) | Error::Custom(_) => {
             PyRuntimeError::new_err(e.to_string())
         }
+        // `Error` is `#[non_exhaustive]`; an unknown future variant is likelier
+        // a runtime failure than bad input.
+        _ => PyRuntimeError::new_err(e.to_string()),
     }
 }

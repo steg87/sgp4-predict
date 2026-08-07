@@ -33,6 +33,7 @@ impl Degrees {
     }
 
     /// Normalize into `[0, 360)`.
+    #[must_use = "returns the normalized angle; the receiver is unchanged"]
     pub fn normalized(self) -> Self {
         Self(self.0.rem_euclid(360.0))
     }
@@ -60,6 +61,7 @@ impl Radians {
     }
 
     /// Normalize into `[0, 2π)`.
+    #[must_use = "returns the normalized angle; the receiver is unchanged"]
     pub fn normalized(self) -> Self {
         Self(self.0.rem_euclid(std::f64::consts::TAU))
     }

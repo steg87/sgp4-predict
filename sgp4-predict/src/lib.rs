@@ -230,6 +230,7 @@ impl Predictor {
     ///
     /// [`detect_transit`]: Predictor::detect_transit
     /// [`max_elevation`]: Predictor::max_elevation
+    #[must_use = "returns a reconfigured Predictor; the receiver is unchanged"]
     pub fn with_refinement(mut self, refinement: Refinement) -> Self {
         self.refinement = refinement;
         self
@@ -279,6 +280,7 @@ impl Predictor {
 
 /// Errors returned by this crate.
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     #[error("TLE format error: {0}")]
     TleFormat(#[from] TleParseError),

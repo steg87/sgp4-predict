@@ -232,6 +232,8 @@ enum Phase {
 /// sample lands on `interval.start()`), stops scanning once that time leaves
 /// the interval, then drains [`Detector::finish`]. Errors are yielded as
 /// items and iteration continues from the following sample.
+// Also covers the `EventIter` and `WindowIter` aliases.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DetectIter<D> {
     detector: D,
     interval: Range<DateTime<Utc>>,
@@ -788,6 +790,7 @@ fn missing_interval(kind: &str) -> crate::Error {
 }
 
 /// Builder for [`EventIter`]. Obtain via [`EventIter::builder`].
+#[must_use = "a builder does nothing until `.build()` is called"]
 pub struct EventIterBuilder<F = Missing, S = FixedStep> {
     interval: Option<Range<DateTime<Utc>>>,
     function: F,
@@ -887,6 +890,7 @@ const DEFAULT_MAX_WINDOW_DURATION: Duration = Duration::hours(1);
 pub(crate) const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
 
 /// Builder for [`WindowIter`]. Obtain via [`WindowIter::builder`].
+#[must_use = "a builder does nothing until `.build()` is called"]
 pub struct WindowIterBuilder<F = Missing, S = FixedStep> {
     interval: Option<Range<DateTime<Utc>>>,
     function: F,
@@ -1063,6 +1067,7 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
 
 /// Errors that can occur during generic event detection.
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     #[error(
         "window too long: the positive window containing {at} exceeds the \

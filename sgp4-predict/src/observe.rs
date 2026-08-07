@@ -56,6 +56,7 @@ pub struct Observation {
 /// Iterator over time-stamped [`Observation`]s at regular intervals.
 ///
 /// Created by [`Predictor::observation_iter`](crate::Predictor::observation_iter).
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ObservationIter<'a, O: Observer> {
     predict_iter: PredictionIter,
     observer: &'a O,
