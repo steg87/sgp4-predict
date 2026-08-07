@@ -49,81 +49,22 @@ from sgp4_predict import Elements
 
 predictor = Predictor.from_tle(tle)                  # raises ValueError if malformed
 predictor = Predictor(Elements.from_json(omm_json))  # CCSDS OMM (Celestrak, Space-Track)
-
-predictor.epoch                  # datetime (UTC) — element epoch
-predictor.tle_age_seconds(now)   # float — positive means the epoch is in the past
 ```
 
-SGP4 accuracy degrades with element age; treat LEO TLEs older than 3–7 days with caution. Fresh
-TLEs are available from [CelesTrak](https://celestrak.org).
+SGP4 accuracy degrades with element age — check `predictor.tle_age_seconds(now)` and treat LEO TLEs
+older than 3–7 days with caution. Fresh TLEs are available from [CelesTrak](https://celestrak.org).
 
-### Point queries
+Besides `transits_iter`, `Predictor` yields apsides, sunlit and eclipse windows, ground-track
+points, area overpasses and raw state vectors, and answers point queries such as `propagate`,
+`observe_at` and `sub_point`. The package ships type stubs, so an IDE or `help(Predictor)` lists
+them with their signatures and units.
 
-```python
-sv    = predictor.propagate(t)               # StateVectorTeme
-obs   = predictor.observe_at(t, observer)    # Observation
-point = predictor.sub_point(t)               # Geodetic — the point beneath the satellite
-state = predictor.illumination_state(t)      # IlluminationState.Sunlit or .Eclipse
-
-# The pass in progress at t, or None
-transit = predictor.detect_transit(t, observer, min_elevation_deg=5.0)
-
-# The area window in progress at t, or None
-overpass = predictor.detect_aoi(t, area)
-
-# Peak elevation within an interval; raises RuntimeError if there is no peak
-t_peak, obs_peak = predictor.max_elevation(observer, window)
-```
-
-### Iterators
-
-All iterators are lazy. Every method taking a time range accepts any object with `.start` and
-`.end` datetime properties — an `Interval`, a `Transit`, an `Illumination`, or your own type.
-
-```python
-for t, sv in predictor.prediction_iter(window, step): ...           # StateVectorTeme
-for t, obs in predictor.observation_iter(observer, window, step): ...  # Observation
-for transit in predictor.transits_iter(observer, window, min_elevation_deg=5.0): ...
-for apsis in predictor.apsis_iter(window): ...                      # Apsis
-for illumination in predictor.illumination_iter(window): ...        # Illumination
-for t, point in predictor.ground_track_iter(window, step): ...      # Geodetic
-for overpass in predictor.aoi_iter(area, window): ...               # AoiWindow
-```
+Every method taking a time range accepts any object with `.start` and `.end` datetime properties —
+an `Interval`, a `Transit`, an `Illumination`, an `AoiWindow`, or your own type. All iterators are
+lazy.
 
 `Predictor.with_refinement(Refinement(...))` returns a copy with a different root-finder
-configuration for event times; `Refinement` exposes `time_tolerance` (seconds, default `1e-3`) and
-`max_iter` (default `100`).
-
-## Return types
-
-```python
-transit.start / .end          # datetime (UTC) — AoS / LoS
-transit.duration_seconds      # float
-
-obs.azimuth_deg               # float — degrees from north, clockwise, in (-180, 180]
-obs.elevation_deg             # float — degrees above the horizon
-obs.range                     # float — metres
-obs.range_rate                # float — m/s, positive = receding
-
-apsis.time                    # datetime (UTC)
-apsis.event                   # ApsisEvent.Apogee or .Perigee
-apsis.altitude                # float — metres above the WGS-84 equatorial radius
-
-illumination.start / .end     # datetime (UTC)
-illumination.state            # IlluminationState.Sunlit or .Eclipse
-illumination.duration_seconds # float
-
-overpass.start / .end         # datetime (UTC) — entry / exit
-overpass.duration_seconds     # float
-
-point.latitude_deg            # float — positive north
-point.longitude_deg           # float — positive east
-point.altitude                # float — metres above the WGS-84 ellipsoid
-```
-
-`Transit`, `Illumination` and `AoiWindow` are themselves intervals —
-`isinstance(transit, IntervalRange)` is `True`, and any of them can be passed wherever a window is
-expected.
+configuration for event times.
 
 ## Areas of interest
 
@@ -157,35 +98,29 @@ A malformed area raises `ValueError` — fewer than three distinct vertices, a l
 `[-90, 90]`, a `nan` or infinite coordinate, a polygon larger than a hemisphere, an empty box, or
 ellipse semi-axes outside `0 < semi_minor_deg <= semi_major_deg < 90`.
 
-A window longer than `max_window_duration` — one hour by default — raises `RuntimeError` instead of
-being yielded, on the assumption that a window that long means the area is bigger than intended. A
-near-global area really is that big: a LEO satellite is inside `Rectangle.latitude_band(-90.0, 60.0)`
-for about 85 minutes of each 100-minute orbit, so raise the cap for one. The other knob is
-`min_step`, the lower bound of the adaptive coarse scan and so the shortest crossing the scan is
-guaranteed to see; lower it below the default second for an area the ground track crosses faster
-than that. It raises the scan's ten-minute upper bound too wherever it exceeds it, so a `min_step`
-larger than that pins every step there and a small area is passed straight over.
+A window longer than `max_window_duration` — one hour by default — raises `RuntimeError` rather than
+being yielded, since a window that long usually means the area is bigger than intended. Raise the
+cap for an area that really is near-global:
 
 ```python
-band = Rectangle.latitude_band(-90.0, 60.0)
+band = Rectangle.latitude_band(-90.0, 60.0)   # ~85 min of each 100-minute orbit
 predictor.aoi_iter(band, window, max_window_duration=timedelta(hours=2))
-predictor.detect_aoi(t, band, max_window_duration=timedelta(hours=2))
 ```
 
 An area the ground track never leaves at all — a whole-Earth box, or a band wider than the orbit's
 inclination reaches — has no window end to find, so it raises whatever the cap is set to.
 
-`Polygon` edges are **great-circle arcs**, so vertices at the same latitude are not joined along the
-parallel — the arc bows toward the nearer pole, growing with the square of the edge's longitude span.
-The 7° box above bulges about 0.05° (5 km) north of 60°N; vertices a quarter of the globe apart would
-reach roughly 68°N, so densify edges that long. Since the bow is always toward the *nearer* pole,
-both horizontal edges of a box shift the same way: the region ends up displaced poleward, not merely
-enlarged — use `Rectangle` when the region really is "these latitudes by these longitudes". A polygon
-must also fit inside a hemisphere; this permits polar caps, equator-spanning and antimeridian-spanning
-areas, but not a region larger than half the globe.
+The other knob is `min_step`, the shortest crossing the scan is guaranteed to see. Lower it below
+the default second for an area the ground track crosses faster than that. It also raises the scan's
+ten-minute upper bound wherever it exceeds it, so a `min_step` above that pins every step there and
+a small area is passed straight over.
 
-Each shape also exposes `signed_angular_offset_deg(point)`, positive inside the area and negative
-outside, which is the quantity detection is built on.
+`Polygon` edges are **great-circle arcs**, so two vertices at the same latitude are not joined along
+the parallel: the arc bows toward the nearer pole, by about 0.05° for the 7° ring above and roughly
+8° for vertices a quarter of the globe apart. Densify edges that long, or use `Rectangle` when the
+region really is "these latitudes by these longitudes". A polygon must also fit inside a hemisphere —
+polar caps, equator-spanning and antimeridian-spanning areas are all fine, a region larger than half
+the globe is not.
 
 ## Coordinate frames
 
@@ -221,11 +156,6 @@ make lint             # ruff check --fix + ruff format
 ```
 
 `make` targets use `uv run`, so no venv activation is needed.
-
-Type stubs live in two files: `python/sgp4_predict/_sgp4_predict/__init__.pyi` is generated by
-`make stubs` after Rust API changes and is not committed, while
-`python/sgp4_predict/__init__.pyi` is hand-maintained and owns `IntervalRange`, `Interval`, and the
-typed `Predictor` overrides.
 
 ## License
 

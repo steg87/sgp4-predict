@@ -61,8 +61,7 @@ Error: unknown ground station 'glasgo'; known ids: glasgow, svalbard
 
 `--config <path>` selects a file; otherwise `~/.sgp4-predict/config.yaml` is used
 (`%USERPROFILE%\.sgp4-predict\config.yaml` on Windows). The default path is created and seeded with
-an example station on first run. A `--config` path that does not exist is an error, so a typo
-cannot quietly succeed against an empty config.
+an example station on first run; a `--config` path that does not exist is an error.
 
 ```yaml
 groundstations:
@@ -161,9 +160,8 @@ aois:
 
 **Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
 
-A box is given by its four bounds, the same two corners the library's `Rectangle` takes. Its north
-and south edges follow their parallels exactly. It runs **eastward** from `west`, so an `east` at a
-smaller longitude wraps across the antimeridian rather than being an error:
+A box's north and south edges follow their parallels exactly. It runs **eastward** from `west`, so
+an `east` at a smaller longitude wraps across the antimeridian rather than being an error:
 
 ```yaml
   pacific:              # 160°E round to 160°W, across the dateline
@@ -174,15 +172,13 @@ smaller longitude wraps across the antimeridian rather than being an error:
     east: -160.0
 ```
 
-Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — four
-vertices at 60°N bulge to roughly 68°N between them. Use `box` when the region really is a
-latitude/longitude box.
+Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — over
+a wide span they bow toward the nearer pole. Use `box` when the region really is a latitude/longitude
+box.
 
-An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the length of
-the *longer* axis and `semi_minor` half the *shorter* — they must satisfy
-`0 < semi_minor <= semi_major < 90` — and `bearing` is what points them, turning the major axis
-clockwise from north. So `bearing: 0` (the default) runs the long axis north–south, and `bearing: 90`
-runs it east–west:
+An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the *longer*
+axis and `semi_minor` half the *shorter* (`0 < semi_minor <= semi_major < 90`), and `bearing` turns
+the major axis clockwise from north — `bearing: 0` runs it north–south, `bearing: 90` east–west:
 
 ```yaml
   tall:                 # 10 degrees north-south by 2 east-west
@@ -239,10 +235,9 @@ Vertex 4 lat,lon (degrees):
 added aoi 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
 ```
 
-A line that does not parse is reported and asked for again, so a typo costs one line rather than
-everything entered before it. The same is true of a blank line before the third vertex, of a
-latitude past a pole, and of a bound that contradicts one already given — a `north` below the
-`south`, or a semi-minor axis above the semi-major.
+Any prompt that is answered with a bad value is asked again rather than aborting — a line that does
+not parse, a blank line before the third vertex, a latitude past a pole, or a bound that contradicts
+one already given, such as a `north` below the `south`.
 
 The id and the shape may be given as arguments, in which case they are echoed as though they had been
 typed and only the coordinates are asked for:
@@ -253,15 +248,7 @@ sgp4-predict aoi add scotland --shape box
 ```
 
 **Coordinates are never taken as arguments.** As with `gs add`, an AOI is either entered at the
-prompts or written into the config file by hand — a positional coordinate syntax would be both
-verbose and easy to get the wrong way round. Adding over an existing id needs `-f` / `--force`.
-
-`gs add` takes its id the same way, and `-f` / `--force` replaces an existing station:
-
-```sh
-sgp4-predict gs add glasgow
-sgp4-predict gs add glasgow --force
-```
+prompts or written into the config file by hand.
 
 `aoi list` honours `--format` and shows each AOI by its config field names:
 
@@ -424,10 +411,8 @@ sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
 ```
 
 Every line names the flag that sets it, so a recorded run can be replayed by pasting its own header
-back onto the command line.
-
-It is rejected with `--format json` or `--format csv`, since `#` lines would make that output
-unparseable.
+back onto the command line. It is rejected with `--format json` or `--format csv`, where `#` lines
+would make the output unparseable.
 
 ## Logging
 
