@@ -5,299 +5,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-cargo build                    # build the library
-cargo check                    # fast type-check without full compile
-cargo test --all-targets --all-features  # run all tests (note: this skips doctests)
-cargo test --doc --all-features           # doctests, including the library README
-cargo test <name>              # run a single test by name (e.g. cargo test test_brent_cubic)
-cargo clippy                   # lint
-make lint                      # cargo fmt + clippy (preferred — matches CI and pre-commit hook)
-make test                      # full test suite (preferred — matches CI and pre-push hook)
-make coverage                  # llvm-cov summary
-make validation                # cross-validate against pypredict/skyfield reference data
-make benchmark                 # Rust vs pypredict monte carlo benchmark
-make docs                      # build cargo docs and open in a browser
-
-cargo run --bin sgp4-predict -- <subcommand>  # run the CLI (see sgp4-predict-cli/README.md)
+cargo test --all-targets --all-features  # all tests — note: this skips doctests
+cargo test --doc --all-features          # doctests, including the library README
+make lint                                # cargo fmt + clippy (matches CI and the pre-commit hook)
+make test                                # full suite (matches CI and the pre-push hook)
 ```
 
-**Always run `make lint` and `make test` after making changes** to catch formatting, lint, and correctness issues before pushing. CI enforces both.
+**Always run `make lint` and `make test` after making changes.** CI enforces both. The remaining `make` targets are self-documenting in the `Makefile`.
 
-### Python bindings (`sgp4-predict-py/`)
-
-Run these from within `sgp4-predict-py/`:
-
-```bash
-make dev    # compile the Rust extension in-place (maturin develop)
-make test   # compile + run pytest
-make lint   # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
-```
-
-To regenerate stubs after Rust API changes (run from repo root):
-
-```bash
-PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
-  cargo run --manifest-path sgp4-predict-py/Cargo.toml --bin stub_gen
-```
-
-Note: `make stubs` inside `sgp4-predict-py/` fails when `VIRTUAL_ENV` points elsewhere — use the explicit command above instead.
-
-**Known stub-gen limitation**: pyo3-stub-gen silently drops static methods whose parameters are `&Bound<'_, PyAny>` (e.g. `Elements.from_dict`). Such methods work at runtime but will not appear in `_sgp4_predict/__init__.pyi`. If this becomes a problem, the method signature can be overridden in the hand-maintained `sgp4_predict/__init__.pyi`.
+The workspace has three crates: `sgp4-predict/` (the Rust library), `sgp4-predict-py/` (the Python bindings) and `sgp4-predict-cli/` (the `sgp4-predict` binary). Each carries its own `CLAUDE.md`, loaded when you work under it — **area-of-interest geometry (`aoi.rs`) is documented in `sgp4-predict/CLAUDE.md`, and its constraints are load-bearing; read it before touching `Area`, `Polygon`, `Rectangle` or `Ellipse`.**
 
 ## Architecture
 
-This is a Rust library (`sgp4-predict`) wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes. The workspace has three crates: `sgp4-predict/` (the Rust library), `sgp4-predict-py/` (the Python bindings), and `sgp4-predict-cli/` (the `sgp4-predict` binary).
+A Rust library wrapping the `sgp4` crate to provide higher-level prediction and observation iterators for satellite passes.
 
 ### Entry point: `Predictor`
 
-`sgp4-predict/src/lib.rs` defines `Predictor` as the main struct. It is constructed from any type implementing `TleRecord` (via `Predictor::from_tle`) or from `Elements` (OMM, via `Predictor::new`). It exposes:
-- `propagate(t)` → `TemeState` — raw SGP4 propagation at a moment in time
-- `observe_at(t, observer)` → `Observation` — azimuth/elevation/range/range_rate from a ground location
-- `prediction_iter(interval, step)` → `PredictionIter`
-- `observation_iter(observer, interval, step)` → `ObservationIter`
-- `transits_iter(observer, interval, min_elevation)` → `TransitIter`
-- `apsis_iter(interval)` → `ApsisIter`
+`Predictor` (in `lib.rs`) is constructed from any `TleRecord` (`Predictor::from_tle`) or from `Elements` (OMM, `Predictor::new`).
 
-`transits_iter`, `apsis_iter`, `illumination_iter`, `detect_transit`, and `max_elevation` each have a `_with_opts` sibling (`transits_iter_with_opts`, `apsis_iter_with_opts`, `illumination_iter_with_opts`, `detect_transit_with_opts`, `max_elevation_with_opts`) taking an additional `opts: TransitIterOpts` / `ApsisIterOpts` / `IlluminationIterOpts` / `MaxElevationOpts` (the iterator ones also take a trailing `refinement: Refinement` — opts before refinement; the two one-shot methods, `detect_transit`/`max_elevation`, take only `opts` and keep reading `self.refinement` implicitly). Each `XxxOpts` has a `Default` reproducing the entry point's prior hardcoded behavior (coarse-scan step, walk step where applicable, window/duration caps); step-like fields are floored to a minimum of 1 second (`MIN_POSITIVE_STEP` in each module) since a zero or negative step never advances the scan and would hang the iterator. Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at construction time (`.refinement(refinement)`), not mutated after the iterator is built — there is deliberately no post-construction `with_refinement` on these iterators (unlike `Predictor::with_refinement`, which configures the `Predictor` itself before any iterator is created from it; `Predictor::refinement()` reads it back).
+`transits_iter`, `apsis_iter`, `illumination_iter`, `detect_transit` and `max_elevation` each have a `_with_opts` sibling taking an `XxxOpts`; the three iterator ones also take a trailing `refinement: Refinement` (opts before refinement), while the two one-shot methods keep reading `self.refinement` implicitly. Each `XxxOpts`'s `Default` reproduces the entry point's prior hardcoded behaviour, and step-like fields are floored to 1 second (`MIN_POSITIVE_STEP` in each module) — a zero or negative step never advances the scan and would hang the iterator.
+
+Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at construction (`.refinement(refinement)`), not mutated afterwards: there is deliberately **no** post-construction `with_refinement` on these iterators. `Predictor::with_refinement` is different — it configures the `Predictor` before any iterator exists, and `Predictor::refinement()` reads it back.
 
 ### Generic detection (`detect.rs`, opt-in `generics` feature)
 
-The generic event/window iterators in `detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) power `ApsisIter`, `TransitIter`, and `IlluminationIter` internally, so the module always compiles — but its public re-exports at the crate root are gated behind the off-by-default `generics` Cargo feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
+`detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) powers `ApsisIter`, `TransitIter` and `IlluminationIter` internally, so the module always compiles — but its crate-root re-exports are gated behind the off-by-default `generics` feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
 
 ### Type-safe coordinate frames
 
-`frames.rs` uses phantom marker structs (`Teme`, `Ecef`, `Enu`) to make coordinate frame tracking a compile-time guarantee. `StateVector<F>`, `Position<F>`, and `Velocity<F>` in `vectors.rs` are all generic over frame. Conversion methods are implemented directly on the concrete instantiations:
+`frames.rs` uses phantom marker structs (`Teme`, `Ecef`, `Enu`) to make frame tracking a compile-time guarantee; `StateVector<F>`, `Position<F>` and `Velocity<F>` in `vectors.rs` are generic over frame, with conversions implemented on the concrete instantiations.
 
-- `StateVector<Teme>::to_ecef(t)` — GMST rotation (Z-axis) to ECEF
-- `StateVector<Ecef>::to_enu(observer)` — geodetic to local East-North-Up
-- `StateVector<Enu>::to_observation()` / `to_elevation()` — final observables
+**All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `predict.rs` in the `From<sgp4::Prediction>` impl.
 
-**All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `sgp4-predict/src/predict.rs` in the `From<sgp4::Prediction>` impl.
-
-**Angles are type-safe in Rust** (`angle.rs`): `Degrees(f64)` and `Radians(f64)` tag a plain `f64` with its unit so the two can't be silently mixed up at a function boundary. There is deliberately no `From<f64>` for either — construction is always explicit (`Degrees(51.5)`, `Radians(1.2)`), and conversion goes through `.to_radians()`/`.to_degrees()` or the corresponding `From` impls; `.degrees()`/`.radians()` are one-hop shorthands for `.to_degrees().to_f64()`/`.to_radians().to_f64()`. Both types also have `.normalized()` (wrap into `[0, 360)` / `[0, 2π)`) and `.total_cmp()`. `Observer::latitude()`/`longitude()` (both the trait and `GroundObserver`) take `Degrees`; `Observation::azimuth`/`elevation` are `Radians`. `min_elevation` parameters (`transits_iter`, `detect_transit`, ...) take `impl Into<Radians>`, so a `Degrees` or `Radians` value can be passed directly — no pointless round-trip through the other unit. Internal-only angle math (GMST, elevation rate, sun-position angles) stays plain `f64` — it never crosses the public API, so typing it would be ceremony without payoff. This type safety is Rust-only: the Python bindings keep plain `float` with `_deg`-suffixed field/arg names, converting to/from `Degrees`/`Radians` at the FFI boundary.
-
-**Python vs Rust naming**: in Rust, `Observer` is the *trait*; the concrete type is `GroundObserver`. In the Python bindings, the class is also named `GroundObserver`.
+**Angles are type-safe** (`angle.rs`): `Degrees(f64)` and `Radians(f64)` tag a float with its unit so the two can't be mixed at a function boundary. There is deliberately no `From<f64>` for either — construction is always explicit. `Observer::latitude()`/`longitude()` take `Degrees`; `Observation::azimuth`/`elevation` are `Radians`; `min_elevation` parameters take `impl Into<Radians>` so either unit passes directly without a round-trip. Internal-only angle math (GMST, elevation rate, sun position) stays plain `f64` — it never crosses the public API, so typing it would be ceremony without payoff.
 
 ### Apsis detection (`apsides.rs`)
 
-`ApsisIter` detects apogee and perigee events in the TEME frame with a fixed step (60 seconds by default; see `ApsisIterOpts`). It monitors the sign of the radial velocity `r · v` (dot product of position and velocity vectors). A sign change brackets an event:
-- `r·v > 0 → < 0`: apogee (`ApsisEvent::Apogee`)
-- `r·v < 0 → > 0`: perigee (`ApsisEvent::Perigee`)
-
-Brent's method refines the crossing time (no derivative needed; bracket is already known).
-
-### Area-of-interest detection (`aoi.rs`)
-
-`AoiIter` finds the windows in which the sub-satellite point is inside an `Area`. `Polygon`,
-`Rectangle` and `Ellipse` are the built-in implementations; anything else goes behind the same trait.
-
-**The event function is one signed scalar and is a pure function of `t`.** This is the load-bearing
-decision. The alternative — track which edge was crossed, keeping an edge index and an inside/outside
-flag — fails precisely at a vertex: the in-arc test `(a×foot)·n >= 0 && (foot×b)·n >= 0` is exactly
-zero for *both* adjoining edges there, so floating point arbitrarily produces zero crossings or two,
-and one desync inverts the flag permanently. Determinism is what rules that out; `walk_to_crossing`
-already guarantees the same crossing is never re-detected, because `resume_from` is an
-already-sampled point and the refined root is never re-sampled. Do not introduce state into
-`GroundTrackInside::sample` — in particular, do not make it sub-sample internally to "improve"
-resolution. Refinement samples out of order, so any call-history dependence breaks it.
-
-**`Area`'s contract is a bound, not an equality**, and deliberately does not require continuity:
-`|value|` must never *exceed* the true angular distance to the boundary. Under-reporting is always
-safe; over-reporting breaks the step guarantee. This is what legitimises the bounding-cap early
-return, which jumps discontinuously. `detect.rs` only ever tests `value < 0.0`, so a
-sign-preserving magnitude jump is harmless — but the cap branch must never return exactly `0.0`,
-since zero counts as inside.
-
-**The hemisphere restriction is a correctness requirement, not a convenience.** The tangent-plane
-signed-angle sum measures degree on `S² ∖ {p, −p}`, not a planar winding number, so without the
-bounding-cap gate the *antipode* of the polygon also winds to ±1 and reads as inside — roughly half
-the emitted windows would be on the far side of the Earth. The cap is only sound if the region fits
-inside it, hence `Error::LargerThanHemisphere`. Do not "simplify" the cap away as a mere fast path.
-Note this restriction is narrower than it sounds: equator-crossing, antimeridian-spanning and
-pole-containing areas are all fine, and a full-longitude ring is accepted as the polar cap on its
-centroid's side. The centroid axis is not the minimal enclosing cap, so the check is conservative.
-
-**Vertex order is ignored** (`NonZero`/`EvenOdd` both derive from `|k|`), which is what makes a
-reversed ring identical. Orientation-sensitivity and the cap prefilter are mutually incompatible:
-resolving "which side is inside" by winding order requires admitting regions the cap cannot contain.
-
-**`ProximityStep` is what makes narrow areas safe.** Step `|value| / ω_max` and the boundary cannot
-be reached within the step, so no chord is ever jumped. `max_sub_point_rate` derives `ω_max` in
-closed form from the element set — perigee angular rate `n√(1−e²)/(1−e)²`, plus `ω_E` because the
-ground point is in ECEF, times `1/(1−e²_WGS84)` for the geodetic-latitude stretch, times 1.05. Deriving
-it beats sampling the orbit: sampling costs propagations and can miss the maximum, whereas this is a
-bound by construction. The empirical cross-check lives in `tests/aoi.rs` instead.
-
-Known limits: the `min_step` floor voids the guarantee below its own scale, and the `WindowIter`
-boundary walk uses a fixed `walk_step`, so a concave notch crossed in under `walk_step` is absorbed
-into the surrounding window. Fixing the walk properly needs a signed walk strategy in `detect.rs` —
-the walk runs in both directions while `StepStrategy::next_time` returns an absolute forward time —
-which is a public API break under `generics` for little gain. Revisit only if a real notch bug
-appears.
-
-The `min_step` floor is a knob rather than a fixed limit, though: it is floored at `MIN_AOI_STEP`
-(1 ms), deliberately **not** at `detect::MIN_POSITIVE_STEP` (1 s), because it bounds the shortest
-crossing the scan can see and a 1 s floor would cap that at ~6.6 km of track. `max_step` is raised to
-the resolved `min` rather than to a constant, so a wholly sub-second pair is honoured. This is the
-same distinction `DateTimeIter` draws below; do not "make it consistent" with the coarse scans that
-clamp at a second.
-
-`Rectangle` is a separate `Area` impl rather than a four-vertex `Polygon`, because a polygon's
-great-circle edges bow toward the nearer pole — *both* horizontal edges of a box move the same way,
-so the region is displaced poleward, not merely enlarged. It needs no bounding cap (containment is
-four inequalities, so the antipodal-winding problem does not arise) and therefore no hemisphere
-restriction. Two non-obvious details: a bound at a pole contributes no edge, since the parallel there
-is a single interior point — counting it would peg the reported distance to zero at the pole and
-collapse the step size; and each meridian edge is tested against its own half of its plane
-(`dot(foot, equator) > 0` plus the foot's latitude), because a meridian plane wraps round the globe
-and its antipodal half would otherwise report a near-zero distance for points on the far side.
-
-That second detail looks like it should break at a pole, and does not. `dot(foot, m.equator)` is
-identically zero there, so both meridians are skipped — but a pole is only interior in latitude when
-the bound *is* ±90°, and then `corner(north, west)` and `corner(north, east)` both **are** the pole to
-within `cos(π/2) = 6.1e-17` rad. The corner term reports that, `d` falls under `ON_BOUNDARY`, and the
-answer is `0.0`, which is correct: the pole is where the two meridian edges meet.
-`test_pole_to_pole_wedge` pins it. The remaining case, `sides == None`, is a full-longitude band that
-genuinely has no meridian edges, where `|lat − south|` is exact.
-
-The whole-sphere band (`latitude_band(-90°, 90°)`) is the one box with no boundary at all: `sides` is
-`None` and both parallel terms are gated off, so `d` is left at its `f64::INFINITY` seed. It is
-clamped to π — the widest separation on a sphere — because only the *magnitude* is unconstrained
-there; the sign is still right, and under-reporting is what the contract allows. The clamp is inert
-for every other box. Note it does not stop a whole-Earth aoi hitting `WindowTooLong`: the track never
-leaves, which is true of any near-global area and not specific to this one.
-
-Relatedly, `build` widens `lon_span` to exactly `TAU` whenever it drops the sides, rather than storing
-the span it was given. The two have to agree: a span within `COINCIDENT` of full has no meridian edges
-but would still leave `contains` excluding a sliver up to 1e-9 rad wide, and a point there has no edge
-to be measured against — it would report the distance to the nearest *parallel*, which over-reports.
-
-`Ellipse` is the two-foci definition (`d(F₁,p) + d(F₂,p) <= 2a`), not a projected planar ellipse.
-The value returned is `a − (d₁ + d₂)/2`, and the **halving is what makes it legal**: each distance is
-1-Lipschitz along the surface, so the sum is 2-Lipschitz, and only half the shortfall is guaranteed
-not to exceed the distance to the boundary. Do not drop the `/2` to "tighten" it — the tighter value
-is the local gradient `|û₁ + û₂|`, which is not a bound along the whole path to the boundary. The
-under-estimate costs nothing but smaller steps, and for a circle the two foci coincide and the
-formula is already exact.
-
-Focal separation comes from `cos a = cos b cos c`, the spherical right triangle at a minor-axis
-endpoint (which is `a` from each focus, since the two distances there are equal and sum to `2a`).
-`semi_major < 90°` is required so that ratio stays in `[0, 1]`; it also rules out an antipodal
-component, since the antipode of the centre sits `2(π − c)` from the foci. Hence no bounding cap and
-no hemisphere restriction, unlike `Polygon`. `local_frame` falls back to the prime-meridian direction
-at a pole, where north is undefined.
-
-**Every constructor rejects a non-finite argument** (`Error::NotFinite`), because nothing downstream
-will. A NaN slips past every comparison that would otherwise catch it — `NaN < COINCIDENT` is false,
-so `wrap_tau` and `build()` both wave it through — and is then baked into the shape, making every
-`signed_angular_offset` NaN. `ProximityStep` floors NaN to `min_step`, so the symptom is the whole
-interval ground through at 1 ms with no error ever raised. `checked_latitude` needs no separate test
-(its range check already fails NaN and both infinities); `checked_angle` covers the longitudes, the
-ellipse bearing, and the semi-axes — which is what `NotFinite`'s free-form `what` field is for, so
-each new site names itself rather than adding a variant.
-
-In the Python bindings, `area.rs` wraps all three shapes and dispatches through a private `AreaKind`
-enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly
-`Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the
-change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, exactly as
-`TransitIter` borrows its `GroundObserver`. Constructors take `&Bound<'_, PyAny>` so a point may be a
-`LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple — which means pyo3-stub-gen widens
-them to `Any`, so `Polygon`/`Rectangle`/`Ellipse` are redeclared in the hand-maintained
-`sgp4_predict/__init__.pyi`. A redeclaration there *replaces* the generated class rather than merging
-with it, so every member has to be repeated.
-
-`AreaRef<'a>` is the borrowed twin of `AreaKind`, for `detect_aoi`, which does not outlive its
-argument. All three pyclasses are `frozen`, so `Bound::cast::<Polygon>()?.get()` yields a reference
-and the vertex vector is never cloned; `extract_area` clones out of an `AreaRef` rather than
-duplicating the dispatch. Note that pyo3 spells this `cast`, not `downcast`. `extract_lat_lon` uses
-`cast` for the same reason plus a second one: the tuple form is the documented common case, and only
-`cast` misses without constructing a Python exception.
-
-`aoi_iter`/`detect_aoi` expose `min_step` and `max_window_duration` as keyword-only arguments, the
-only `*Opts` fields reachable from Python. This is deliberately not symmetric with `transits_iter`:
-without it `max_window_duration` is a dead end, since a near-global area raises `WindowTooLong`
-partway through iteration with no Python-side way to raise the cap. Note the cap is only escapable
-for an area the track actually leaves — a whole-Earth box has no window end, so it raises whatever
-the cap is. Beware that a *symmetric* latitude band cannot trip the one-hour default for a LEO
-satellite: its two in-band arcs are each at most half an orbit, so they only exceed an hour by
-merging, which means permanently inside. `tests/test_aoi.py` uses `latitude_band(-90, 60)`, whose
-windows are ~85 min.
-
-Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
-a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for
-larger areas over a single day.
+`ApsisIter` monitors the sign of the radial velocity `r · v` in TEME at a fixed step (60 s by default, see `ApsisIterOpts`). A sign change brackets an event: positive→negative is apogee, negative→positive is perigee. Brent's method refines the crossing time — no derivative needed, since the bracket is already known.
 
 ### Transit detection (`transits.rs`)
 
-`TransitIter` uses an adaptive step-size strategy: large steps when the satellite is descending or far from `min_elevation`, smaller steps when approaching. Step bounds, the boundary-walk step, and the max transit duration are configurable via `TransitIterOpts`. On detecting an Outside→Inside transition, it refines the exact crossing time using root finding (`roots.rs`):
-1. Newton-Raphson (uses elevation rate as derivative, fast convergence)
-2. Falls back to Brent's method (bracketed, guaranteed convergence) if Newton-Raphson fails
+`TransitIter` steps adaptively — large steps when descending or far from `min_elevation`, smaller when approaching. Step bounds, the boundary-walk step and the max transit duration come from `TransitIterOpts`. On an Outside→Inside transition it refines the crossing time via `roots.rs`: Newton-Raphson first (elevation rate as the derivative), falling back to Brent's method (bracketed, guaranteed) if that fails.
 
 ### `IntervalRange` trait (`time.rs`)
 
-Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over a specific pass.
+Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over one pass.
 
-`DateTimeIter` substitutes 1 s for a **non-positive** step only: a zero step never advances `next_time` and would yield the same instant forever, which previously hung `prediction_iter`/`observation_iter`. Any positive step is used as given, including sub-second ones — this is a *sampling* iterator, so `Duration::milliseconds(100)` is a legitimate request, unlike for the coarse detection scans that clamp everything below `MIN_POSITIVE_STEP`. Do not "make it consistent" with those: the two have genuinely different requirements, and flooring here silently decimates a caller's sample rate.
-
-### CLI (`sgp4-predict-cli/`)
-
-The `sgp4-predict` binary. `cli.rs` holds clap declarations only; logic lives in sibling modules. Each subcommand's `Args` struct flattens `CommonArgs` (start/duration/tle-file/out/format/output-args), and the observer-taking subcommands (`observations`, `transits`) also flatten `ObserverArgs`. `--config`, `--verbose` and `--quiet` are `global = true` on the top-level `Args`, so they may appear on either side of the subcommand; `main.rs` passes the config path down to the three commands that need it (`observations`, `transits`, `aoi-windows`), which use it only to resolve `--gs`/`--aoi`. Errors are `anyhow`.
-
-`commands::prepare()` builds the shared `Context` (interval, TLE, predictor, writer, format) that every subcommand needs — add new subcommands through it rather than repeating the sequence. Ordering inside it is deliberate: `--output-args`/format compatibility is checked first, then the TLE is loaded *before* the writer is opened, so a bad TLE leaves no empty `--out` file behind.
-
-`tuning.rs` maps the detection-tuning flags onto the library's `*Opts` and `Refinement`. It is a separate module because `cli.rs` holds clap declarations only. Every `build()` writes a full struct literal rather than `..Default::default()`, so a knob added to the library breaks the build until it is either exposed or deliberately defaulted — that is the mechanism keeping the CLI's surface in step, and `src/tuning.rs`'s unit tests pin each default against the library's own `Default`.
-
-Two things there are deliberate. The bool knobs (`--skip-leading-partial`, `--clamp-to-interval`) **take a value** rather than being presence flags: clap presence flags are always false-by-default, so a default-*true* knob would have to be spelled `--no-skip-leading-partial`, and then the `--output-args` line (`skip-leading-partial: true`) would name a flag that does not exist. Taking a value keeps every header line pasteable back onto the command line and keeps the flag names identical to the library's field names. And the caps use `parse_positive_duration` rather than `parse_step` only for the error wording; both reject zero, which would otherwise reject every window or hang the scan.
-
-`--output-args` records *every* resolved knob, not just overridden ones, so the header has a fixed shape and fully reproduces a run. Commands bind their `header_pairs()` to a local before calling `commands::pairs()`, which borrows from them.
-
-Every line is an *input* that changes the output. Deliberately absent: `format` (always `text`, since the header is rejected for JSON/CSV), `out` (names the file the line is written into), `tle-source` (the TLE itself is on the two lines above) and `config` (the values it supplied — `observer`, `aoi-definition` — are already recorded literally, and a local path is not reproducible elsewhere). Do not re-add them; the last two also leak a local path into a file that gets shared.
-
-`output.rs` is column-driven: each `write_*` declares a `&[Column]` (header, JSON/CSV key, width, alignment) and emits `Cell::Str`/`Cell::Num` rows, which `RowWriter` renders as text, NDJSON, or CSV. Adding a format means adding a `Format` variant and a match arm, not touching the five commands. The text underline is derived from the rendered header (`"-".repeat(header.chars().count())`), so column widths can change without desyncing it — do not reintroduce hand-computed widths. `--output-args` is rejected for JSON/CSV because `#` lines would make that output unparseable.
-
-`main.rs` returns `ExitCode`, not `anyhow::Result`: a broken pipe (`… | head`) exits 141 silently instead of printing an error, so piping is not reported as failure. Warnings go through `tracing` to **stderr** and never to stdout.
-
-Ground locations come from the config file, not from CLI coordinates: `--gs <id>` names an entry in the `groundstations` map. There is deliberately no inline `--observer "lat,lon,alt"` flag — it was removed. **Areas of interest follow the same rule**: `aoi-windows --aoi <id>` names an entry in the `aois` map, and there is no inline `--box`/`--circle` anywhere — not on the prediction command, and not on `aoi add` either (see below).
-
-Note the naming split, which is deliberate and easy to "tidy" wrongly: `aoi` is the *management* command group (`aoi add|remove|list`, mirroring `gs`), and `aoi-windows` is the *prediction* command (mirroring `transits`). The stored data is called an **aoi** everywhere else — the `aois:` map, `--aoi <id>`, `AoiDef`, `AoiShape`, `AoiArgs`, `src/aoi.rs`, `Config::find_aoi`, and the `aoi`/`aoi-shape`/`aoi-definition` keys in the `--output-args` header. The library's own term stays `Area` (the `Area` trait, `Rectangle`/`Ellipse`/`Polygon`, `aoi_iter`), so `AoiShape::Rectangle(aoi) => windows(ctx, aoi)` handing a CLI aoi to a library `Area` is the boundary, not an inconsistency. Prose keeps the spelled-out "area of interest" where it is the acronym's expansion (subcommand help, README headings) and uses "AOI" for the noun.
-
-`AoiDef` is internally tagged on `shape`, not externally tagged. This is not a style choice: **serde_yaml 0.9 serialises an externally tagged enum as a `!Box` YAML tag rather than a nested `box: { … }` map**, and refuses the map form on the way back in, so `{shape: box, south: …}` is the only flat representation that round-trips. `PolygonDef` wraps its `Vec<Vertex>` in a struct for the same reason — an internal tag has nowhere to live on a bare sequence.
-
-**`BoxDef` stores the four bounds (`south`/`north`/`west`/`east`), not a centre with extents**, so it is the same two corners `Rectangle::new` takes and `build()` is a rename rather than a calculation. An earlier centre-plus-`width`/`height` form was replaced for exactly that reason: nothing is derived, so a bad value can always be attributed to the field it was typed into, and the library's own `Error::Latitude`/`EmptyRectangle` messages land on real config field names. Do not reintroduce extents — the CLI and the library would disagree about what a box is.
-
-`AoiDef::build()` is where geometry is validated, so `aoi add` rejects an impossible shape before writing and `--aoi` rejects one that was hand-edited into the file. `Config::find_aoi` deliberately skips that, for the same reason `Config::find` exists: `aoi remove` must be able to delete an entry that no longer builds.
-
-`commands/aoi_windows.rs` matches on `AoiShape` once and calls a generic `windows(ctx, aoi: &impl Area)`, rather than giving `AoiShape` an `impl Area`. `Predictor::aoi_iter` is generic over one `Area`, so the dispatch has to happen somewhere; doing it at the call site keeps the per-sample geometry call static. The Python bindings solve the same problem the other way (an `impl Area for AreaKind`) because a pyclass cannot be monomorphised per shape.
-
-`commands/gs.rs` implements `gs add|remove|list` (aliases `rm`, `ls`) over `open_for_edit`/`save`. Its prompts and confirmations go to **stderr**, so `gs list` stays pipeable and prompts stay visible when stdout is redirected. `confirm()` treats EOF and anything other than `y`/`yes` as no, so a non-interactive caller that forgot `--force` cannot delete a station. `gs list` reuses the `output.rs` column machinery, so it honours `--format` like every other table.
-
-Note the asymmetry with the data-input paths below: `gs add` prompts deliberately because it is interactive config management, whereas TLE and observer input prompts were removed so they could be piped. Do not "restore consistency" by removing this one.
-
-`commands/aoi.rs` is the same shape for AOIs. **Coordinates are never accepted as arguments** — only the id and `--shape` are, on both `aoi add` and `gs add`. This is the same rule as `--gs`/`--aoi`: config data is entered at a prompt or written into the YAML by hand, never assembled from a positional flag syntax. An earlier `--box LAT,LON,W,H` family was removed for exactly that reason; do not reintroduce it. `confirm()`, `prompt()`, `prompt_f64()` and `echo()` live in `commands/mod.rs` so both command groups share them.
-
-An argument that replaces a prompt is `echo()`ed in that prompt's own format, so the transcript is identical whether a value was typed or passed. That is why `tests/aoi.rs` asserts on *what stdin is consumed* rather than on which prompts appear — the transcript deliberately cannot tell them apart.
-
-Range checks live in the prompts (`prompt_latitude`, `prompt_bounded`, and the pairwise checks: north-above-south, east-off-west's-meridian, semi-minor-under-semi-major), not in a value parser — there is no parser left to put them in. Keep them there, because a prompt can *re-ask*: the alternative is `build()` rejecting the shape after every field has been entered and discarding all of it. The pairwise checks close over the earlier value, which is why each is inline rather than a shared helper.
-
-`number()` and `prompt_f64` reject a non-finite value for the same reason: `nan`/`inf` parse as `f64` and then pass every range check silently, so a non-finite West longitude would make the East prompt unsatisfiable — `(value - west).rem_euclid(360.0)` is NaN and no comparison against it is ever true — and a non-finite centre would only fail at `build()`, with every field lost.
-
-The consequence is that `build()` is unreachable for a box or an ellipse — the prompts cover every way those can fail. It still runs, because `--aoi` must reject a hand-edited config, and a **polygon** can still fail there: `AntipodalEdge` and `LargerThanHemisphere` are properties of the assembled ring, not of any one vertex. That is what `tests/aoi.rs::test_invalid_geometry_is_rejected_before_saving` exercises.
-
-**Prompts re-ask on a malformed line rather than aborting** (`prompt_retry`), because a typo five fields in would otherwise discard everything before it. EOF is what ends a prompt loop — `prompt` errors there — so a scripted caller cannot spin forever; keep that property when adding prompts. The polygon vertex loop re-asks *at the same index* on a bad line and on a blank line before the third vertex, for the same reason.
-
-The shape prompt accepts each name's initial (`b`/`e`/`c`/`p`) and underlines it with an ANSI escape, but **only when stderr is a terminal** (`IsTerminal`) — otherwise the codes would land in a redirected log, and `tests/aoi.rs` reads stderr as plain text. Clap cannot render a selection menu; it is an argument parser, and an interactive picker would mean a `dialoguer`-style dependency plus a non-TTY fallback.
-
-Neither *data* input prompts line-by-line any more; both were removed in favour of non-interactive paths. `--tle-file` reads a file, and omitting it reads *all* of stdin so a TLE can be piped in. `tle.rs` funnels both through one `parse_tle(&str)`, so file and pipe accept exactly the same 2-or-3-line text — keep it that way rather than adding a parser per source. When stdin is a terminal, `read_tle_stdin` prints a Ctrl-D hint to **stderr**, not stdout, so it cannot contaminate piped output. Note that the observer-taking commands resolve `--gs` *before* calling `load_tle`, so a bad station id fails immediately instead of after the user has typed a TLE.
-
-`config.rs` deserializes the YAML (`groundstations: {id: {location: {latitude, longitude, altitude}}}`; `altitude` defaults to 0, and every struct is `deny_unknown_fields` so typos error rather than being silently dropped). The path comes from `--config`, else `dirs::home_dir().join(".sgp4-predict").join("config.yaml")` — one expression covering `~/.sgp4-predict/config.yaml` and `%USERPROFILE%\.sgp4-predict\config.yaml`, so keep new path handling `PathBuf`-based rather than string-formatted. Creation is deliberately asymmetric between the default path and `--config`. A missing file at the *default* path is created and seeded with `TEMPLATE` — the user never named it, so it cannot be a typo. A missing `--config` path is an **error** everywhere except `gs add`: creating it would let a mistyped path succeed against a fresh empty config while the real stations sit unread, and the resulting `unknown ground station` error points at the wrong file. Do not "simplify" this into one rule; the two cases differ in whether the user typed the path.
-
-There are two entry points. `load()` is for the prediction commands and behaves as above. `open_for_edit(path, Missing)` is for the `gs` commands and never seeds — `gs add` passes `Missing::Create` and starts from an empty config, `gs list`/`gs remove` pass `Missing::Reject`. The reject applies only to an *explicit* path; a missing default path is still just an empty station list. Both entry points propagate parse errors, so a broken config is never silently overwritten. `Config::save()` writes to a sibling `.yaml.tmp` and renames, so a failed write cannot truncate an existing config; it re-emits a fixed header because **serialising drops YAML comments**, which is the known cost of `gs add`/`gs remove` on a hand-annotated file.
-
-`GroundStation` implements the library's `Observer` trait directly, so the CLI never constructs a `GroundObserver` — it hands `&GroundStation` straight to `observation_iter` / `transits_iter` / `observe_at`, which are all generic over `O: Observer`. This is the "implement the trait on your own type" path the library README documents; don't reintroduce a conversion. `GroundObserver` remains the library's built-in type for users who lack one of their own, and the Python bindings define a separate pyclass of the same name.
-
-Coordinate range checks live in `Location::validate()` and run in `Config::groundstation()`, the only way to get a `&GroundStation` — deserialization itself does not validate, so a `GroundStation` obtained by any other route (e.g. indexing `groundstations` directly) is unchecked. Validation is per-lookup, not per-load, so one malformed entry does not block using the others.
-
-`ObserverArgs` is the mixin that carries this: `validate(&Config)` enforces that `--gs` is present and names a usable station (returning the id), and `resolve(config_path)` loads the config and `remove`s the named station to return it owned — owned rather than borrowed because the `Config` is local to `resolve`. Errors list the ids the config actually defines, via `Config::ids_hint()` / `Config::groundstation()` — preserve that when touching these messages, and note that `tests/config.rs` asserts on the wording. Both commands then `.expect()` on `args.observer.gs` when writing the `--output-args` header, which is sound only because `resolve` ran first.
+`DateTimeIter` substitutes 1 s for a **non-positive** step only — a zero step never advances `next_time` and would yield the same instant forever, which previously hung `prediction_iter`/`observation_iter`. Any positive step is used as given, including sub-second ones: this is a *sampling* iterator, so `Duration::milliseconds(100)` is legitimate, unlike for the coarse detection scans. Do not "make it consistent" with those — flooring here silently decimates a caller's sample rate.
 
 ## Conventions
 
@@ -308,10 +62,6 @@ Coordinate range checks live in `Location::validate()` and run in `Config::groun
 ## Repo infrastructure
 
 - **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.
-- **CI** (`.github/workflows/`):
-  - `test.yml` — runs `cargo test`, `cargo fmt --check`, `cargo clippy`, `cargo doc` (denying rustdoc warnings), and a `versions` job asserting the release invariant below. Installs `uv` in the test and docs jobs.
-  - `audit.yml` — weekly `cargo audit` for security advisories.
-  - `labeler.yml` — auto-labels PRs based on changed files (config in `.github/labeler.yml`).
 - **Dependencies**: `serde_yaml` (not `serde_yml`) is used for YAML parsing in dev/tests.
 
 ### Releasing
