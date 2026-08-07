@@ -10,8 +10,11 @@ pub fn to_py_err(e: Error) -> PyErr {
         | Error::Interval(_)
         // A rejected area is bad input, not a runtime failure.
         | Error::Aoi(_) => PyValueError::new_err(e.to_string()),
-        // Sgp4, Roots, Detect, Custom, and — since `Error` is
-        // `#[non_exhaustive]` — any variant added later.
+        Error::Sgp4(_) | Error::Roots(_) | Error::Detect(_) | Error::Custom(_) => {
+            PyRuntimeError::new_err(e.to_string())
+        }
+        // `Error` is `#[non_exhaustive]`; an unknown future variant is likelier
+        // a runtime failure than bad input.
         _ => PyRuntimeError::new_err(e.to_string()),
     }
 }

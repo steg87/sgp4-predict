@@ -53,7 +53,7 @@ pub trait IntervalRange {
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
     /// assert!(a.intersection(&c).is_none());
     /// ```
-    #[must_use]
+    #[must_use = "returns the overlap; neither interval is modified"]
     fn intersection(&self, other: &impl IntervalRange) -> Option<Range<DateTime<Utc>>> {
         let start = self.start().max(other.start());
         let end = self.end().min(other.end());

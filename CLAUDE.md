@@ -81,8 +81,8 @@ adding method-level attributes to those types; they are already covered and woul
 Method-level `#[must_use]` is only for methods whose _type_ should not be must-use:
 `TimeWindow::clamp` and `IntervalRange::intersection` (`Option` is not must-use), and
 `TimeWindow::with_bounds`, `Predictor::with_refinement` and `Polygon::with_fill_rule` (the
-receiving type is normally stored, not consumed), and both
-`Angle::normalized`s (which read like in-place mutators).
+receiving type is normally stored, not consumed), and
+`Degrees::normalized`/`Radians::normalized` (which read like in-place mutators).
 
 Clippy's `must_use_candidate` also flags every pure getter — `Degrees::to_f64`, `Ellipse::foci`,
 `Predictor::epoch`, and ~30 more. Those were considered and deliberately left off: they catch no

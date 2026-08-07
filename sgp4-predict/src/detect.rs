@@ -232,9 +232,7 @@ enum Phase {
 /// sample lands on `interval.start()`), stops scanning once that time leaves
 /// the interval, then drains [`Detector::finish`]. Errors are yielded as
 /// items and iteration continues from the following sample.
-///
-/// The `#[must_use]` here also covers the [`EventIter`] and [`WindowIter`]
-/// aliases.
+// Also covers the `EventIter` and `WindowIter` aliases.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DetectIter<D> {
     detector: D,
