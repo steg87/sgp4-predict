@@ -196,6 +196,33 @@ interval ground through at 1 ms with no error ever raised. `checked_latitude` ne
 ellipse bearing, and the semi-axes — which is what `NotFinite`'s free-form `what` field is for, so
 each new site names itself rather than adding a variant.
 
+In the Python bindings, `area.rs` wraps all three shapes and dispatches through a private `AreaKind`
+enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly
+`Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the
+change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, exactly as
+`TransitIter` borrows its `GroundObserver`. Constructors take `&Bound<'_, PyAny>` so a point may be a
+`LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple — which means pyo3-stub-gen widens
+them to `Any`, so `Polygon`/`Rectangle`/`Ellipse` are redeclared in the hand-maintained
+`sgp4_predict/__init__.pyi`. A redeclaration there *replaces* the generated class rather than merging
+with it, so every member has to be repeated.
+
+`AreaRef<'a>` is the borrowed twin of `AreaKind`, for `detect_aoi`, which does not outlive its
+argument. All three pyclasses are `frozen`, so `Bound::cast::<Polygon>()?.get()` yields a reference
+and the vertex vector is never cloned; `extract_area` clones out of an `AreaRef` rather than
+duplicating the dispatch. Note that pyo3 spells this `cast`, not `downcast`. `extract_lat_lon` uses
+`cast` for the same reason plus a second one: the tuple form is the documented common case, and only
+`cast` misses without constructing a Python exception.
+
+`aoi_iter`/`detect_aoi` expose `min_step` and `max_window_duration` as keyword-only arguments, the
+only `*Opts` fields reachable from Python. This is deliberately not symmetric with `transits_iter`:
+without it `max_window_duration` is a dead end, since a near-global area raises `WindowTooLong`
+partway through iteration with no Python-side way to raise the cap. Note the cap is only escapable
+for an area the track actually leaves — a whole-Earth box has no window end, so it raises whatever
+the cap is. Beware that a *symmetric* latitude band cannot trip the one-hour default for a LEO
+satellite: its two in-band arcs are each at most half an orbit, so they only exceed an hour by
+merging, which means permanently inside. `tests/test_aoi.py` uses `latitude_band(-90, 60)`, whose
+windows are ~85 min.
+
 Test-sizing gotcha: a 7°-wide box at 57°N is only overflown on some days, so `tests/aoi.rs` searches
 a month for the small `scotland()` area and reserves the 1-second `dense_scan` cross-checks for
 larger areas over a single day.

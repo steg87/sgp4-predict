@@ -5,11 +5,12 @@ use pyo3_stub_gen::derive::*;
 use sgp4_predict::Degrees;
 
 use crate::{
+    area::{AreaKind, Geodetic, extract_area, extract_area_ref},
     elements::Elements,
     errors::to_py_err,
     observer::GroundObserver,
     tle::Tle,
-    types::{Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
+    types::{AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
     vectors::StateVectorTeme,
 };
 
@@ -77,6 +78,31 @@ impl PredictionIter {
         match self.inner.next() {
             None => Ok(None),
             Some(Ok((t, sv))) => Ok(Some((t, StateVectorTeme::from_inner(sv)))),
+            Some(Err(e)) => Err(to_py_err(e)),
+        }
+    }
+}
+
+// ── GroundTrackIter ────────────────────────────────────────────────────────────
+
+/// Lazy iterator yielding `(datetime, Geodetic)` sub-satellite points at regular intervals.
+#[gen_stub_pyclass]
+#[pyclass(module = "sgp4_predict._sgp4_predict")]
+pub struct GroundTrackIter {
+    inner: sgp4_predict::GroundTrackIter,
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl GroundTrackIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Geodetic)>> {
+        match self.inner.next() {
+            None => Ok(None),
+            Some(Ok((t, point))) => Ok(Some((t, Geodetic::from_inner(point)))),
             Some(Err(e)) => Err(to_py_err(e)),
         }
     }
@@ -183,6 +209,43 @@ impl TransitIter {
     }
 }
 
+// ── AoiIter ────────────────────────────────────────────────────────────────────
+
+// Self-referential struct: owns the area and the AoiIter that borrows it.
+#[self_referencing]
+struct AoiIterOwned {
+    area: AreaKind,
+    #[borrows(area)]
+    #[covariant]
+    iter: sgp4_predict::AoiIter<'this, AreaKind>,
+}
+
+/// Lazy iterator yielding the windows during which the ground track is inside an area.
+#[gen_stub_pyclass]
+#[pyclass(module = "sgp4_predict._sgp4_predict")]
+pub struct AoiIter {
+    inner: AoiIterOwned,
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl AoiIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<AoiWindow>> {
+        self.inner.with_iter_mut(|iter| match iter.next() {
+            None => Ok(None),
+            Some(Ok(w)) => Ok(Some(AoiWindow {
+                start: w.start,
+                end: w.end,
+            })),
+            Some(Err(e)) => Err(to_py_err(e)),
+        })
+    }
+}
+
 // ── ObservationIter ────────────────────────────────────────────────────────────
 
 // Self-referential struct: owns the GroundObserver and the ObservationIter that borrows it.
@@ -223,6 +286,19 @@ fn extract_interval(interval: &Bound<'_, PyAny>) -> PyResult<(DateTime<Utc>, Dat
     let start: DateTime<Utc> = interval.getattr("start")?.extract()?;
     let end: DateTime<Utc> = interval.getattr("end")?.extract()?;
     Ok((start, end))
+}
+
+/// The two fields the bindings expose; everything else keeps its library default.
+fn aoi_opts(
+    min_step: Option<Duration>,
+    max_window_duration: Option<Duration>,
+) -> sgp4_predict::AoiIterOpts {
+    let defaults = sgp4_predict::AoiIterOpts::default();
+    sgp4_predict::AoiIterOpts {
+        min_step: min_step.unwrap_or(defaults.min_step),
+        max_window_duration: max_window_duration.unwrap_or(defaults.max_window_duration),
+        ..defaults
+    }
 }
 
 // ── Predictor ──────────────────────────────────────────────────────────────────
@@ -347,6 +423,94 @@ impl Predictor {
             }
             .build(),
         })
+    }
+
+    /// The geodetic point directly beneath the satellite at time `t`.
+    fn sub_point(&self, t: DateTime<Utc>) -> PyResult<Geodetic> {
+        self.inner
+            .sub_point(t)
+            .map(Geodetic::from_inner)
+            .map_err(to_py_err)
+    }
+
+    /// Trace the satellite's ground track at regular intervals.
+    ///
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    /// Yields `(datetime, Geodetic)` sub-satellite points.
+    fn ground_track_iter(
+        &self,
+        interval: &Bound<'_, PyAny>,
+        step: Duration,
+    ) -> PyResult<GroundTrackIter> {
+        let (start, end) = extract_interval(interval)?;
+        Ok(GroundTrackIter {
+            inner: self.inner.ground_track_iter(start..end, step),
+        })
+    }
+
+    /// Iterate over the windows in which the ground track lies inside `area`.
+    ///
+    /// `area` is a `Polygon`, `Rectangle`, or `Ellipse`.
+    /// `interval` must expose `.start` and `.end` datetime properties.
+    ///
+    /// `min_step` is the lower bound of the adaptive coarse-scan step, and also the
+    /// shortest crossing the scan is guaranteed to see; lower it below the default
+    /// second for an area the ground track can cross faster than that. Floored at
+    /// 1 ms. It also raises the upper bound where it exceeds it, so a `min_step`
+    /// above the ten-minute default ceiling pins the whole scan at that step and a
+    /// small area will be stepped straight over.
+    ///
+    /// `max_window_duration` caps how long a single window may run; the default is
+    /// one hour. A window longer than the cap raises `RuntimeError`, so raise it for
+    /// a continental-scale area — a LEO satellite is inside something like
+    /// `Rectangle.latitude_band(-90.0, 60.0)` for most of each orbit.
+    #[pyo3(signature = (area, interval, *, min_step = None, max_window_duration = None))]
+    fn aoi_iter(
+        &self,
+        area: &Bound<'_, PyAny>,
+        interval: &Bound<'_, PyAny>,
+        min_step: Option<Duration>,
+        max_window_duration: Option<Duration>,
+    ) -> PyResult<AoiIter> {
+        let (start, end) = extract_interval(interval)?;
+        let opts = aoi_opts(min_step, max_window_duration);
+        let predictor = self.inner.clone();
+        let refinement = self.inner.refinement();
+        Ok(AoiIter {
+            inner: AoiIterOwnedBuilder {
+                area: extract_area(area)?,
+                iter_builder: move |area| {
+                    predictor.aoi_iter_with_opts(area, start..end, opts, refinement)
+                },
+            }
+            .build(),
+        })
+    }
+
+    /// Detect whether the ground track is inside `area` at time `t`.
+    ///
+    /// Returns `None` if it is outside. Otherwise searches backward and forward to
+    /// bracket the entry and exit crossings.
+    ///
+    /// Raises `RuntimeError` if the window turns out to be longer than
+    /// `max_window_duration`, which defaults to one hour. See `aoi_iter`.
+    #[pyo3(signature = (t, area, *, max_window_duration = None))]
+    fn detect_aoi(
+        &self,
+        t: DateTime<Utc>,
+        area: &Bound<'_, PyAny>,
+        max_window_duration: Option<Duration>,
+    ) -> PyResult<Option<AoiWindow>> {
+        let area = extract_area_ref(area)?;
+        self.inner
+            .detect_aoi_with_opts(t, &area, aoi_opts(None, max_window_duration))
+            .map(|opt| {
+                opt.map(|w| AoiWindow {
+                    start: w.start,
+                    end: w.end,
+                })
+            })
+            .map_err(to_py_err)
     }
 
     /// Iterate over apogee and perigee events within the interval.
