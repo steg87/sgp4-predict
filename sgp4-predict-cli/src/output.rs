@@ -7,8 +7,8 @@
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
 use sgp4_predict::{
-    Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Result as PredictResult,
-    Transit,
+    AoiWindow, Apsis, ApsisEvent, Geodetic, Illumination, IlluminationState, Observation,
+    Result as PredictResult, Transit,
 };
 use std::io::Write;
 
@@ -373,6 +373,88 @@ where
             num(tca_obs.elevation.to_degrees().to_f64(), 2),
             duration(transit.start, transit.end),
         ])?;
+    }
+    out.finish()
+}
+
+const GROUND_TRACK_COLUMNS: &[Column] = &[
+    left("datetime", "datetime", 24),
+    right("lat [deg]", "lat_deg", 10),
+    right("lon [deg]", "lon_deg", 11),
+    right("altitude [km]", "altitude_km", 14),
+];
+
+pub fn write_ground_track<W, I>(w: W, format: Format, iter: I) -> anyhow::Result<()>
+where
+    W: Write,
+    I: Iterator<Item = PredictResult<(DateTime<Utc>, Geodetic)>>,
+{
+    let mut out = RowWriter::new(w, format, GROUND_TRACK_COLUMNS);
+    for item in iter {
+        let (t, point) = item.context("propagation error")?;
+        out.write_row(&[
+            time(t),
+            num(point.latitude.to_f64(), 4),
+            num(point.longitude.to_f64(), 4),
+            num(point.altitude / 1_000.0, 3),
+        ])?;
+    }
+    out.finish()
+}
+
+const AOI_COLUMNS: &[Column] = &[
+    left("entry", "entry", 24),
+    left("exit", "exit", 24),
+    right("entry_lat [deg]", "entry_lat_deg", 15),
+    right("entry_lon [deg]", "entry_lon_deg", 15),
+    right("exit_lat [deg]", "exit_lat_deg", 14),
+    right("exit_lon [deg]", "exit_lon_deg", 14),
+    right("duration", "duration", 10),
+];
+
+/// The window plus the sub-satellite point at each end, which is where the
+/// ground track crossed the boundary.
+type AoiRow = (AoiWindow, Geodetic, Geodetic);
+
+pub fn write_aoi<W, I>(w: W, format: Format, iter: I) -> anyhow::Result<()>
+where
+    W: Write,
+    I: Iterator<Item = anyhow::Result<AoiRow>>,
+{
+    let mut out = RowWriter::new(w, format, AOI_COLUMNS);
+    for item in iter {
+        let (window, entry, exit) = item?;
+        out.write_row(&[
+            time(window.start),
+            time(window.end),
+            num(entry.latitude.to_f64(), 4),
+            num(entry.longitude.to_f64(), 4),
+            num(exit.latitude.to_f64(), 4),
+            num(exit.longitude.to_f64(), 4),
+            duration(window.start, window.end),
+        ])?;
+    }
+    out.finish()
+}
+
+const AOI_LIST_COLUMNS: &[Column] = &[
+    left("id", "id", 16),
+    left("shape", "shape", 8),
+    left("definition", "definition", 64),
+];
+
+/// Render the config's AOIs, in id order.
+///
+/// `definition` uses the config file's own field names, so a listing reads the
+/// same way the YAML does.
+pub fn write_aois<'a, W, I>(w: W, format: Format, aois: I) -> anyhow::Result<()>
+where
+    W: Write,
+    I: Iterator<Item = (&'a str, &'a crate::config::AoiDef)>,
+{
+    let mut out = RowWriter::new(w, format, AOI_LIST_COLUMNS);
+    for (id, def) in aois {
+        out.write_row(&[text(id), text(def.kind()), text(def.describe())])?;
     }
     out.finish()
 }

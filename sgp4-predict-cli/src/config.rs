@@ -1,4 +1,5 @@
-//! Config file (`~/.sgp4-predict/config.yaml` by default) holding named ground stations.
+//! Config file (`~/.sgp4-predict/config.yaml` by default) holding named ground
+//! stations and areas of interest.
 
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
@@ -16,8 +17,99 @@ const CONFIG_FILE: &str = "config.yaml";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Ground stations keyed by the id passed to `--gs`.
-    #[serde(default)]
+    /// Omitted when empty, so a config with only AOIs does not grow a stub.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub groundstations: BTreeMap<String, GroundStation>,
+    /// Areas of interest keyed by the id passed to `--aoi`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub aois: BTreeMap<String, AoiDef>,
+}
+
+/// A region on the ground, as written in the config file.
+///
+/// Internally tagged on `shape`, so each AOI is a flat map of named fields:
+///
+/// ```yaml
+/// aois:
+///   scotland:
+///     shape: box
+///     south: 54.0
+///     north: 60.0
+///     west: -8.0
+///     east: -1.0
+/// ```
+///
+/// Externally tagged (`box: { ... }`) would read as well, but serde_yaml
+/// represents that with a `!Box` YAML tag rather than a nested map, which is
+/// not something to hand-write.
+///
+/// This is the *stored* form. [`AoiDef::build`] turns it into the library
+/// shape, which is where the geometry is validated.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "shape", rename_all = "lowercase")]
+pub enum AoiDef {
+    /// A latitude/longitude box, given by its bounds.
+    Box(BoxDef),
+    Ellipse(EllipseDef),
+    Circle(CircleDef),
+    /// A ring of at least three vertices, closing implicitly.
+    Polygon(PolygonDef),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoxDef {
+    /// Southern latitude bound in degrees.
+    pub south: f64,
+    /// Northern latitude bound in degrees.
+    pub north: f64,
+    /// Western longitude bound in degrees.
+    pub west: f64,
+    /// Eastern longitude bound in degrees. The box runs **eastward** from
+    /// `west`, so an `east` at a smaller longitude wraps the antimeridian.
+    pub east: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EllipseDef {
+    /// Centre latitude in degrees.
+    pub latitude: f64,
+    /// Centre longitude in degrees.
+    pub longitude: f64,
+    /// Semi-major axis in degrees of arc (about 111.2 km per degree).
+    pub semi_major: f64,
+    /// Semi-minor axis in degrees of arc.
+    pub semi_minor: f64,
+    /// Bearing of the major axis, degrees clockwise from north.
+    #[serde(default)]
+    pub bearing: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CircleDef {
+    /// Centre latitude in degrees.
+    pub latitude: f64,
+    /// Centre longitude in degrees.
+    pub longitude: f64,
+    /// Radius in degrees of arc (about 111.2 km per degree).
+    pub radius: f64,
+}
+
+/// Wraps the vertex list in a struct because an internally tagged enum cannot
+/// carry a bare sequence — the tag has nowhere to live.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolygonDef {
+    pub vertices: Vec<Vertex>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Vertex {
+    pub latitude: f64,
+    pub longitude: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -52,6 +144,16 @@ groundstations:
       latitude: 55.86
       longitude: -4.25
       altitude: 40
+
+# Areas of interest. Select one with `--aoi <id>`.
+# All coordinates are in degrees — about 111.2 km per degree of arc.
+aois:
+  scotland:
+    shape: box
+    south: 54.0
+    north: 60.0
+    west: -8.0
+    east: -1.0
 ";
 
 /// Load the config from `path`, or from [`default_path`] when `path` is `None`.
@@ -118,9 +220,9 @@ fn write_template(path: &Path) -> anyhow::Result<()> {
 
 /// Header re-emitted on every save, since serialising drops YAML comments.
 const SAVED_HEADER: &str = "\
-# sgp4-predict ground stations. Select one with `--gs <id>`.
-# Managed by `sgp4-predict gs add|remove|list`; hand edits are preserved,
-# but comments are not.
+# sgp4-predict ground stations (`--gs <id>`) and areas of interest (`--aoi <id>`).
+# Managed by `sgp4-predict gs add|remove|list` and `sgp4-predict aoi add|remove|list`;
+# hand edits are preserved, but comments are not.
 ";
 
 /// Whether a `gs` subcommand may create the config it was pointed at.
@@ -229,6 +331,38 @@ impl Config {
             String::new()
         } else {
             format!(" (known ground stations: {})", self.ids().join(", "))
+        }
+    }
+
+    /// Look up an AOI by id, without building or validating its geometry.
+    ///
+    /// `aoi remove` uses this, for the same reason [`Config::find`] exists: a
+    /// hand-edited AOI that no longer builds is still listed, so it must be
+    /// removable without editing the YAML by hand.
+    pub fn find_aoi(&self, id: &str) -> anyhow::Result<&AoiDef> {
+        self.aois.get(id).ok_or_else(|| {
+            if self.aois.is_empty() {
+                anyhow::anyhow!("unknown aoi '{id}'; the config defines none")
+            } else {
+                anyhow::anyhow!(
+                    "unknown aoi '{id}'; known ids: {}",
+                    self.aoi_ids().join(", ")
+                )
+            }
+        })
+    }
+
+    /// AOI ids in sorted order.
+    pub fn aoi_ids(&self) -> Vec<&str> {
+        self.aois.keys().map(String::as_str).collect()
+    }
+
+    /// `" (known aois: a, b)"`, or empty when the config defines none.
+    pub fn aoi_ids_hint(&self) -> String {
+        if self.aois.is_empty() {
+            String::new()
+        } else {
+            format!(" (known aois: {})", self.aoi_ids().join(", "))
         }
     }
 }

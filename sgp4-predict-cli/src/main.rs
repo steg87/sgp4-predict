@@ -1,9 +1,11 @@
+mod aoi;
 mod cli;
 mod commands;
 mod config;
 mod observer;
 mod output;
 mod tle;
+mod tuning;
 
 use anyhow::Context as _;
 use clap::{CommandFactory as _, Parser as _};
@@ -37,7 +39,10 @@ fn run(args: cli::Args) -> anyhow::Result<()> {
         cli::Command::StateVectors(a) => commands::state_vectors::run(a),
         cli::Command::Apsides(a) => commands::apsides::run(a),
         cli::Command::Illumination(a) => commands::illumination::run(a),
+        cli::Command::GroundTrack(a) => commands::ground_track::run(a),
+        cli::Command::AoiWindows(a) => commands::aoi_windows::run(a, config_path),
         cli::Command::Gs(a) => commands::gs::run(a.command, config_path),
+        cli::Command::Aoi(a) => commands::aoi::run(a.command, config_path),
         cli::Command::Completions(a) => {
             // clap_complete panics on write errors instead of returning them,
             // so render into memory and do the writing here.

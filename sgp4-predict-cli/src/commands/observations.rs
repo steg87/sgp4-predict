@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use chrono::Duration;
 use std::path::Path;
 
-use super::{effective_config_path, format_observer_str, prepare};
+use super::{format_observer_str, prepare};
 use crate::{cli::ObservationsArgs, output};
 
 pub fn run(args: ObservationsArgs, config_path: Option<&Path>) -> anyhow::Result<()> {
@@ -15,11 +15,9 @@ pub fn run(args: ObservationsArgs, config_path: Option<&Path>) -> anyhow::Result
     let observer_str = format_observer_str(&observer);
     let gs_id = args.observer.gs.as_deref().expect("resolve requires --gs");
     let step_str = humantime::format_duration(args.step).to_string();
-    let config = effective_config_path(config_path);
     ctx.write_args_header(
         "observations",
         &args.common,
-        config.as_deref(),
         &[
             ("ground-station", gs_id),
             ("observer", &observer_str),

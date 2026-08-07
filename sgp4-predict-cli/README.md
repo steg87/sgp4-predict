@@ -92,7 +92,8 @@ path when it is omitted.
 
 | Command                         | Description                             |
 |---------------------------------|-----------------------------------------|
-| `gs add`                        | Add a station, prompting for each field |
+| `gs add [id]`                   | Add a station, prompting for each field |
+| `gs add [id] --force`           | Replace an existing station             |
 | `gs list` (`gs ls`)             | List the configured stations            |
 | `gs remove <id>` (`gs rm <id>`) | Remove a station, after confirmation    |
 
@@ -116,6 +117,162 @@ other than `y`/`yes` — including end-of-input — leaves the config untouched.
 
 Note that `gs add` and `gs remove` re-serialise the file, so **YAML comments are not preserved**. A
 config that fails to parse is never overwritten.
+
+## Areas of interest
+
+`aoi-windows` needs a region on the ground, given as `--aoi <id>` naming an entry in the same
+config file. AOIs live under `aois:` alongside `groundstations:`, and each is a flat map of named
+fields tagged with its `shape`:
+
+```yaml
+aois:
+  scotland:
+    shape: box
+    south: 54.0
+    north: 60.0
+    west: -8.0
+    east: -1.0
+  north-sea:
+    shape: ellipse
+    latitude: 56.0
+    longitude: 2.0
+    semi_major: 2.7
+    semi_minor: 1.1
+    bearing: 45.0
+  cape-town:
+    shape: circle
+    latitude: -33.9
+    longitude: 18.4
+    radius: 2.25
+  corridor:
+    shape: polygon
+    vertices:
+      - { latitude: 54.0, longitude: -8.0 }
+      - { latitude: 54.0, longitude: -1.0 }
+      - { latitude: 60.0, longitude: -1.0 }
+```
+
+| `shape`   | Fields                                                          |
+|-----------|-----------------------------------------------------------------|
+| `box`     | `south`, `north`, `west`, `east` — the box's bounds             |
+| `ellipse` | `latitude`, `longitude` (centre), `semi_major`, `semi_minor`, `bearing` (default 0) |
+| `circle`  | `latitude`, `longitude` (centre), `radius`                       |
+| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
+
+**Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
+
+A box is given by its four bounds, the same two corners the library's `Rectangle` takes. Its north
+and south edges follow their parallels exactly. It runs **eastward** from `west`, so an `east` at a
+smaller longitude wraps across the antimeridian rather than being an error:
+
+```yaml
+  pacific:              # 160°E round to 160°W, across the dateline
+    shape: box
+    south: -20.0
+    north: 20.0
+    west: 160.0
+    east: -160.0
+```
+
+Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — four
+vertices at 60°N bulge to roughly 68°N between them. Use `box` when the region really is a
+latitude/longitude box.
+
+An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the length of
+the *longer* axis and `semi_minor` half the *shorter* — they must satisfy
+`0 < semi_minor <= semi_major < 90` — and `bearing` is what points them, turning the major axis
+clockwise from north. So `bearing: 0` (the default) runs the long axis north–south, and `bearing: 90`
+runs it east–west:
+
+```yaml
+  tall:                 # 10 degrees north-south by 2 east-west
+    shape: ellipse
+    latitude: 0.0
+    longitude: 0.0
+    semi_major: 10.0
+    semi_minor: 2.0
+  wide:                 # the same ellipse turned a quarter turn
+    shape: ellipse
+    latitude: 0.0
+    longitude: 0.0
+    semi_major: 10.0
+    semi_minor: 2.0
+    bearing: 90.0
+```
+
+### Managing AOIs
+
+Edit the file by hand, or use `sgp4-predict aoi`.
+
+| Command                                   | Description                          |
+|-------------------------------------------|--------------------------------------|
+| `aoi add [id] [--shape S]`                | Add an AOI, prompting for its coordinates |
+| `aoi add [id] --force`                    | Replace an existing AOI              |
+| `aoi list` (`aoi ls`)                     | List the configured AOIs             |
+| `aoi remove <id>` (`aoi rm <id>`)         | Remove an AOI, after confirmation    |
+
+`aoi add` prompts field by field, like `gs add`. The underlined initial is accepted on its own, so
+the shape can be picked with a single key:
+
+```
+$ sgp4-predict aoi add
+AOI id: scotland
+Shape (box, ellipse, circle, polygon): b
+South latitude (degrees): 54
+North latitude (degrees): 60
+West longitude (degrees): -8
+East longitude (degrees): -1
+added aoi 'scotland' (54..60, 7 eastward from -8) to /home/you/.sgp4-predict/config.yaml
+```
+
+A polygon has no fixed number of fields, so its vertices are read one per line until a blank line:
+
+```
+$ sgp4-predict aoi add corridor
+AOI id: corridor
+Shape (box, ellipse, circle, polygon): p
+Vertices, one per line as `lat,lon`. Blank line when done.
+Vertex 1 lat,lon (degrees): 54,-8
+Vertex 2 lat,lon (degrees): 54,-1
+Vertex 3 lat,lon (degrees): 60,-1
+Vertex 4 lat,lon (degrees):
+added aoi 'corridor' (3 vertices) to /home/you/.sgp4-predict/config.yaml
+```
+
+A line that does not parse is reported and asked for again, so a typo costs one line rather than
+everything entered before it. The same is true of a blank line before the third vertex, of a
+latitude past a pole, and of a bound that contradicts one already given — a `north` below the
+`south`, or a semi-minor axis above the semi-major.
+
+The id and the shape may be given as arguments, in which case they are echoed as though they had been
+typed and only the coordinates are asked for:
+
+```sh
+sgp4-predict aoi add scotland
+sgp4-predict aoi add scotland --shape box
+```
+
+**Coordinates are never taken as arguments.** As with `gs add`, an AOI is either entered at the
+prompts or written into the config file by hand — a positional coordinate syntax would be both
+verbose and easy to get the wrong way round. Adding over an existing id needs `-f` / `--force`.
+
+`gs add` takes its id the same way, and `-f` / `--force` replaces an existing station:
+
+```sh
+sgp4-predict gs add glasgow
+sgp4-predict gs add glasgow --force
+```
+
+`aoi list` honours `--format` and shows each AOI by its config field names:
+
+```
+id               shape    definition
+------------------------------------
+cape-town        circle   latitude=-33.9 longitude=18.4 radius=2.25
+corridor         polygon  (54, -8) (54, -1) (60, -1)
+north-sea        ellipse  latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45
+scotland         box      south=54 north=60 west=-8 east=-1
+```
 
 ## Subcommands
 
@@ -187,6 +344,39 @@ start                    end                           state   duration
 2026-03-25T10:51:08Z     2026-03-25T11:24:48Z        Eclipse    33m 40s
 ```
 
+### `ground-track` — the sub-satellite point
+
+The geodetic point directly beneath the satellite, sampled at `--step` (default: `60s`).
+
+```sh
+sgp4-predict ground-track --tle-file sentinel.tle --duration 20m --step 5m
+```
+
+```
+datetime                  lat [deg]   lon [deg]  altitude [km]
+--------------------------------------------------------------
+2025-12-22T12:00:00Z       -29.3239    -27.2842        800.274
+2025-12-22T12:05:00Z       -46.8701    -32.9106        807.646
+2025-12-22T12:10:00Z       -64.0128    -42.8591        814.142
+2025-12-22T12:15:00Z       -79.0528    -76.9861        817.736
+```
+
+### `aoi-windows` — overpasses of an area of interest
+
+The windows in which the ground track lies inside the AOI named by `--aoi <id>`, with the
+sub-satellite point at each boundary crossing. See [Areas of interest](#areas-of-interest).
+
+```sh
+sgp4-predict aoi-windows --tle-file sentinel.tle --aoi europe --duration 12h
+```
+
+```
+entry                    exit                     entry_lat [deg] entry_lon [deg] exit_lat [deg] exit_lon [deg]   duration
+--------------------------------------------------------------------------------------------------------------------------
+2025-12-22T19:40:33Z     2025-12-22T19:43:28Z             55.0985         30.0000        65.0000        22.9317     2m 54s
+2025-12-22T21:16:56Z     2025-12-22T21:24:10Z             40.0000         11.0870        65.0000        -2.2431     7m 14s
+```
+
 ## Output
 
 | Flag                          | Description                                                       |
@@ -209,23 +399,32 @@ sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
 
 `text` and `csv` write the header even when there are no rows; `json` writes nothing.
 
-`--output-args` records how an output file was produced — the TLE source, the config file, and the
-coordinates `--gs` resolved to:
+`--output-args` records how an output file was produced — the TLE, the interval, the coordinates
+`--gs` resolved to, and every detection knob, whether or not it was passed:
 
 ```
 # command: transits
 # satellite: SENTINEL-2C
 # tle-line1: 1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
 # tle-line2: 2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740
-# tle-source: sentinel.tle
 # start: 2026-03-25T10:00:00Z
 # duration: 4h
-# config: /home/you/.sgp4-predict/config.yaml
 # ground-station: glasgow
 # observer: 55.86,-4.25,40
 # min-elevation: 0
-# format: text
+# min-step: 10s
+# max-step: 10m
+# walk-step: 30s
+# max-transit-duration: 1h
+# skip-leading-partial: true
+# clamp-to-interval: false
+# tca-scan-step: 10s
+# time-tolerance: 0.001
+# max-iter: 100
 ```
+
+Every line names the flag that sets it, so a recorded run can be replayed by pasting its own header
+back onto the command line.
 
 It is rejected with `--format json` or `--format csv`, since `#` lines would make that output
 unparseable.

@@ -123,7 +123,8 @@ impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
 pub struct TransitIterOpts {
     /// Lower bound of the adaptive coarse-scan step (`ThresholdStep::min`).
     pub min_step: Duration,
-    /// Upper bound of the adaptive coarse-scan step (`ThresholdStep::max`).
+    /// Upper bound of the adaptive coarse-scan step (`ThresholdStep::max`),
+    /// raised to `min_step` if smaller.
     pub max_step: Duration,
     /// Fixed step used to walk from a transit's start to its end; an
     /// adaptive step could jump clear over the peak and out the far side.

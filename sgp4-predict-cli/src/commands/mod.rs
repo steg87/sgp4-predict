@@ -1,4 +1,7 @@
+pub mod aoi;
+pub mod aoi_windows;
 pub mod apsides;
+pub mod ground_track;
 pub mod gs;
 pub mod illumination;
 pub mod observations;
@@ -15,9 +18,21 @@ use std::{
 
 use crate::{
     cli::{CommonArgs, Format},
-    config, tle,
+    tle,
+    tuning::HeaderPair,
 };
 use sgp4_predict::{Observer, Predictor, Tle};
+
+/// Flatten owned `--output-args` pairs into the borrowed form the header takes.
+///
+/// The groups must outlive the returned slice, which is why each command binds
+/// its `header_pairs()` to a local first.
+pub fn pairs<'a>(groups: &[&'a [HeaderPair]]) -> Vec<(&'a str, &'a str)> {
+    groups
+        .iter()
+        .flat_map(|group| group.iter().map(|(key, value)| (*key, value.as_str())))
+        .collect()
+}
 
 /// Everything the subcommands share: the resolved interval, the TLE and the
 /// predictor built from it, and the writer to emit rows to.
@@ -42,7 +57,6 @@ impl Context {
         &mut self,
         command: &str,
         common: &CommonArgs,
-        config_path: Option<&Path>,
         extra: &[(&str, &str)],
     ) -> anyhow::Result<()> {
         if !common.output_args {
@@ -51,34 +65,16 @@ impl Context {
 
         let start = self.start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
         let duration = humantime::format_duration(common.duration).to_string();
-        let format = crate::cli::value_name(self.format);
-        let tle_source = common
-            .tle_file
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "stdin".to_string());
 
         let mut pairs: Vec<(&str, &str)> = vec![
             ("command", command),
             ("satellite", &self.tle.satellite_name),
             ("tle-line1", &self.tle.line_1),
             ("tle-line2", &self.tle.line_2),
-            ("tle-source", &tle_source),
             ("start", &start),
             ("duration", &duration),
         ];
-
-        let config_display = config_path.map(|p| p.display().to_string());
-        if let Some(path) = &config_display {
-            pairs.push(("config", path));
-        }
         pairs.extend_from_slice(extra);
-        pairs.push(("format", &format));
-
-        let out_display = common.out.as_ref().map(|p| p.display().to_string());
-        if let Some(path) = &out_display {
-            pairs.push(("out", path));
-        }
 
         for (key, value) in &pairs {
             writeln!(self.writer, "# {key}: {value}")?;
@@ -163,9 +159,82 @@ pub fn format_observer_str(obs: &impl Observer) -> String {
     )
 }
 
-/// Resolve the config path actually in use, for `--output-args`.
-pub fn effective_config_path(explicit: Option<&Path>) -> Option<std::path::PathBuf> {
-    explicit
-        .map(Path::to_path_buf)
-        .or_else(config::default_path)
+/// Prompt for one field, shared by `gs add` and `aoi add`.
+///
+/// Prompts go to stderr so `gs list`-style piping is never contaminated and
+/// they stay visible when stdout is redirected.
+pub fn prompt(
+    lines: &mut impl Iterator<Item = std::io::Result<String>>,
+    label: &str,
+) -> anyhow::Result<String> {
+    eprint!("{label}: ");
+    std::io::stderr().flush()?;
+    let line = lines
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("unexpected end of input while reading {label}"))?
+        .context("failed to read from stdin")?;
+    Ok(line.trim().to_string())
+}
+
+/// Echo a value that came from the command line as though it had been typed at
+/// its prompt, so the transcript reads the same either way.
+pub fn echo(label: &str, value: impl std::fmt::Display) {
+    eprintln!("{label}: {value}");
+}
+
+/// Prompt until the answer parses, reporting each bad line and asking again.
+///
+/// A typo costs one line, not everything entered so far. EOF still ends it —
+/// `prompt` errors there — so a scripted caller cannot spin forever.
+pub fn prompt_retry<T>(
+    lines: &mut impl Iterator<Item = std::io::Result<String>>,
+    label: &str,
+    parse: impl Fn(&str) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    loop {
+        let input = prompt(lines, label)?;
+        match parse(&input) {
+            Ok(value) => return Ok(value),
+            Err(e) => eprintln!("  {e:#}"),
+        }
+    }
+}
+
+pub fn prompt_f64(
+    lines: &mut impl Iterator<Item = std::io::Result<String>>,
+    label: &str,
+    default: Option<f64>,
+) -> anyhow::Result<f64> {
+    let shown = match default {
+        Some(d) => format!("{label} [{d}]"),
+        None => label.to_string(),
+    };
+    prompt_retry(lines, &shown, |input| match (input, default) {
+        ("", Some(d)) => Ok(d),
+        ("", None) => anyhow::bail!("{label} is required"),
+        // `nan`/`inf` parse but pass every range check silently.
+        (value, _) => match value.parse::<f64>() {
+            Ok(parsed) if parsed.is_finite() => Ok(parsed),
+            _ => anyhow::bail!("expected a number, got '{value}'"),
+        },
+    })
+}
+
+/// Ask a yes/no question, for the `gs` and `aoi` remove commands.
+///
+/// The prompt goes to stderr so stdout stays pipeable. Anything other than
+/// y/yes means no, and so does EOF, so a non-interactive caller that forgot
+/// `--force` cannot delete anything.
+pub fn confirm(question: &str) -> anyhow::Result<bool> {
+    eprint!("{question} [y/N] ");
+    std::io::stderr().flush()?;
+
+    let mut answer = String::new();
+    if std::io::stdin().read_line(&mut answer)? == 0 {
+        return Ok(false);
+    }
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }

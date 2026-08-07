@@ -16,7 +16,6 @@ pub fn run(args: StateVectorsArgs) -> anyhow::Result<()> {
     ctx.write_args_header(
         "state-vectors",
         &args.common,
-        None,
         &[("step", &step_str), ("frame", &frame_str)],
     )?;
 
