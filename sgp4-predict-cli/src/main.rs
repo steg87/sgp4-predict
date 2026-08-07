@@ -5,6 +5,7 @@ mod config;
 mod observer;
 mod output;
 mod tle;
+mod tuning;
 
 use anyhow::Context as _;
 use clap::{CommandFactory as _, Parser as _};

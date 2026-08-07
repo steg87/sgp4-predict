@@ -19,8 +19,20 @@ use std::{
 use crate::{
     cli::{CommonArgs, Format},
     config, tle,
+    tuning::HeaderPair,
 };
 use sgp4_predict::{Observer, Predictor, Tle};
+
+/// Flatten owned `--output-args` pairs into the borrowed form the header takes.
+///
+/// The groups must outlive the returned slice, which is why each command binds
+/// its `header_pairs()` to a local first.
+pub fn pairs<'a>(groups: &[&'a [HeaderPair]]) -> Vec<(&'a str, &'a str)> {
+    groups
+        .iter()
+        .flat_map(|group| group.iter().map(|(key, value)| (*key, value.as_str())))
+        .collect()
+}
 
 /// Everything the subcommands share: the resolved interval, the TLE and the
 /// predictor built from it, and the writer to emit rows to.

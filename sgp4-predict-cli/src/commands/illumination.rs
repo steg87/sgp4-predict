@@ -1,10 +1,22 @@
-use super::prepare;
+use super::{pairs, prepare};
 use crate::{cli::IlluminationArgs, output};
 
 pub fn run(args: IlluminationArgs) -> anyhow::Result<()> {
     let mut ctx = prepare(&args.common)?;
-    ctx.write_args_header("illumination", &args.common, None, &[])?;
 
-    let windows = ctx.predictor.illumination_iter(ctx.interval.clone());
+    let tuning = args.tuning.header_pairs();
+    let refinement = args.refinement.header_pairs();
+    ctx.write_args_header(
+        "illumination",
+        &args.common,
+        None,
+        &pairs(&[&tuning, &refinement]),
+    )?;
+
+    let windows = ctx.predictor.illumination_iter_with_opts(
+        ctx.interval.clone(),
+        args.tuning.build()?,
+        args.refinement.build(),
+    );
     output::write_illumination(ctx.writer, ctx.format, windows)
 }

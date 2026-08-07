@@ -100,6 +100,7 @@ pub struct CircleDef {
 /// Wraps the vertex list in a struct because an internally tagged enum cannot
 /// carry a bare sequence — the tag has nowhere to live.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PolygonDef {
     pub vertices: Vec<Vertex>,
 }

@@ -26,6 +26,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   point directly beneath the satellite.
 - `Predictor::ground_track_iter`, sampling sub-satellite points at a fixed cadence.
 
+### Changed
+
+- `DetectError::WindowTooLong` renders its limit as a humantime span (`1h`) rather than chrono's
+  ISO-8601 `Display` (`PT3600S`), so the message names the value in the spelling callers pass back
+  in. This promotes `humantime` from a dev-dependency to a dependency.
+
 ## [0.1.0] - 2026-07-28
 
 Initial release — a higher-level prediction and observation layer over the `sgp4` crate.

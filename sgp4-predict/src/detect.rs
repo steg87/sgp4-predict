@@ -1036,12 +1036,22 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
 pub enum Error {
     #[error(
         "window too long: the positive window containing {at} exceeds the \
-         {max_window_duration} maximum"
+         {} maximum", human(*max_window_duration)
     )]
     WindowTooLong {
         at: DateTime<Utc>,
         max_window_duration: Duration,
     },
+}
+
+/// chrono's `Display` for `Duration` is ISO-8601 (`PT3600S`). This error names
+/// a limit the caller raises with a humantime span, so it is rendered the same
+/// way (`1h`) rather than in a spelling that cannot be passed back in.
+fn human(duration: Duration) -> String {
+    duration
+        .to_std()
+        .map(|d| humantime::format_duration(d).to_string())
+        .unwrap_or_else(|_| duration.to_string())
 }
 
 #[cfg(test)]

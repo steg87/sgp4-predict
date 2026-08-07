@@ -302,6 +302,48 @@ pub struct TransitsArgs {
         allow_negative_numbers = true
     )]
     pub min_elevation_deg: f64,
+
+    #[command(flatten)]
+    pub tuning: TransitTuningArgs,
+
+    #[command(flatten)]
+    pub refinement: RefinementArgs,
+}
+
+/// `TransitIterOpts` and `MaxElevationOpts` as flags. Defaults mirror those
+/// structs' `Default` impls, so passing none of these reproduces `transits_iter`.
+#[derive(clap::Args)]
+#[command(next_help_heading = "Detection tuning")]
+pub struct TransitTuningArgs {
+    /// Lower bound of the adaptive coarse-scan step
+    #[arg(long, value_parser = parse_step, default_value = "10s")]
+    pub min_step: Duration,
+
+    /// Upper bound of the adaptive coarse-scan step
+    #[arg(long, value_parser = parse_step, default_value = "10m")]
+    pub max_step: Duration,
+
+    /// Fixed step used to walk from a transit's start to its end
+    #[arg(long, value_parser = parse_step, default_value = "30s")]
+    pub walk_step: Duration,
+
+    /// A transit longer than this is reported as an error
+    #[arg(long, value_parser = parse_positive_duration, default_value = "1h")]
+    pub max_transit_duration: Duration,
+
+    /// Discard a transit already in progress at the interval start; false walks
+    /// backward past it to find its true AoS
+    #[arg(long, value_name = "BOOL", action = clap::ArgAction::Set, default_value_t = true)]
+    pub skip_leading_partial: bool,
+
+    /// Clamp a transit still in progress at the interval end to the interval;
+    /// false walks forward past it to find its true LoS
+    #[arg(long, value_name = "BOOL", action = clap::ArgAction::Set, default_value_t = false)]
+    pub clamp_to_interval: bool,
+
+    /// Fixed step used to scan for the time of closest approach
+    #[arg(long, value_parser = parse_step, default_value = "10s")]
+    pub tca_scan_step: Duration,
 }
 
 #[derive(clap::Args)]
@@ -338,6 +380,21 @@ pub fn value_name(value: impl ValueEnum) -> String {
 pub struct ApsidesArgs {
     #[command(flatten)]
     pub common: CommonArgs,
+
+    #[command(flatten)]
+    pub tuning: ApsisTuningArgs,
+
+    #[command(flatten)]
+    pub refinement: RefinementArgs,
+}
+
+/// `ApsisIterOpts` as flags.
+#[derive(clap::Args)]
+#[command(next_help_heading = "Detection tuning")]
+pub struct ApsisTuningArgs {
+    /// Fixed step used to scan for radial-velocity sign changes
+    #[arg(long, value_parser = parse_step, default_value = "60s")]
+    pub step: Duration,
 }
 
 #[derive(clap::Args)]
@@ -357,6 +414,45 @@ pub struct AoiWindowsArgs {
 
     #[command(flatten)]
     pub aoi: AoiArgs,
+
+    #[command(flatten)]
+    pub tuning: AoiTuningArgs,
+
+    #[command(flatten)]
+    pub refinement: RefinementArgs,
+}
+
+/// `AoiIterOpts` as flags.
+#[derive(clap::Args)]
+#[command(next_help_heading = "Detection tuning")]
+pub struct AoiTuningArgs {
+    /// Lower bound of the adaptive coarse-scan step, and so the shortest
+    /// crossing the scan is guaranteed to see. Floored at 1ms
+    #[arg(long, value_parser = parse_step, default_value = "1s")]
+    pub min_step: Duration,
+
+    /// Upper bound of the adaptive coarse-scan step, used far from the area
+    #[arg(long, value_parser = parse_step, default_value = "10m")]
+    pub max_step: Duration,
+
+    /// Fixed step used to walk from a window's start to its end
+    #[arg(long, value_parser = parse_step, default_value = "5s")]
+    pub walk_step: Duration,
+
+    /// A window longer than this is reported as an error; raise it for a
+    /// continental-scale area
+    #[arg(long, value_parser = parse_positive_duration, default_value = "1h")]
+    pub max_window_duration: Duration,
+
+    /// Discard a window already in progress at the interval start; false walks
+    /// backward past it to find its true beginning
+    #[arg(long, value_name = "BOOL", action = clap::ArgAction::Set, default_value_t = true)]
+    pub skip_leading_partial: bool,
+
+    /// Clamp a window still in progress at the interval end to the interval;
+    /// false walks forward past it to find its true end
+    #[arg(long, value_name = "BOOL", action = clap::ArgAction::Set, default_value_t = false)]
+    pub clamp_to_interval: bool,
 }
 
 /// Area-of-interest selection, the counterpart of [`ObserverArgs`].
@@ -381,6 +477,46 @@ does define. Add one with `sgp4-predict aoi add`.";
 pub struct IlluminationArgs {
     #[command(flatten)]
     pub common: CommonArgs,
+
+    #[command(flatten)]
+    pub tuning: IlluminationTuningArgs,
+
+    #[command(flatten)]
+    pub refinement: RefinementArgs,
+}
+
+/// `IlluminationIterOpts` as flags.
+#[derive(clap::Args)]
+#[command(next_help_heading = "Detection tuning")]
+pub struct IlluminationTuningArgs {
+    /// Fixed step used to scan for shadow-boundary crossings
+    #[arg(long, value_parser = parse_step, default_value = "60s")]
+    pub step: Duration,
+
+    /// Fixed step used to walk out to a window's true start and end
+    #[arg(long, value_parser = parse_step, default_value = "30s")]
+    pub walk_step: Duration,
+
+    /// An eclipse window longer than this is reported as an error; sunlit
+    /// windows are the gaps between eclipses and are never capped
+    #[arg(long, value_parser = parse_positive_duration, default_value = "1h")]
+    pub max_window_duration: Duration,
+}
+
+/// Root-finder configuration, shared by every detection subcommand.
+///
+/// Applied with `Predictor::with_refinement` rather than passed per call, so it
+/// reaches the one-shot refinements (`max_elevation`) as well as the iterators.
+#[derive(clap::Args)]
+#[command(next_help_heading = "Root finder")]
+pub struct RefinementArgs {
+    /// Convergence threshold on the bracket width, in seconds
+    #[arg(long, value_name = "SECONDS", value_parser = parse_time_tolerance, default_value = "0.001")]
+    pub time_tolerance: f64,
+
+    /// Maximum root-finder iterations before reporting failure to converge
+    #[arg(long, value_name = "N", value_parser = parse_max_iter, default_value = "100")]
+    pub max_iter: usize,
 }
 
 /// Expand a leading `~` or `~/`, so a quoted path behaves like an unquoted one.
@@ -416,6 +552,33 @@ fn parse_step(s: &str) -> Result<Duration, String> {
         return Err("step must be greater than zero".to_string());
     }
     Ok(step)
+}
+
+/// A zero cap rejects every window, so no result could ever be reported.
+fn parse_positive_duration(s: &str) -> Result<Duration, String> {
+    let duration = parse_duration(s)?;
+    if duration.is_zero() {
+        return Err("duration must be greater than zero".to_string());
+    }
+    Ok(duration)
+}
+
+/// A non-positive tolerance can never be met, so iteration would always run to
+/// `max_iter` and report a failure to converge.
+fn parse_time_tolerance(s: &str) -> Result<f64, String> {
+    let seconds: f64 = s.parse().map_err(|_| format!("invalid number: {s}"))?;
+    if !(seconds.is_finite() && seconds > 0.0) {
+        return Err(format!("time tolerance must be greater than zero, got {s}"));
+    }
+    Ok(seconds)
+}
+
+/// Zero iterations refines nothing, so every crossing would fail to converge.
+fn parse_max_iter(s: &str) -> Result<usize, String> {
+    match s.parse() {
+        Ok(0) | Err(_) => Err(format!("max iterations must be at least 1, got {s}")),
+        Ok(n) => Ok(n),
+    }
 }
 
 /// Elevation angles outside the horizon-to-zenith range can never be crossed.

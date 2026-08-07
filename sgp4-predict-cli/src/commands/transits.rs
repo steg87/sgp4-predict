@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use sgp4_predict::Degrees;
 use std::path::Path;
 
-use super::{effective_config_path, format_observer_str, prepare};
+use super::{effective_config_path, format_observer_str, pairs, prepare};
 use crate::{cli::TransitsArgs, output};
 
 pub fn run(args: TransitsArgs, config_path: Option<&Path>) -> anyhow::Result<()> {
@@ -15,23 +15,34 @@ pub fn run(args: TransitsArgs, config_path: Option<&Path>) -> anyhow::Result<()>
     let gs_id = args.observer.gs.as_deref().expect("resolve requires --gs");
     let min_el_str = args.min_elevation_deg.to_string();
     let config = effective_config_path(config_path);
-    ctx.write_args_header(
-        "transits",
-        &args.common,
-        config.as_deref(),
-        &[
-            ("ground-station", gs_id),
-            ("observer", &observer_str),
-            ("min-elevation", &min_el_str),
-        ],
-    )?;
+    let tuning = args.tuning.header_pairs();
+    let refinement = args.refinement.header_pairs();
 
-    let predictor = &ctx.predictor;
+    let mut extra = vec![
+        ("ground-station", gs_id),
+        ("observer", observer_str.as_str()),
+        ("min-elevation", min_el_str.as_str()),
+    ];
+    extra.extend(pairs(&[&tuning, &refinement]));
+    ctx.write_args_header("transits", &args.common, config.as_deref(), &extra)?;
+
+    // Set on the predictor rather than passed per call, so the TCA refinement
+    // below uses the same root finder as the transit crossings.
+    let predictor = ctx
+        .predictor
+        .clone()
+        .with_refinement(args.refinement.build());
+    let opts = args.tuning.build()?;
+    let max_elevation_opts = args.tuning.build_max_elevation()?;
+
+    let predictor = &predictor;
     let transits = predictor
-        .transits_iter(
+        .transits_iter_with_opts(
             &observer,
             ctx.interval.clone(),
             Degrees(args.min_elevation_deg),
+            opts,
+            args.refinement.build(),
         )
         .map(|result| {
             let transit = result.context("transit detection error")?;
@@ -42,7 +53,7 @@ pub fn run(args: TransitsArgs, config_path: Option<&Path>) -> anyhow::Result<()>
                 .observe_at(transit.end, &observer)
                 .context("LoS observation error")?;
             let (tca_time, tca_obs) = predictor
-                .max_elevation(transit, &observer)
+                .max_elevation_with_opts(transit, &observer, max_elevation_opts)
                 .context("TCA error")?;
             Ok((transit, aos_obs, los_obs, tca_time, tca_obs))
         });

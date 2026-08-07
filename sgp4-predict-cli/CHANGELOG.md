@@ -29,11 +29,26 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   though it had been typed, so the transcript reads the same either way.
 - Prompts re-ask on a malformed line instead of aborting, so a typo no longer discards the fields
   already entered. This applies to `gs add` too.
+- Detection tuning flags on `transits`, `apsides`, `illumination` and `aoi-windows`, exposing the
+  library's `*Opts` and `Refinement` knobs with their existing defaults, so an ordinary run is
+  unchanged. Which flags a subcommand takes depends on how it scans: `--step` where the stride is
+  fixed, `--min-step` / `--max-step` where it adapts, plus `--walk-step`, `--max-transit-duration`
+  or `--max-window-duration`, `--skip-leading-partial`, `--clamp-to-interval`, `--tca-scan-step`,
+  `--time-tolerance` and `--max-iter`. See each subcommand's `--help`.
+  `--max-window-duration` in particular was previously unreachable, so a continental-scale AOI
+  could not be scanned at all.
 
 ### Changed
 
 - `groundstations:` is omitted from a saved config when empty, so a config holding only AOIs no
   longer grows an empty stub.
+- `--output-args` records every resolved tuning knob, and each line is spelled as the flag that
+  sets it, so a recorded header can be pasted back onto the command line.
+
+### Fixed
+
+- `PolygonDef` rejects unknown fields, like every other config struct. A typo alongside a valid
+  `vertices` list was silently dropped.
 
 ## [0.1.0] - 2026-07-28
 
