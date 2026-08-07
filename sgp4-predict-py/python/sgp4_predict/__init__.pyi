@@ -53,12 +53,75 @@ class Interval:
 # A LatLon, a Geodetic, or a plain (latitude_deg, longitude_deg) tuple.
 LatLonLike: TypeAlias = LatLon | Geodetic | tuple[float, float]
 
+# Redeclared only because from_dict is not emitted by pyo3-stub-gen (PyAny
+# limitation) — but a redeclaration replaces the generated class, so every member
+# has to be repeated here.
 class Elements:
-    # from_dict is not emitted by pyo3-stub-gen (PyAny limitation); defined here manually.
+    """Orbital elements for a satellite."""
+    def __new__(
+        cls,
+        *,
+        norad_id: int,
+        epoch: datetime,
+        mean_motion: float,
+        eccentricity: float,
+        inclination: float,
+        right_ascension: float,
+        argument_of_perigee: float,
+        mean_anomaly: float,
+        mean_motion_dot: float,
+        mean_motion_ddot: float = 0.0,
+        drag_term: float = 0.0,
+        revolution_number: int = 0,
+        object_name: str | None = None,
+        classification: Classification = ...,
+        international_designator: str | None = None,
+        element_set_number: int = 0,
+        ephemeris_type: int = 0,
+    ) -> Elements: ...
+    @staticmethod
+    def from_json(json: str) -> Elements:
+        """Parse an OMM JSON string into orbital elements (Celestrak / Space-Track format)."""
+        ...
     @staticmethod
     def from_dict(data: dict) -> Elements:
         """Parse an OMM dict into orbital elements (Celestrak / Space-Track format)."""
         ...
+    @property
+    def object_name(self) -> str | None: ...
+    @property
+    def norad_id(self) -> int: ...
+    @property
+    def classification(self) -> Classification: ...
+    @property
+    def international_designator(self) -> str | None: ...
+    @property
+    def epoch(self) -> datetime: ...
+    @property
+    def mean_motion_dot(self) -> float: ...
+    @property
+    def mean_motion_ddot(self) -> float: ...
+    @property
+    def drag_term(self) -> float: ...
+    @property
+    def element_set_number(self) -> int: ...
+    @property
+    def inclination(self) -> float: ...
+    @property
+    def right_ascension(self) -> float: ...
+    @property
+    def eccentricity(self) -> float: ...
+    @property
+    def argument_of_perigee(self) -> float: ...
+    @property
+    def mean_anomaly(self) -> float: ...
+    @property
+    def mean_motion(self) -> float: ...
+    @property
+    def revolution_number(self) -> int: ...
+    @property
+    def ephemeris_type(self) -> int: ...
+    def __repr__(self) -> str: ...
 
 # The three area shapes take LatLonLike arguments, which pyo3-stub-gen widens to
 # Any; they are redeclared here so the tuple form type-checks.

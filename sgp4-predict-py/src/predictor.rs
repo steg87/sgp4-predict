@@ -456,7 +456,9 @@ impl Predictor {
     /// `min_step` is the lower bound of the adaptive coarse-scan step, and also the
     /// shortest crossing the scan is guaranteed to see; lower it below the default
     /// second for an area the ground track can cross faster than that. Floored at
-    /// 1 ms.
+    /// 1 ms. It also raises the upper bound where it exceeds it, so a `min_step`
+    /// above the ten-minute default ceiling pins the whole scan at that step and a
+    /// small area will be stepped straight over.
     ///
     /// `max_window_duration` caps how long a single window may run; the default is
     /// one hour. A window longer than the cap raises `RuntimeError`, so raise it for

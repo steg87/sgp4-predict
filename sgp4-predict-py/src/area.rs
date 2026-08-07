@@ -147,7 +147,8 @@ impl From<FillRule> for sgp4_predict::FillRule {
 /// A closed polygon on Earth's surface whose edges are great-circle arcs.
 ///
 /// The ring closes implicitly and vertex order does not matter. Vertices may be
-/// `LatLon` objects or `(latitude_deg, longitude_deg)` tuples.
+/// `LatLon` objects, `Geodetic` objects whose altitude is ignored, or
+/// `(latitude_deg, longitude_deg)` tuples.
 ///
 /// Edges are great-circle arcs, so vertices at the same latitude are not joined
 /// along the parallel — the arc bows toward the nearer pole, growing with the
@@ -218,7 +219,8 @@ impl Polygon {
 ///
 /// The box runs **eastward** from the south-west corner, so a north-east corner at
 /// a smaller longitude wraps across the antimeridian. Corners may be `LatLon`
-/// objects or `(latitude_deg, longitude_deg)` tuples.
+/// objects, `Geodetic` objects whose altitude is ignored, or
+/// `(latitude_deg, longitude_deg)` tuples.
 ///
 /// Raises `ValueError` if a latitude is outside [-90, 90], if a coordinate is `nan`
 /// or infinite, or if the box has no extent. Note that -180 and 180 are the same
@@ -287,7 +289,9 @@ impl Rectangle {
 ///
 /// Semi-axes are angular — a degree of arc is about 111.2 km on the ground — and
 /// the bearing turns the major axis clockwise from north. At a pole, where north is
-/// undefined, the bearing is measured from the prime meridian instead.
+/// undefined, the bearing is measured from the prime meridian instead. The centre
+/// may be a `LatLon` object, a `Geodetic` object whose altitude is ignored, or a
+/// `(latitude_deg, longitude_deg)` tuple.
 ///
 /// Raises `ValueError` if `0 < semi_minor_deg <= semi_major_deg < 90` does not
 /// hold, if the centre's latitude is outside [-90, 90], or if any argument is
@@ -444,8 +448,8 @@ pub(crate) fn extract_area_ref<'a>(area: &'a Bound<'_, PyAny>) -> PyResult<AreaR
 
 /// A `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple.
 pub(crate) fn extract_lat_lon(point: &Bound<'_, PyAny>) -> PyResult<sgp4_predict::LatLon> {
-    // `downcast` rather than `extract`: a miss here is the common case for the
-    // tuple form, and only `downcast` misses without building an exception.
+    // `cast` rather than `extract`: a miss here is the common case for the tuple
+    // form, and only `cast` misses without building an exception.
     if let Ok(p) = point.cast::<LatLon>() {
         return Ok(p.get().inner);
     }

@@ -15,8 +15,9 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 - Area-of-interest detection: `Predictor.aoi_iter` and `detect_aoi` yield the `AoiWindow`s during
   which the sub-satellite point is inside an area. `Polygon`, `Rectangle` and `Ellipse` describe the
-  region; each also exposes `signed_angular_offset_deg`. Points are `LatLon` objects or plain
-  `(latitude_deg, longitude_deg)` tuples, and `AoiWindow` satisfies `IntervalRange`.
+  region; each also exposes `signed_angular_offset_deg`. Points are `LatLon` objects, `Geodetic`
+  objects whose altitude is ignored, or plain `(latitude_deg, longitude_deg)` tuples, and
+  `AoiWindow` satisfies `IntervalRange`.
 - `LatLon` and `Geodetic` types, `Predictor.sub_point` — the geodetic point directly beneath the
   satellite — and `Predictor.ground_track_iter`, sampling those points at a fixed cadence.
 

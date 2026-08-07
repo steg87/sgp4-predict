@@ -392,6 +392,8 @@ def test_near_global_area_needs_a_raised_max_window_duration():
 def test_detect_aoi_max_window_duration_is_configurable():
     p = make_predictor()
     t = START + timedelta(hours=2)
+    # The premise: t is inside the area, so detect_aoi has a window to measure.
+    assert p.sub_point(t).latitude_deg < 60.0
 
     with pytest.raises(RuntimeError):
         p.detect_aoi(t, SOUTH_OF_60N)

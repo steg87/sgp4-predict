@@ -128,7 +128,8 @@ expected.
 ## Areas of interest
 
 An area is a region on the ground; `aoi_iter` yields the windows in which the sub-satellite point
-lies inside it. Points are `LatLon` objects or plain `(latitude_deg, longitude_deg)` tuples.
+lies inside it. Points are `LatLon` objects, `Geodetic` objects whose altitude is ignored — so a
+`sub_point` result can be passed straight in — or plain `(latitude_deg, longitude_deg)` tuples.
 
 ```python
 from sgp4_predict import Ellipse, LatLon, Polygon, Rectangle
@@ -162,7 +163,8 @@ near-global area really is that big: a LEO satellite is inside `Rectangle.latitu
 for about 85 minutes of each 100-minute orbit, so raise the cap for one. The other knob is
 `min_step`, the lower bound of the adaptive coarse scan and so the shortest crossing the scan is
 guaranteed to see; lower it below the default second for an area the ground track crosses faster
-than that.
+than that. It raises the scan's ten-minute upper bound too wherever it exceeds it, so a `min_step`
+larger than that pins every step there and a small area is passed straight over.
 
 ```python
 band = Rectangle.latitude_band(-90.0, 60.0)
