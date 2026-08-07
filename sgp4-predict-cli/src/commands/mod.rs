@@ -238,9 +238,11 @@ pub fn prompt_f64(
     prompt_retry(lines, &shown, |input| match (input, default) {
         ("", Some(d)) => Ok(d),
         ("", None) => anyhow::bail!("{label} is required"),
-        (value, _) => value
-            .parse()
-            .map_err(|_| anyhow::anyhow!("expected a number, got '{value}'")),
+        // `nan`/`inf` parse but pass every range check silently.
+        (value, _) => match value.parse::<f64>() {
+            Ok(parsed) if parsed.is_finite() => Ok(parsed),
+            _ => anyhow::bail!("expected a number, got '{value}'"),
+        },
     })
 }
 

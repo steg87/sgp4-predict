@@ -149,6 +149,11 @@ impl StepStrategy for FixedStep {
 /// `-value / rate`, clamped to `[min, max]` — large steps far below the
 /// threshold, small steps as the crossing approaches. This is the strategy
 /// used by transit detection.
+///
+/// An inverted pair resolves in favour of `min`: `max` is raised to it, as
+/// [`AoiIterOpts`](crate::AoiIterOpts) does. Honouring `max` instead would
+/// take `min`-sized steps only where the crossing is imminent — precisely
+/// where a step too large jumps clean over the window and reports nothing.
 #[derive(Debug, Clone, Copy)]
 pub struct ThresholdStep {
     /// Smallest step taken when the crossing is imminent.
@@ -168,16 +173,17 @@ impl Default for ThresholdStep {
 
 impl StepStrategy for ThresholdStep {
     fn next_time(&mut self, current: DateTime<Utc>, sample: Option<&Sample>) -> DateTime<Utc> {
+        let max = self.max.max(self.min);
         let step = match sample.and_then(|s| s.rate.map(|rate| (s.value, rate))) {
             Some((value, rate)) if rate > 0.0 => {
                 // Clamping the f64 seconds to at most max_seconds first
                 // keeps the Duration::seconds conversion below from
-                // overflowing, and already bounds the result to self.max —
-                // only the floor still needs enforcing.
-                let seconds = (-value / rate).clamp(0.0, self.max.num_seconds() as f64);
+                // overflowing, and already bounds the result to max — only
+                // the floor still needs enforcing.
+                let seconds = (-value / rate).clamp(0.0, max.num_seconds() as f64);
                 Duration::seconds(seconds as i64).max(self.min)
             }
-            _ => self.max,
+            _ => max,
         };
         current + step
     }
@@ -1342,6 +1348,10 @@ mod tests {
             results[0],
             Err(crate::Error::Detect(Error::WindowTooLong { .. }))
         ));
+        // The cap is named the way the caller spelled it, not as chrono's
+        // ISO-8601 `PT300S`, so it can be passed straight back in.
+        let message = results[0].as_ref().unwrap_err().to_string();
+        assert!(message.contains("5m"), "{message}");
     }
 
     // --- detect_window ---
@@ -1446,6 +1456,19 @@ mod tests {
             max: Duration::minutes(10),
         };
         let s = threshold_sample(-0.0001, 1.0);
+        assert_eq!(step.next_time(t0(), Some(&s)), t0() + step.min);
+    }
+
+    #[test]
+    fn test_threshold_step_inverted_bounds_resolve_to_min() {
+        // max below min must not leave the approaching branch stepping by the
+        // larger of the two, which would jump clean over the crossing.
+        let mut step = ThresholdStep {
+            min: Duration::minutes(20),
+            max: Duration::seconds(10),
+        };
+        assert_eq!(step.next_time(t0(), None), t0() + step.min);
+        let s = threshold_sample(-600.0, 1.0);
         assert_eq!(step.next_time(t0(), Some(&s)), t0() + step.min);
     }
 

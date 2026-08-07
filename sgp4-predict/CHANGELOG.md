@@ -32,6 +32,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   ISO-8601 `Display` (`PT3600S`), so the message names the value in the spelling callers pass back
   in. This promotes `humantime` from a dev-dependency to a dependency.
 
+### Fixed
+
+- A `TransitIterOpts` whose `min_step` exceeds its `max_step` no longer steps over passes and
+  reports nothing. `ThresholdStep` now raises `max` to `min`, matching how `AoiIterOpts` resolves
+  the same pair.
+
 ## [0.1.0] - 2026-07-28
 
 Initial release — a higher-level prediction and observation layer over the `sgp4` crate.

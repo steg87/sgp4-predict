@@ -105,6 +105,22 @@ fn test_max_window_duration_binds_and_can_be_raised() {
     assert!(stdout.lines().count() > 2, "{stdout}");
 }
 
+/// A knob rejected after the writer is open would leave an empty `--out`
+/// behind, the same failure `prepare()` avoids for a bad TLE.
+#[test]
+fn test_rejected_knob_leaves_no_output_file() {
+    let config = config("tuning_no_empty_out");
+    let out = config.with_file_name("apsides.txt");
+
+    // Beyond chrono::Duration's range, so it fails at build(), not parsing.
+    err(&run(
+        &config,
+        "apsides",
+        &["--step", "1000000000y", "--out", out.to_str().unwrap()],
+    ));
+    assert!(!out.exists(), "{} was created", out.display());
+}
+
 #[test]
 fn test_zero_and_negative_values_are_rejected() {
     let config = config("tuning_rejects");

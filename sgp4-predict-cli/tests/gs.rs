@@ -212,6 +212,15 @@ fn test_remove_confirms_before_deleting() {
             .unwrap()
             .contains("glasgow")
     );
+
+    // Removing the last station empties both maps, which serialise away
+    // entirely; the result must still parse.
+    let out = gs(&config, &["list"], "");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]

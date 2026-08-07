@@ -49,6 +49,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 - `PolygonDef` rejects unknown fields, like every other config struct. A typo alongside a valid
   `vertices` list was silently dropped.
+- Prompts reject `nan` and `inf`. Both parse as numbers but pass every range check, so a non-finite
+  West longitude made the East prompt unsatisfiable and a non-finite centre only failed once every
+  field had been entered.
+- A detection-tuning flag rejected during conversion no longer leaves an empty `--out` file behind.
 
 ## [0.1.0] - 2026-07-28
 

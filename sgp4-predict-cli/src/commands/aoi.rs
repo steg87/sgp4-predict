@@ -244,10 +244,12 @@ fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AoiDef> {
     }))
 }
 
+/// `nan`/`inf` parse as `f64` but pass every range check silently.
 fn number(input: &str) -> anyhow::Result<f64> {
-    input
-        .parse()
-        .map_err(|_| anyhow::anyhow!("expected a number, got '{input}'"))
+    match input.parse::<f64>() {
+        Ok(value) if value.is_finite() => Ok(value),
+        _ => anyhow::bail!("expected a number, got '{input}'"),
+    }
 }
 
 /// Read vertices until a blank line. Numbered as they are entered, since a

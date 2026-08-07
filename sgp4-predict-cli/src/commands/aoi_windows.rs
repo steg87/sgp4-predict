@@ -9,6 +9,8 @@ pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<(
     // Resolve the AOI first: an unknown --aoi must fail before the user is
     // asked for a TLE on stdin.
     let (def, shape) = args.aoi.resolve(config_path)?;
+    let opts = args.tuning.build()?;
+    let refinement = args.refinement.build();
     let mut ctx = prepare(&args.common)?;
 
     let aoi_id = args.aoi.id.as_deref().expect("resolve requires --aoi");
@@ -24,9 +26,6 @@ pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<(
     ];
     extra.extend(pairs(&[&tuning, &refinement_pairs]));
     ctx.write_args_header("aoi-windows", &args.common, config.as_deref(), &extra)?;
-
-    let opts = args.tuning.build()?;
-    let refinement = args.refinement.build();
 
     // Matched once here rather than behind a trait object, so the per-sample
     // geometry call stays static.

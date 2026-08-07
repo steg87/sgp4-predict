@@ -2,6 +2,7 @@ use super::{pairs, prepare};
 use crate::{cli::IlluminationArgs, output};
 
 pub fn run(args: IlluminationArgs) -> anyhow::Result<()> {
+    let opts = args.tuning.build()?;
     let mut ctx = prepare(&args.common)?;
 
     let tuning = args.tuning.header_pairs();
@@ -15,7 +16,7 @@ pub fn run(args: IlluminationArgs) -> anyhow::Result<()> {
 
     let windows = ctx.predictor.illumination_iter_with_opts(
         ctx.interval.clone(),
-        args.tuning.build()?,
+        opts,
         args.refinement.build(),
     );
     output::write_illumination(ctx.writer, ctx.format, windows)

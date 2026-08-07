@@ -310,17 +310,22 @@ fn test_polygon_vertices_are_numbered_and_blank_line_ends_them() {
 fn test_malformed_input_re_prompts_rather_than_aborting() {
     let config = fresh_config("aoi_prompt_retry");
 
-    // A bad shape, then a bad number, then a good run of the same entry.
+    // A bad shape, a bad number, then `inf` — which parses as f64 but would
+    // make the East prompt unsatisfiable — then a good run of the same entry.
     let out = aoi(
         &config,
         &["add"],
-        "scotland\nhexagon\nbox\n54\nsixty\n60\n-8\n-1\n",
+        "scotland\nhexagon\nbox\n54\nsixty\n60\ninf\n-8\n-1\n",
     );
     ok(&out);
     let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(prompts.contains("unknown shape 'hexagon'"), "{prompts}");
     assert!(
         prompts.contains("expected a number, got 'sixty'"),
+        "{prompts}"
+    );
+    assert!(
+        prompts.contains("expected a number, got 'inf'"),
         "{prompts}"
     );
     assert!(

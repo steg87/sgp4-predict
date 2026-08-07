@@ -9,6 +9,8 @@ pub fn run(args: TransitsArgs, config_path: Option<&Path>) -> anyhow::Result<()>
     // Resolve the station first: an unknown --gs must fail before the user is
     // asked for a TLE on stdin.
     let observer = args.observer.resolve(config_path)?;
+    let opts = args.tuning.build()?;
+    let max_elevation_opts = args.tuning.build_max_elevation()?;
     let mut ctx = prepare(&args.common)?;
 
     let observer_str = format_observer_str(&observer);
@@ -32,8 +34,6 @@ pub fn run(args: TransitsArgs, config_path: Option<&Path>) -> anyhow::Result<()>
         .predictor
         .clone()
         .with_refinement(args.refinement.build());
-    let opts = args.tuning.build()?;
-    let max_elevation_opts = args.tuning.build_max_elevation()?;
 
     let predictor = &predictor;
     let transits = predictor
