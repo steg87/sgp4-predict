@@ -54,6 +54,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   field had been entered.
 - A detection-tuning flag rejected during conversion no longer leaves an empty `--out` file behind.
 
+### Removed
+
+- The `--output-args` header no longer emits `tle-source`, `config`, `format` or `out`. `format` was
+  always `text`, `out` named the file the line was written into, and the other two were local paths
+  whose content is already recorded literally on the surrounding lines.
+
 ## [0.1.0] - 2026-07-28
 
 Initial release — a command-line front-end to `sgp4-predict`.

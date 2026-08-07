@@ -18,7 +18,7 @@ use std::{
 
 use crate::{
     cli::{CommonArgs, Format},
-    config, tle,
+    tle,
     tuning::HeaderPair,
 };
 use sgp4_predict::{Observer, Predictor, Tle};
@@ -57,7 +57,6 @@ impl Context {
         &mut self,
         command: &str,
         common: &CommonArgs,
-        config_path: Option<&Path>,
         extra: &[(&str, &str)],
     ) -> anyhow::Result<()> {
         if !common.output_args {
@@ -66,34 +65,16 @@ impl Context {
 
         let start = self.start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
         let duration = humantime::format_duration(common.duration).to_string();
-        let format = crate::cli::value_name(self.format);
-        let tle_source = common
-            .tle_file
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "stdin".to_string());
 
         let mut pairs: Vec<(&str, &str)> = vec![
             ("command", command),
             ("satellite", &self.tle.satellite_name),
             ("tle-line1", &self.tle.line_1),
             ("tle-line2", &self.tle.line_2),
-            ("tle-source", &tle_source),
             ("start", &start),
             ("duration", &duration),
         ];
-
-        let config_display = config_path.map(|p| p.display().to_string());
-        if let Some(path) = &config_display {
-            pairs.push(("config", path));
-        }
         pairs.extend_from_slice(extra);
-        pairs.push(("format", &format));
-
-        let out_display = common.out.as_ref().map(|p| p.display().to_string());
-        if let Some(path) = &out_display {
-            pairs.push(("out", path));
-        }
 
         for (key, value) in &pairs {
             writeln!(self.writer, "# {key}: {value}")?;
@@ -176,13 +157,6 @@ pub fn format_observer_str(obs: &impl Observer) -> String {
         obs.longitude().to_f64(),
         obs.altitude()
     )
-}
-
-/// Resolve the config path actually in use, for `--output-args`.
-pub fn effective_config_path(explicit: Option<&Path>) -> Option<std::path::PathBuf> {
-    explicit
-        .map(Path::to_path_buf)
-        .or_else(config::default_path)
 }
 
 /// Prompt for one field, shared by `gs add` and `aoi add`.

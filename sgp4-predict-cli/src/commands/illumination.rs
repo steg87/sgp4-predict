@@ -10,7 +10,6 @@ pub fn run(args: IlluminationArgs) -> anyhow::Result<()> {
     ctx.write_args_header(
         "illumination",
         &args.common,
-        None,
         &pairs(&[&tuning, &refinement]),
     )?;
 

@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use sgp4_predict::{AoiIterOpts, Refinement};
 use std::path::Path;
 
-use super::{Context, effective_config_path, pairs, prepare};
+use super::{Context, pairs, prepare};
 use crate::{aoi::AoiShape, cli::AoiWindowsArgs, output};
 
 pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<()> {
@@ -15,7 +15,6 @@ pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<(
 
     let aoi_id = args.aoi.id.as_deref().expect("resolve requires --aoi");
     let definition = def.describe();
-    let config = effective_config_path(config_path);
     let tuning = args.tuning.header_pairs();
     let refinement_pairs = args.refinement.header_pairs();
 
@@ -25,7 +24,7 @@ pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<(
         ("aoi-definition", definition.as_str()),
     ];
     extra.extend(pairs(&[&tuning, &refinement_pairs]));
-    ctx.write_args_header("aoi-windows", &args.common, config.as_deref(), &extra)?;
+    ctx.write_args_header("aoi-windows", &args.common, &extra)?;
 
     // Matched once here rather than behind a trait object, so the per-sample
     // geometry call stays static.

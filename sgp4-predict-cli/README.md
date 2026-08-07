@@ -399,23 +399,32 @@ sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
 
 `text` and `csv` write the header even when there are no rows; `json` writes nothing.
 
-`--output-args` records how an output file was produced — the TLE source, the config file, and the
-coordinates `--gs` resolved to:
+`--output-args` records how an output file was produced — the TLE, the interval, the coordinates
+`--gs` resolved to, and every detection knob, whether or not it was passed:
 
 ```
 # command: transits
 # satellite: SENTINEL-2C
 # tle-line1: 1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
 # tle-line2: 2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740
-# tle-source: sentinel.tle
 # start: 2026-03-25T10:00:00Z
 # duration: 4h
-# config: /home/you/.sgp4-predict/config.yaml
 # ground-station: glasgow
 # observer: 55.86,-4.25,40
 # min-elevation: 0
-# format: text
+# min-step: 10s
+# max-step: 10m
+# walk-step: 30s
+# max-transit-duration: 1h
+# skip-leading-partial: true
+# clamp-to-interval: false
+# tca-scan-step: 10s
+# time-tolerance: 0.001
+# max-iter: 100
 ```
+
+Every line names the flag that sets it, so a recorded run can be replayed by pasting its own header
+back onto the command line.
 
 It is rejected with `--format json` or `--format csv`, since `#` lines would make that output
 unparseable.

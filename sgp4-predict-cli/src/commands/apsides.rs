@@ -7,12 +7,7 @@ pub fn run(args: ApsidesArgs) -> anyhow::Result<()> {
 
     let tuning = args.tuning.header_pairs();
     let refinement = args.refinement.header_pairs();
-    ctx.write_args_header(
-        "apsides",
-        &args.common,
-        None,
-        &pairs(&[&tuning, &refinement]),
-    )?;
+    ctx.write_args_header("apsides", &args.common, &pairs(&[&tuning, &refinement]))?;
 
     let apsides =
         ctx.predictor
