@@ -46,12 +46,12 @@ function's units.
 
 ## The built-in event functions
 
-| Iterator | Event function | Step |
-|---|---|---|
-| `TransitIter` | elevation − `min_elevation`, with its rate as the derivative | adaptive: large while below or descending, small while approaching or above |
-| `ApsisIter` | radial velocity `r·v` — `+ → −` is apogee, `− → +` perigee | fixed, 60 s |
-| `IlluminationIter` | cylindrical shadow scalar, negative in sunlight | fixed |
-| `AoiIter` | signed angular offset of the sub-satellite point from the area boundary, positive inside | `\|offset\| / ω_max`, which cannot reach the boundary within one step |
+| Iterator           | Event function                                                                           | Step                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `TransitIter`      | elevation − `min_elevation`, with its rate as the derivative                             | adaptive: large while below or descending, small while approaching or above |
+| `ApsisIter`        | radial velocity `r·v` — `+ → −` is apogee, `− → +` perigee                               | fixed, 60 s                                                                 |
+| `IlluminationIter` | cylindrical shadow scalar, negative in sunlight                                          | fixed                                                                       |
+| `AoiIter`          | signed angular offset of the sub-satellite point from the area boundary, positive inside | `\|offset\| / ω_max`, which cannot reach the boundary within one step       |
 
 Each has an `Opts` struct carrying its step bounds and caps; `Predictor::with_refinement`
 configures the solver.

@@ -1,14 +1,15 @@
 rust:
   - changed-files:
-    - any-glob-to-any-file: ["sgp4-predict/src/**/*.rs", "sgp4-predict/Cargo.toml", "Cargo.lock"]
+      - any-glob-to-any-file:
+          ["sgp4-predict/src/**/*.rs", "sgp4-predict/Cargo.toml", "Cargo.lock"]
 
 tests:
   - changed-files:
-    - any-glob-to-any-file: "sgp4-predict/tests/**"
+      - any-glob-to-any-file: "sgp4-predict/tests/**"
 
 ci:
   - changed-files:
-    - any-glob-to-any-file: [".github/**", "Makefile", "release.toml"]
+      - any-glob-to-any-file: [".github/**", "Makefile", "release.toml"]
 
 # Matched on the branch, not on paths: a release PR touches Cargo.toml and
 # CHANGELOG.md, which is exactly what ordinary PRs touch. `release/` is the
@@ -18,12 +19,12 @@ release:
 
 python:
   - changed-files:
-    - any-glob-to-any-file: "**/*.py"
+      - any-glob-to-any-file: "**/*.py"
 
 python-bindings:
   - changed-files:
-    - any-glob-to-any-file: ["sgp4-predict-py/**", "**/*.pyi"]
+      - any-glob-to-any-file: ["sgp4-predict-py/**", "**/*.pyi"]
 
 documentation:
   - changed-files:
-    - any-glob-to-any-file: ["**/*.md", "docs/**"]
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]

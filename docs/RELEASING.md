@@ -5,10 +5,10 @@ no local script needs to be run.
 
 Two workflows do the work:
 
-| Workflow | Trigger | Does |
-|---|---|---|
-| **Prepare release** (`release-prepare.yml`) | manual dispatch | bumps versions, rolls changelogs, verifies, opens a release PR |
-| **Release** (`release.yml`) | push to a release branch | publishes to crates.io + PyPI, tags, opens GitHub Releases |
+| Workflow                                    | Trigger                  | Does                                                           |
+| ------------------------------------------- | ------------------------ | -------------------------------------------------------------- |
+| **Prepare release** (`release-prepare.yml`) | manual dispatch          | bumps versions, rolls changelogs, verifies, opens a release PR |
+| **Release** (`release.yml`)                 | push to a release branch | publishes to crates.io + PyPI, tags, opens GitHub Releases     |
 
 The bump and changelog roll are driven by [`cargo-release`](https://github.com/crate-ci/cargo-release);
 its configuration lives in [`release.toml`](../release.toml).
@@ -39,21 +39,21 @@ fails `test.yml` immediately.
 1. **Write notes as you go.** Every PR that changes behaviour adds bullets under
    `## [Unreleased]` in the affected crate's `CHANGELOG.md`.
 
-2. **Dispatch _Prepare release_.** Actions → *Prepare release* → *Run workflow*:
+2. **Dispatch _Prepare release_.** Actions → _Prepare release_ → _Run workflow_:
 
-   | Input | Meaning |
-   |---|---|
-   | `branch` | branch to release from (default `main`) |
-   | `level` | `patch` / `minor` / `major` / `rc` / `beta` / `alpha` / `release` |
-   | `version` | an exact version, overriding `level` — e.g. `0.2.0-rc.1` |
-   | `scope` | `all`, or a single crate (patch bumps only) |
+   | Input     | Meaning                                                           |
+   | --------- | ----------------------------------------------------------------- |
+   | `branch`  | branch to release from (default `main`)                           |
+   | `level`   | `patch` / `minor` / `major` / `rc` / `beta` / `alpha` / `release` |
+   | `version` | an exact version, overriding `level` — e.g. `0.2.0-rc.1`          |
+   | `scope`   | `all`, or a single crate (patch bumps only)                       |
 
 3. **Review the PR.** It shows the version table, the changelog diff, and a
-   *Release notes preview* — the exact text each GitHub Release will carry. The
+   _Release notes preview_ — the exact text each GitHub Release will carry. The
    normal test suite runs on it. Amend the changelog wording on the PR branch if
    you want; notes are re-extracted from the merged files at publish time.
 
-4. **Merge it.** *Release* then publishes every crate whose
+4. **Merge it.** _Release_ then publishes every crate whose
    `<name>-v<version>` tag does not yet exist, tags it, and opens a GitHub
    Release per crate.
 
@@ -77,7 +77,7 @@ releases from a single bump would race for the badge.
 0.1.1-rc.2   --level release--> 0.1.1
 ```
 
-To cut a release candidate for the *next minor* rather than the next patch, pass
+To cut a release candidate for the _next minor_ rather than the next patch, pass
 the exact version: `version = 0.2.0-rc.1`.
 
 Pre-releases **do not roll the changelog**. A release candidate ships the pending
@@ -89,10 +89,10 @@ version carrying a pre-release suffix.
 
 `release.yml` also triggers on `*.x`, so a backport patch can ship from an older
 line — releasing `1.1.2` after `1.2.0` is already out. Branch from the tag as
-`1.1.x`, cherry-pick, then dispatch *Prepare release* with `branch = 1.1.x`.
+`1.1.x`, cherry-pick, then dispatch _Prepare release_ with `branch = 1.1.x`.
 
 **Name maintenance branches `<major>.<minor>.x`, never `release/…`.** `release/`
-is the namespace *Prepare release* opens its PR branches in, so `release.yml`
+is the namespace _Prepare release_ opens its PR branches in, so `release.yml`
 deliberately does not trigger on it. Adding `release/**` to those triggers would
 publish a release PR branch the moment it was pushed, before anyone reviewed it.
 
@@ -100,7 +100,7 @@ publish a release PR branch the moment it was pushed, before anyone reviewed it.
 
 Required once:
 
-- **Branch protection on `main` requiring `test.yml`.** *Release* fires on push
+- **Branch protection on `main` requiring `test.yml`.** _Release_ fires on push
   and does not itself wait for the suite, so this is what actually stops a
   release PR merging — and publishing — over a red build.
 - A **`release` label**, applied by `.github/labeler.yml`'s head-branch rule.
@@ -111,7 +111,7 @@ Required once:
 - **`pypi` environment** — no secret; PyPI uses OIDC trusted publishing.
   Configure a publisher on PyPI for `sgp4-predict` with owner `steg87`,
   repository `sgp4-predict`, workflow `release.yml`, environment `pypi`. For a
-  project that does not exist on PyPI yet this is a *pending* publisher, and it
+  project that does not exist on PyPI yet this is a _pending_ publisher, and it
   must exist **before** the first publish.
 - Adding **required reviewers** to either environment makes publishing pause for
   an explicit approval even after the release PR merges.
@@ -124,13 +124,13 @@ a PR opened with `GITHUB_TOKEN` never starts `test.yml`.
 
 A GitHub App fixes it, and is what this repo uses:
 
-| Setting | Value |
-|---|---|
-| `RELEASE_APP_CLIENT_ID` **variable** | the App's Client ID or App ID |
+| Setting                              | Value                                         |
+| ------------------------------------ | --------------------------------------------- |
+| `RELEASE_APP_CLIENT_ID` **variable** | the App's Client ID or App ID                 |
 | `RELEASE_APP_PRIVATE_KEY` **secret** | the full `.pem`, `BEGIN`/`END` lines included |
 
-Create the App with **contents: write** and **pull requests: write**, *Generate a
-private key*, and **install the App on this repository** — creating it is not
+Create the App with **contents: write** and **pull requests: write**, _Generate a
+private key_, and **install the App on this repository** — creating it is not
 enough; without the install the token request fails with `Not Found`. A client
 secret cannot be used in place of the key; that belongs to the OAuth user flow.
 
@@ -140,29 +140,29 @@ Set the key from the file rather than pasting it, so its line breaks survive:
 gh secret set RELEASE_APP_PRIVATE_KEY < ~/Downloads/<app>.<date>.private-key.pem
 ```
 
-A mangled value fails at *Mint app token* with `Invalid keyData` /
+A mangled value fails at _Mint app token_ with `Invalid keyData` /
 `asn1 encoding routines::not enough data`, which is always the local value
 rather than the App's registration.
 
-If `RELEASE_APP_CLIENT_ID` is unset, *Prepare release* fails immediately rather
+If `RELEASE_APP_CLIENT_ID` is unset, _Prepare release_ fails immediately rather
 than opening a PR that silently gets no CI. Note the App cannot approve its own
 PR, so a required-review rule still needs a human — which is the intent.
 
 ## Recovering from a partial release
 
-Tag absence is the release signal, so re-running *Release* resumes rather than
+Tag absence is the release signal, so re-running _Release_ resumes rather than
 duplicating:
 
 - Published but not tagged? `cargo info <name>@<version>` detects it, the publish
   is skipped, and only the tag and GitHub Release are created.
 - Tagged already? That crate is not pending and is skipped entirely.
 
-To rehearse without side effects, dispatch *Release* with `dry_run: true`
+To rehearse without side effects, dispatch _Release_ with `dry_run: true`
 (the default): detection and the wheel builds run, publishing and tagging do not.
 
 ## The 0.0.0 sentinel
 
-A crate at `0.0.0` is treated as **never released**: *Release* skips it and
+A crate at `0.0.0` is treated as **never released**: _Release_ skips it and
 publishes nothing.
 
 This exists because tag absence is otherwise the only release signal, so a crate
@@ -176,7 +176,7 @@ release bumps out of it.
 Nothing special — the normal flow, and its first real exercise. Before
 dispatching, confirm the repository setup above, in particular the crates.io
 token's **`publish-new`** scope (a `publish-update`-only token cannot create a
-new crate) and the **pending** PyPI publisher. Then dispatch *Prepare release*
+new crate) and the **pending** PyPI publisher. Then dispatch _Prepare release_
 with `level: minor`, `scope: all` — `0.0.0` → `0.1.0`.
 
 Consider adding required reviewers to the `cargo.io` and `pypi` environments

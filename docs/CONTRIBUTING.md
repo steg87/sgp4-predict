@@ -4,12 +4,12 @@ Contributions are welcome.
 
 ## Tooling
 
-| Tool | Purpose | Install |
-|---|---|---|
-| Rust stable | compiler, rustfmt, clippy | [rustup.rs](https://rustup.rs) |
-| cargo-llvm-cov | coverage (pre-push hook) | `cargo install cargo-llvm-cov` |
-| prek | git hook runner | [prek docs](https://github.com/blinpete/prek) |
-| uv | Python tooling | [docs.astral.sh/uv](https://docs.astral.sh/uv) |
+| Tool           | Purpose                   | Install                                        |
+| -------------- | ------------------------- | ---------------------------------------------- |
+| Rust stable    | compiler, rustfmt, clippy | [rustup.rs](https://rustup.rs)                 |
+| cargo-llvm-cov | coverage (pre-push hook)  | `cargo install cargo-llvm-cov`                 |
+| prek           | git hook runner           | [prek docs](https://github.com/blinpete/prek)  |
+| uv             | Python tooling            | [docs.astral.sh/uv](https://docs.astral.sh/uv) |
 
 ## Getting started
 

@@ -25,7 +25,7 @@ PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
 
 Angles are plain `float` with `_deg`-suffixed field/arg names, converted to/from the library's `Degrees`/`Radians` at the FFI boundary — the Rust type safety deliberately stops here.
 
-In Rust, `Observer` is the *trait* and `GroundObserver` the concrete type; in Python the class is also named `GroundObserver`.
+In Rust, `Observer` is the _trait_ and `GroundObserver` the concrete type; in Python the class is also named `GroundObserver`.
 
 ## Areas of interest (`area.rs`)
 
@@ -33,8 +33,8 @@ In Rust, `Observer` is the *trait* and `GroundObserver` the concrete type; in Py
 
 `AreaRef<'a>` is the borrowed twin of `AreaKind`, for `detect_aoi`, which does not outlive its argument. All three pyclasses are `frozen`, so `Bound::cast::<Polygon>()?.get()` yields a reference and the vertex vector is never cloned; `extract_area` clones out of an `AreaRef` rather than duplicating the dispatch. Note pyo3 spells this `cast`, not `downcast`. `extract_lat_lon` uses `cast` for that reason plus one more: the tuple form is the documented common case, and only `cast` misses without constructing a Python exception.
 
-Constructors take `&Bound<'_, PyAny>` so a point may be a `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple. pyo3-stub-gen therefore widens them to `Any`, so `Polygon`/`Rectangle`/`Ellipse` are redeclared in the hand-maintained `sgp4_predict/__init__.pyi` — and a redeclaration there *replaces* the generated class rather than merging with it, so every member has to be repeated.
+Constructors take `&Bound<'_, PyAny>` so a point may be a `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple. pyo3-stub-gen therefore widens them to `Any`, so `Polygon`/`Rectangle`/`Ellipse` are redeclared in the hand-maintained `sgp4_predict/__init__.pyi` — and a redeclaration there _replaces_ the generated class rather than merging with it, so every member has to be repeated.
 
 `aoi_iter`/`detect_aoi` expose `min_step` and `max_window_duration` as keyword-only arguments, the only `*Opts` fields reachable from Python. Deliberately not symmetric with `transits_iter`: without it `max_window_duration` is a dead end, since a near-global area raises `WindowTooLong` partway through iteration with no Python-side way to raise the cap. The cap is only escapable for an area the track actually leaves — a whole-Earth box has no window end, so it raises whatever the cap is.
 
-Test-sizing gotcha: a *symmetric* latitude band cannot trip the one-hour default for a LEO satellite, because its two in-band arcs are each at most half an orbit and only exceed an hour by merging (i.e. permanently inside). `tests/test_aoi.py` uses `latitude_band(-90, 60)`, whose windows are ~85 min.
+Test-sizing gotcha: a _symmetric_ latitude band cannot trip the one-hour default for a LEO satellite, because its two in-band arcs are each at most half an orbit and only exceed an hour by merging (i.e. permanently inside). `tests/test_aoi.py` uses `latitude_band(-90, 60)`, whose windows are ~85 min.

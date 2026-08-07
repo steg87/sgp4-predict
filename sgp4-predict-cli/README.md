@@ -77,7 +77,7 @@ groundstations:
 ```
 
 | Field                | Required | Description                             |
-|----------------------|----------|-----------------------------------------|
+| -------------------- | -------- | --------------------------------------- |
 | `location.latitude`  | yes      | degrees, `[-90, 90]`                    |
 | `location.longitude` | yes      | degrees, `[-180, 180]`                  |
 | `location.altitude`  | no       | metres above the ellipsoid (default: 0) |
@@ -144,12 +144,12 @@ aois:
       - { latitude: 60.0, longitude: -1.0 }
 ```
 
-| `shape`   | Fields                                                          |
-|-----------|-----------------------------------------------------------------|
-| `box`     | `south`, `north`, `west`, `east` — the box's bounds             |
+| `shape`   | Fields                                                                              |
+| --------- | ----------------------------------------------------------------------------------- |
+| `box`     | `south`, `north`, `west`, `east` — the box's bounds                                 |
 | `ellipse` | `latitude`, `longitude` (centre), `semi_major`, `semi_minor`, `bearing` (default 0) |
-| `circle`  | `latitude`, `longitude` (centre), `radius`                       |
-| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
+| `circle`  | `latitude`, `longitude` (centre), `radius`                                          |
+| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs                   |
 
 **Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
 
@@ -157,36 +157,36 @@ A box's north and south edges follow their parallels exactly. It runs **eastward
 an `east` at a smaller longitude wraps across the antimeridian rather than being an error:
 
 ```yaml
-  pacific:              # 160°E round to 160°W, across the dateline
-    shape: box
-    south: -20.0
-    north: 20.0
-    west: 160.0
-    east: -160.0
+pacific: # 160°E round to 160°W, across the dateline
+  shape: box
+  south: -20.0
+  north: 20.0
+  west: 160.0
+  east: -160.0
 ```
 
 Polygon edges, by contrast, are great-circle arcs, so they are not lines of constant latitude — over
 a wide span they bow toward the nearer pole. Use `box` when the region really is a latitude/longitude
 box.
 
-An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the *longer*
-axis and `semi_minor` half the *shorter* (`0 < semi_minor <= semi_major < 90`), and `bearing` turns
+An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the _longer_
+axis and `semi_minor` half the _shorter_ (`0 < semi_minor <= semi_major < 90`), and `bearing` turns
 the major axis clockwise from north — `bearing: 0` runs it north–south, `bearing: 90` east–west:
 
 ```yaml
-  tall:                 # 10 degrees north-south by 2 east-west
-    shape: ellipse
-    latitude: 0.0
-    longitude: 0.0
-    semi_major: 10.0
-    semi_minor: 2.0
-  wide:                 # the same ellipse turned a quarter turn
-    shape: ellipse
-    latitude: 0.0
-    longitude: 0.0
-    semi_major: 10.0
-    semi_minor: 2.0
-    bearing: 90.0
+tall: # 10 degrees north-south by 2 east-west
+  shape: ellipse
+  latitude: 0.0
+  longitude: 0.0
+  semi_major: 10.0
+  semi_minor: 2.0
+wide: # the same ellipse turned a quarter turn
+  shape: ellipse
+  latitude: 0.0
+  longitude: 0.0
+  semi_major: 10.0
+  semi_minor: 2.0
+  bearing: 90.0
 ```
 
 ### Managing AOIs
@@ -362,7 +362,15 @@ sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
 ```
 
 ```json
-{"aos":"2026-03-25T11:36:24Z","los":"2026-03-25T11:51:28Z","aos_az_deg":15.43,"los_az_deg":-158.39,"tca_time":"2026-03-25T11:43:58Z","tca_el_deg":82.95,"duration":"15m 4s"}
+{
+  "aos": "2026-03-25T11:36:24Z",
+  "los": "2026-03-25T11:51:28Z",
+  "aos_az_deg": 15.43,
+  "los_az_deg": -158.39,
+  "tca_time": "2026-03-25T11:43:58Z",
+  "tca_el_deg": 82.95,
+  "duration": "15m 4s"
+}
 ```
 
 `text` and `csv` write the header even when there are no rows; `json` writes nothing.
@@ -414,7 +422,7 @@ sgp4-predict man > /usr/local/share/man/man1/sgp4-predict.1
 ## Exit codes
 
 | Code | Meaning                                                     |
-|------|-------------------------------------------------------------|
+| ---- | ----------------------------------------------------------- |
 | 0    | Success                                                     |
 | 1    | Runtime error (bad TLE, unreadable config, unknown station) |
 | 2    | Invalid command-line usage                                  |
