@@ -47,9 +47,13 @@ Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at c
 
 `TransitIter` steps adaptively — large steps when descending or far from `min_elevation`, smaller when approaching. Step bounds, the boundary-walk step and the max transit duration come from `TransitIterOpts`. On an Outside→Inside transition it refines the crossing time via `roots.rs`: Newton-Raphson first (elevation rate as the derivative), falling back to Brent's method (bracketed, guaranteed) if that fails.
 
-### `IntervalRange` trait (`time.rs`)
+### `IntervalRange` and `TimeWindow` traits (`time.rs`)
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over one pass.
+
+The two traits are deliberately separate. `IntervalRange` only *reads* an interval, which is why every iterator takes `impl IntervalRange` — a caller's own type can span time without being reconstructible. `TimeWindow: IntervalRange + Sized` adds the one method that can't be derived from reading, `with_bounds(start, end) -> Self`, and gets `clamp` for free; it is implemented by the concrete detection results (`Transit`, `AoiWindow`, `Illumination`, `detect::Window`) only — `Range<DateTime<Utc>>` has no payload to preserve, so its `clamp` would just duplicate `IntervalRange::intersection`. Do not merge `with_bounds` into `IntervalRange` — that would force every interval-shaped type to be constructible and break the `impl IntervalRange` parameters.
+
+`with_bounds` takes `&self` and rebuilds with `..*self` rather than mutating, so payload fields (`Illumination::state`, `Window::positive`) survive clamping. New window types belong here rather than growing another inherent `clamp`.
 
 `DateTimeIter` substitutes 1 s for a **non-positive** step only — a zero step never advances `next_time` and would yield the same instant forever, which previously hung `prediction_iter`/`observation_iter`. Any positive step is used as given, including sub-second ones: this is a *sampling* iterator, so `Duration::milliseconds(100)` is legitimate, unlike for the coarse detection scans. Do not "make it consistent" with those — flooring here silently decimates a caller's sample rate.
 

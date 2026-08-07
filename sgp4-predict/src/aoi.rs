@@ -688,7 +688,8 @@ impl Area for Ellipse {
 ///
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific
-/// overpass.
+/// overpass, and [`TimeWindow`](crate::TimeWindow) for
+/// [`clamp`](crate::TimeWindow::clamp).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AoiWindow {
     /// When the ground track crosses into the area.
@@ -701,13 +702,6 @@ impl AoiWindow {
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
     }
-
-    /// Returns a copy of this window clamped to `interval`, or `None` if it
-    /// lies entirely outside.
-    pub fn clamp(&self, interval: &impl time::IntervalRange) -> Option<AoiWindow> {
-        self.intersection(interval)
-            .map(|r| AoiWindow::new(r.start, r.end))
-    }
 }
 
 impl time::IntervalRange for AoiWindow {
@@ -716,6 +710,12 @@ impl time::IntervalRange for AoiWindow {
     }
     fn end(&self) -> DateTime<Utc> {
         self.end
+    }
+}
+
+impl time::TimeWindow for AoiWindow {
+    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        Self::new(start, end)
     }
 }
 

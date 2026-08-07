@@ -49,7 +49,7 @@ graph TD
 | `vectors.rs` | `StateVector<F>`, `Position<F>`, `Velocity<F>`, generic over frame |
 | `angle.rs` | `Degrees` / `Radians` newtypes |
 | `roots.rs` | `Refinement` — bracketed hybrid root solver |
-| `time.rs` | `IntervalRange` trait and `DateTimeIter` |
+| `time.rs` | `IntervalRange` / `TimeWindow` traits and `DateTimeIter` |
 
 ## Data flow
 

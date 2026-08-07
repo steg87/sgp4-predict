@@ -36,7 +36,9 @@ use crate::{
 /// `min_elevation` as seen from the observer.
 ///
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
-/// directly to prediction and observation iterators to cover a specific pass.
+/// directly to prediction and observation iterators to cover a specific pass,
+/// and [`TimeWindow`](crate::TimeWindow) for
+/// [`clamp`](crate::TimeWindow::clamp).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transit {
     /// Acquisition of Signal: when the satellite rises above `min_elevation`.
@@ -49,36 +51,6 @@ impl Transit {
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
     }
-
-    /// Returns a copy of this transit clamped to `interval`, or `None` if the
-    /// transit lies entirely outside the interval.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use chrono::{TimeZone, Utc};
-    /// use sgp4_predict::Transit;
-    ///
-    /// let transit = Transit::new(
-    ///     Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
-    ///     Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).unwrap(),
-    /// );
-    /// let window = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
-    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
-    ///
-    /// let clamped = transit.clamp(&window).unwrap();
-    /// assert_eq!(clamped.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
-    /// assert_eq!(clamped.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
-    ///
-    /// // Fully outside returns None.
-    /// let disjoint = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
-    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
-    /// assert!(transit.clamp(&disjoint).is_none());
-    /// ```
-    pub fn clamp(&self, interval: &impl time::IntervalRange) -> Option<Transit> {
-        self.intersection(interval)
-            .map(|r| Transit::new(r.start, r.end))
-    }
 }
 
 impl time::IntervalRange for Transit {
@@ -87,6 +59,12 @@ impl time::IntervalRange for Transit {
     }
     fn end(&self) -> DateTime<Utc> {
         self.end
+    }
+}
+
+impl time::TimeWindow for Transit {
+    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        Self::new(start, end)
     }
 }
 
@@ -325,13 +303,16 @@ impl Predictor {
 
     /// Find the peak elevation of the satellite over an observer within a time interval.
     ///
-    /// Built on [`EventIter`]: the event function is the elevation rate, and
-    /// interior peaks are its falling zero crossings (ascending →
-    /// descending), refined with the bracketed hybrid solver
-    /// ([`Refinement`]). The global maximum over the interval is attained
-    /// either at one of these interior peaks or at an interval boundary, so
-    /// every candidate — each falling crossing plus both endpoints — is
-    /// compared and the highest returned.
+    /// The event function is the elevation rate, and interior peaks are its
+    /// falling zero crossings (ascending → descending), refined with the
+    /// bracketed hybrid solver ([`Refinement`]). The global maximum over the
+    /// interval is attained either at one of these interior peaks or at an
+    /// interval boundary, so every candidate — each falling crossing plus
+    /// both endpoints — is compared and the highest returned.
+    // `EventIter` is only public under the `generics` feature; linking to it
+    // unconditionally makes this public doc link to a private item.
+    #[cfg_attr(feature = "generics", doc = "")]
+    #[cfg_attr(feature = "generics", doc = "Built on [`EventIter`].")]
     pub fn max_elevation<O: Observer>(
         &self,
         interval: impl IntervalRange,

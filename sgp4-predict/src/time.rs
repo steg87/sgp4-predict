@@ -7,12 +7,8 @@ use crate::detect::MIN_POSITIVE_STEP;
 
 /// A half-open time interval `[start, end)`.
 ///
-/// Implemented for `Range<DateTime<Utc>>` and for [`Transit`] and
-/// [`Illumination`], so either can be passed directly to the prediction and
-/// observation iterators.
-///
-/// [`Transit`]: crate::Transit
-/// [`Illumination`]: crate::Illumination
+/// Anything that spans time can implement it, and any implementor can be
+/// passed directly to the prediction and observation iterators.
 pub trait IntervalRange {
     /// Inclusive start of the interval.
     fn start(&self) -> DateTime<Utc>;
@@ -70,6 +66,55 @@ impl IntervalRange for Range<DateTime<Utc>> {
     }
     fn end(&self) -> DateTime<Utc> {
         self.end
+    }
+}
+
+/// A concrete time window that can be rebuilt with different bounds.
+///
+/// [`IntervalRange`] only reads an interval, so it is implementable by
+/// anything that merely *spans* time. `TimeWindow` is the narrower contract
+/// for the detection results — [`Transit`], [`AoiWindow`], [`Illumination`],
+/// the generic `Window` — whose payload fields (illumination state, window
+/// sign, …) survive a change of bounds. Implement [`with_bounds`] and every
+/// operation that returns a window comes with it.
+///
+/// [`Transit`]: crate::Transit
+/// [`AoiWindow`]: crate::AoiWindow
+/// [`Illumination`]: crate::Illumination
+/// [`with_bounds`]: TimeWindow::with_bounds
+pub trait TimeWindow: IntervalRange + Sized {
+    /// Returns a copy of this window spanning `start..end`, leaving every
+    /// other field unchanged.
+    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self;
+
+    /// Returns a copy of this window clamped to `interval`, or `None` if it
+    /// lies entirely outside the interval.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{TimeZone, Utc};
+    /// use sgp4_predict::{TimeWindow, Transit};
+    ///
+    /// let transit = Transit::new(
+    ///     Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+    ///     Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).unwrap(),
+    /// );
+    /// let window = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
+    ///
+    /// let clamped = transit.clamp(&window).unwrap();
+    /// assert_eq!(clamped.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
+    /// assert_eq!(clamped.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
+    ///
+    /// // Fully outside returns None.
+    /// let disjoint = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
+    /// assert!(transit.clamp(&disjoint).is_none());
+    /// ```
+    fn clamp(&self, interval: &impl IntervalRange) -> Option<Self> {
+        self.intersection(interval)
+            .map(|r| self.with_bounds(r.start, r.end))
     }
 }
 
@@ -163,6 +208,33 @@ mod tests {
         assert!(
             (t2 - t).abs() < 1e-3,
             "f64 subsecond round-trip error: {t2} vs {t}"
+        );
+    }
+
+    #[test]
+    fn test_clamp_preserves_payload_fields() {
+        // The blanket clamp rebuilds via with_bounds, so fields other than the
+        // bounds must survive it.
+        use crate::{Illumination, IlluminationState};
+
+        let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let window = Illumination {
+            start,
+            end: start + Duration::hours(1),
+            state: IlluminationState::Eclipse,
+        };
+
+        let clamped = window
+            .clamp(&(start + Duration::minutes(30)..start + Duration::hours(2)))
+            .unwrap();
+        assert_eq!(clamped.start, start + Duration::minutes(30));
+        assert_eq!(clamped.end, start + Duration::hours(1));
+        assert_eq!(clamped.state, IlluminationState::Eclipse);
+
+        assert!(
+            window
+                .clamp(&(start + Duration::hours(3)..start + Duration::hours(4)))
+                .is_none()
         );
     }
 

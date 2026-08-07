@@ -64,7 +64,12 @@ use chrono::{DateTime, Duration, Utc};
 use std::ops::Range;
 use thiserror::Error as ThisError;
 
-use crate::{Result, roots::Refinement, time, time::IntervalRange};
+use crate::{
+    Result,
+    roots::Refinement,
+    time,
+    time::{IntervalRange, TimeWindow},
+};
 
 /// One evaluation of an [`EventFunction`].
 #[derive(Debug, Clone, Copy)]
@@ -537,6 +542,25 @@ pub struct Window {
     pub end: DateTime<Utc>,
     /// Whether the function value was positive throughout the window.
     pub positive: bool,
+}
+
+impl IntervalRange for Window {
+    fn start(&self) -> DateTime<Utc> {
+        self.start
+    }
+    fn end(&self) -> DateTime<Utc> {
+        self.end
+    }
+}
+
+impl TimeWindow for Window {
+    fn with_bounds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        Self {
+            start,
+            end,
+            ..*self
+        }
+    }
 }
 
 /// A [`Detector`] that pairs the zero crossings of an [`EventFunction`] into

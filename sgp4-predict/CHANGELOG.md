@@ -25,9 +25,14 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - `Geodetic` and `LatLon` types, `EcefState::to_geodetic`, and `Predictor::sub_point` — the geodetic
   point directly beneath the satellite.
 - `Predictor::ground_track_iter`, sampling sub-satellite points at a fixed cadence.
+- `TimeWindow`, a trait over the concrete window types (`Transit`, `AoiWindow`, `Illumination`
+  and `Window`). Implementing `with_bounds` supplies `clamp`, so
+  `Illumination` and `Window` gain it and it is written once rather than per type.
 
 ### Changed
 
+- `Transit::clamp` and `AoiWindow::clamp` moved from inherent methods to the `TimeWindow` trait;
+  callers now need `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged.
 - `DetectError::WindowTooLong` renders its limit as a humantime span (`1h`) rather than chrono's
   ISO-8601 `Display` (`PT3600S`), so the message names the value in the spelling callers pass back
   in. This promotes `humantime` from a dev-dependency to a dependency.
