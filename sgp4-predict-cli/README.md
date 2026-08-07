@@ -86,15 +86,8 @@ Unrecognised fields are rejected, so typos surface as errors.
 
 ### Managing stations
 
-Edit the file by hand, or use `sgp4-predict gs`. All three operate on `--config`, or the default
-path when it is omitted.
-
-| Command                         | Description                             |
-|---------------------------------|-----------------------------------------|
-| `gs add [id]`                   | Add a station, prompting for each field |
-| `gs add [id] --force`           | Replace an existing station             |
-| `gs list` (`gs ls`)             | List the configured stations            |
-| `gs remove <id>` (`gs rm <id>`) | Remove a station, after confirmation    |
+Edit the file by hand, or use `sgp4-predict gs add|list|remove`. All three operate on `--config`, or
+the default path when it is omitted.
 
 ```
 $ sgp4-predict gs add
@@ -198,14 +191,7 @@ the major axis clockwise from north — `bearing: 0` runs it north–south, `bea
 
 ### Managing AOIs
 
-Edit the file by hand, or use `sgp4-predict aoi`.
-
-| Command                                   | Description                          |
-|-------------------------------------------|--------------------------------------|
-| `aoi add [id] [--shape S]`                | Add an AOI, prompting for its coordinates |
-| `aoi add [id] --force`                    | Replace an existing AOI              |
-| `aoi list` (`aoi ls`)                     | List the configured AOIs             |
-| `aoi remove <id>` (`aoi rm <id>`)         | Remove an AOI, after confirmation    |
+Edit the file by hand, or use `sgp4-predict aoi add|list|remove`, which mirrors `gs`.
 
 `aoi add` prompts field by field, like `gs add`. The underlined initial is accepted on its own, so
 the shape can be picked with a single key:
@@ -366,15 +352,10 @@ entry                    exit                     entry_lat [deg] entry_lon [deg
 
 ## Output
 
-| Flag                          | Description                                                       |
-|-------------------------------|-------------------------------------------------------------------|
-| `--format <text\|json\|csv>`  | Output format (default: `text`)                                   |
-| `-o <path>` / `--out <path>`  | Write to a file instead of stdout                                 |
-| `--output-args`               | Prepend the resolved inputs as `# key: value` lines (`text` only) |
-
-Every subcommand supports all three formats with the same columns. `text` is fixed-width with a
-header; `json` is newline-delimited, one object per row, so it streams into `jq`; `csv` is RFC 4180
-with a header row and the same field names as JSON.
+`--format` selects `text`, `json` or `csv`; `-o` / `--out` writes to a file instead of stdout. Every
+subcommand supports all three formats with the same columns. `text` is fixed-width with a header;
+`json` is newline-delimited, one object per row, so it streams into `jq`; `csv` is RFC 4180 with a
+header row and the same field names as JSON.
 
 ```sh
 sgp4-predict transits --gs glasgow --format json | jq 'select(.tca_el_deg > 30)'
@@ -416,14 +397,9 @@ would make the output unparseable.
 
 ## Logging
 
-Warnings and prompts go to stderr, so they never mix into piped output.
-
-| Flag                  | Effect               |
-|-----------------------|----------------------|
-| `-q` / `--quiet`      | Errors only          |
-| `-v` / `-vv` / `-vvv` | info / debug / trace |
-
-`RUST_LOG` overrides both if set.
+Warnings and prompts go to stderr, so they never mix into piped output. `-q` silences everything but
+errors, `-v` / `-vv` / `-vvv` raise the level to info / debug / trace, and `RUST_LOG` overrides both
+if set.
 
 ## Completions and man page
 
