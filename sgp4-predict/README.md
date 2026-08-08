@@ -65,49 +65,17 @@ times. See the [`Predictor` docs](https://docs.rs/sgp4-predict/latest/sgp4_predi
 
 ## Handling errors
 
-Every iterator yields `Result`, which is the `let transit = transit?;` above. `FallibleIter` moves
-that onto the iterator. A failure to refine one event is local, so skip it; a propagation failure is
-sticky — a decayed TLE fails at every sample — so stop and report it:
+Every iterator yields `Result`, which is the `let transit = transit?;` above.
+[`FallibleIter`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.FallibleIter.html) moves
+that onto the iterator: `on_error`, `skip_errors` and `log_errors` consume the error and carry on,
+while `tolerate_errors(n)` and `until_error` stop once failures persist and retain the one that
+stopped them.
 
-```rust,no_run
-use chrono::{Duration, Utc};
-use sgp4_predict::prelude::*;
-
-fn main() -> Result<()> {
-    let tle: Tle = "\
-        SENTINEL-2C
-        1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
-        2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
-        .parse()?;
-    let predictor = Predictor::from_tle(&tle)?;
-    let glasgow = GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0);
-
-    let start = Utc::now();
-    let interval = start..start + Duration::days(1);
-
-    // Skip and log the passes that fail to refine.
-    for transit in predictor
-        .transits_iter(&glasgow, interval.clone(), Degrees(5.0))
-        .log_errors()
-    {
-        println!("AoS {}  LoS {}", transit.start, transit.end);
-    }
-
-    // Stop once three samples in a row fail, and surface why. Iterate `&mut` to
-    // keep the adapter alive for the check afterwards.
-    let mut samples = predictor
-        .observation_iter(&glasgow, interval, Duration::seconds(10))
-        .tolerate_errors(3);
-
-    for (t, obs) in samples.by_ref() {
-        println!("{t}  el {:5.1}°", obs.elevation.degrees());
-    }
-    if let Some(e) = samples.error() {
-        eprintln!("propagation gave up: {e}");
-    }
-    Ok(())
-}
-```
+Which to reach for depends on the failure. One event failing to refine is local, and the scan has
+already moved past it, so skipping is right. A propagation failure is deterministic in the elements
+and repeats at every sample, so skipping it yields an empty iterator — indistinguishable from "no
+passes this week". The `resilient_pass_scan` example in [`tests/examples.rs`](tests/examples.rs)
+uses both in one scan.
 
 ## Areas of interest
 
