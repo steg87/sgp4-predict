@@ -18,7 +18,7 @@
 //! [`Error::Detect`]: crate::Error::Detect
 //! [`Error::Sgp4`]: crate::Error::Sgp4
 
-use std::iter::FusedIterator;
+use std::{fmt, iter::FusedIterator};
 
 use crate::{Error, Result};
 
@@ -154,10 +154,18 @@ impl<I, T> FallibleIter<T> for I where I: Iterator<Item = Result<T>> {}
 /// handler. Created by [`FallibleIter::on_error`], [`FallibleIter::skip_errors`]
 /// and [`FallibleIter::log_errors`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct OnError<I, F> {
     iter: I,
     handler: F,
+}
+
+// Hand-written: a derive would bound `Debug` on `F`, and the general case of
+// `on_error` is a closure, which is never `Debug`.
+impl<I: fmt::Debug, F> fmt::Debug for OnError<I, F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OnError").field("iter", &self.iter).finish()
+    }
 }
 
 impl<I, F, T> Iterator for OnError<I, F>

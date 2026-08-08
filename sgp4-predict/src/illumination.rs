@@ -195,30 +195,24 @@ impl Iterator for IlluminationIter {
     type Item = Result<Illumination>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(match self.inner.next()? {
-            Ok(window) => {
-                let illumination = Illumination {
-                    start: window.start,
-                    end: window.end,
-                    state: if window.positive {
-                        IlluminationState::Eclipse
-                    } else {
-                        IlluminationState::Sunlit
-                    },
-                };
-                tracing::debug!(
-                    state = ?illumination.state,
-                    start = %illumination.start,
-                    end = %illumination.end,
-                    "illumination window"
-                );
-                Ok(illumination)
-            }
-            Err(e) => {
-                tracing::warn!("error calculating illumination window: {}", e.to_string());
-                Err(e)
-            }
-        })
+        Some(self.inner.next()?.map(|window| {
+            let illumination = Illumination {
+                start: window.start,
+                end: window.end,
+                state: if window.positive {
+                    IlluminationState::Eclipse
+                } else {
+                    IlluminationState::Sunlit
+                },
+            };
+            tracing::debug!(
+                state = ?illumination.state,
+                start = %illumination.start,
+                end = %illumination.end,
+                "illumination window"
+            );
+            illumination
+        }))
     }
 }
 

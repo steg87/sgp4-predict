@@ -67,15 +67,8 @@ times. See the [`Predictor` docs](https://docs.rs/sgp4-predict/latest/sgp4_predi
 
 Every iterator yields `Result`, which is the `let transit = transit?;` above.
 [`FallibleIter`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.FallibleIter.html) moves
-that onto the iterator: `on_error`, `skip_errors` and `log_errors` consume the error and carry on,
-while `tolerate_errors(n)` and `until_error` stop once failures persist and retain the one that
-stopped them.
-
-Which to reach for depends on the failure. One event failing to refine is local, and the scan has
-already moved past it, so skipping is right. A propagation failure is deterministic in the elements
-and repeats at every sample, so skipping it yields an empty iterator — indistinguishable from "no
-passes this week". The `resilient_pass_scan` example in [`tests/examples.rs`](tests/examples.rs)
-uses both in one scan.
+that onto the iterator: skip the failures that affect a single event, or stop once they persist.
+The `resilient_pass_scan` example in [`tests/examples.rs`](tests/examples.rs) uses both in one scan.
 
 ## Areas of interest
 

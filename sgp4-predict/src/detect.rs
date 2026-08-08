@@ -306,7 +306,13 @@ impl<D: Detector> Iterator for DetectIter<D> {
             match self.detector.finish(self.interval.end) {
                 Ok(Some(event)) => return Some(Ok(event)),
                 Ok(None) => self.phase = Phase::Done,
-                Err(e) => return Some(Err(e)),
+                // A failed flush is never retried. Unlike the scan, `finish`
+                // takes no time argument to advance, so a detector whose
+                // failure reproduces would yield the same error forever.
+                Err(e) => {
+                    self.phase = Phase::Done;
+                    return Some(Err(e));
+                }
             }
         }
         None
@@ -345,12 +351,10 @@ fn refine_crossing<F: EventFunction>(
 ) -> Result<DateTime<Utc>> {
     let a = time::datetime_to_f64(t0);
     let b = time::datetime_to_f64(t1);
-    let root = refinement
-        .solve(a, b, |x| {
-            f.sample(time::f64_to_datetime(x))
-                .map(|s| (s.value, s.rate))
-        })
-        .inspect_err(|e| tracing::warn!(error = %e, "failed to refine crossing"))?;
+    let root = refinement.solve(a, b, |x| {
+        f.sample(time::f64_to_datetime(x))
+            .map(|s| (s.value, s.rate))
+    })?;
     Ok(time::f64_to_datetime(root))
 }
 
@@ -396,7 +400,6 @@ fn walk_to_crossing<F: EventFunction>(
         let next = clamped_at.unwrap_or(candidate);
 
         if clamped_at.is_none() && past(next, giving_up_at) {
-            tracing::warn!(at = %t0, %giving_up_at, "window boundary not found");
             return Err(on_give_up().into());
         }
 

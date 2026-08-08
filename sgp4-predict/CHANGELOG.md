@@ -42,6 +42,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Changed
 
+- Errors that are returned to the caller are no longer also logged. Refinement failures, the
+  window-boundary give-up and illumination window failures each emitted a `warn` on the way out,
+  which double-reported every error once the caller handled it — and twice over when that handler
+  was `log_errors`. Logging is the caller's decision; `FallibleIter` is how to make it.
 - The public `Error` enums (`sgp4_predict::Error`, `aoi::Error`, `roots::Error`, `DetectError`) are
   `#[non_exhaustive]`, so adding a variant is no longer a breaking change. A downstream `match` on
   one now needs a `_` arm. The `*Opts` structs stay exhaustive, so `..Default::default()` keeps

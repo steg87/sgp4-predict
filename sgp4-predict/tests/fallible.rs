@@ -35,13 +35,42 @@ fn test_skip_errors_on_empty_input() {
     assert!(values.is_empty(), "expected no values, got {values:?}");
 }
 
+/// An all-error input exhausts the inner iterator from inside the skip loop.
+#[test]
+fn test_skip_errors_on_all_error_input() {
+    let items = vec![err(), err(), err()];
+    let values: Vec<i32> = items.into_iter().skip_errors().collect();
+    assert!(values.is_empty(), "expected no values, got {values:?}");
+}
+
+/// Both adapters can drop items, so neither may promise a lower bound.
+#[test]
+fn test_size_hint_has_no_lower_bound() {
+    let items = vec![Ok(1), err(), Ok(2)];
+
+    assert_eq!(
+        items.clone().into_iter().skip_errors().size_hint(),
+        (0, Some(3)),
+        "OnError may yield anywhere from 0 to all 3 items"
+    );
+    assert_eq!(
+        items.into_iter().tolerate_errors(1).size_hint(),
+        (0, Some(3)),
+        "Tolerate may yield anywhere from 0 to all 3 items"
+    );
+}
+
 /// `on_error` invokes the handler once per error, in encounter order.
 #[test]
 fn test_on_error_sees_every_error_in_order() {
     let items = vec![Ok(1), Err(Error::Custom("first".into())), Ok(2), err()];
     let mut seen = Vec::new();
 
-    let values: Vec<i32> = items.into_iter().on_error(|e| seen.push(e)).collect();
+    let adapter = items.into_iter().on_error(|e| seen.push(e));
+    // A closure handler must not cost the adapter its Debug impl.
+    assert!(format!("{adapter:?}").starts_with("OnError"));
+
+    let values: Vec<i32> = adapter.collect();
 
     assert_eq!(values, [1, 2], "handled errors must not end iteration");
     assert_eq!(

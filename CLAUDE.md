@@ -111,7 +111,8 @@ line. `DetectIter` covers the `EventIter` and `WindowIter` aliases too. Do not "
 adding method-level attributes to those types; they are already covered and would be redundant.
 
 Method-level `#[must_use]` is only for methods whose _type_ should not be must-use:
-`TimeWindow::clamp` and `IntervalRange::intersection` (`Option` is not must-use), and
+`TimeWindow::clamp`, `IntervalRange::intersection` and `Tolerate::error`/`into_error` (`Option` is
+not must-use), and
 `TimeWindow::with_bounds`, `Predictor::with_refinement` and `Polygon::with_fill_rule` (the
 receiving type is normally stored, not consumed), and
 `Degrees::normalized`/`Radians::normalized` (which read like in-place mutators).
@@ -139,7 +140,10 @@ everywhere: `roots::Error::FailedToConverge` carries `f64`s.
 
 **Where a generic is only held behind a shared reference, the trait impls are hand-written**
 (`TransitIter`, `ObservationIter`, `AoiIter`, `ElevationAboveMin`, `GroundTrackInside`, and
-`ValueFn`/`RateFn` in `detect.rs`). A derive bounds on the type parameter itself, so
+`ValueFn`/`RateFn` in `detect.rs`). `OnError`'s `Debug` is hand-written for the same reason —
+`on_error`'s general case is a closure, so a derive's `F: Debug` bound would be dead exactly where
+the type is most used. It is `Clone` but deliberately not `Copy`: std's iterator adapters aren't,
+because a `Copy` iterator gets silently copied into a `for` loop leaving the original unadvanced. A derive bounds on the type parameter itself, so
 `#[derive(Clone)]` on `TransitIter<'a, O>` would emit `where O: Clone` for a field that is a
 `&'a O` — making the iterator un-`Clone` for any caller-supplied `Observer` that isn't. `ValueFn`
 is the sharper case: `F` is always a closure and closures are never `Debug`, so a derived `Debug`
