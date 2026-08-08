@@ -1827,6 +1827,21 @@ mod ellipse_tests {
         assert!((b.to_f64() - 1.1).abs() < 1e-12);
         assert!((e.bearing().to_f64() - 45.0).abs() < 1e-12);
 
+        // The pair is stored as given, so a longer `b` reads back unswapped,
+        // with the bearing it was given rather than the turned one the foci
+        // were built from.
+        let wide = Ellipse::new(
+            (Degrees(56.0), Degrees(2.0)),
+            Degrees(1.1),
+            Degrees(2.7),
+            Degrees(135.0),
+        )
+        .expect("valid ellipse");
+        let (a, b) = wide.semi_axes();
+        assert!((a.to_f64() - 1.1).abs() < 1e-12);
+        assert!((b.to_f64() - 2.7).abs() < 1e-12);
+        assert!((wide.bearing().to_f64() - 135.0).abs() < 1e-12);
+
         // A bearing outside [0, 360) reads back normalized.
         let wrapped = Ellipse::new(
             (Degrees(0.0), Degrees(0.0)),
