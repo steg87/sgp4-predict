@@ -649,7 +649,14 @@ impl Predictor {
         max_window_duration: Option<Duration>,
     ) -> PyResult<Option<AoiWindow>> {
         let area = extract_area_ref(area)?;
-        let opts = aoi_opts(None, None, walk_step, max_window_duration, None, None);
+        // Named rather than the six-`Option` builder: `detect_window` reads only
+        // these two, and positionally they are interchangeable `Duration`s.
+        let d = AoiIterOpts::default();
+        let opts = AoiIterOpts {
+            walk_step: walk_step.unwrap_or(d.walk_step),
+            max_window_duration: max_window_duration.unwrap_or(d.max_window_duration),
+            ..d
+        };
         self.inner
             .detect_aoi_with_opts(t, &area, opts)
             .map(|opt| {
@@ -735,7 +742,13 @@ impl Predictor {
         walk_step: Option<Duration>,
         max_transit_duration: Option<Duration>,
     ) -> PyResult<Option<Transit>> {
-        let opts = transit_opts(None, None, walk_step, max_transit_duration, None, None);
+        // Named, for the reason given in `detect_aoi`.
+        let d = TransitIterOpts::default();
+        let opts = TransitIterOpts {
+            walk_step: walk_step.unwrap_or(d.walk_step),
+            max_transit_duration: max_transit_duration.unwrap_or(d.max_transit_duration),
+            ..d
+        };
         self.inner
             .detect_transit_with_opts(t, observer, Degrees(min_elevation_deg), opts)
             .map(|opt| {
