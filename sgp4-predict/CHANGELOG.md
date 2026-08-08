@@ -28,9 +28,9 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - The common derives across the public API: every type implements `Debug`, and `Clone`, `Copy`,
   `Default`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash` are derived wherever the fields
   support them. `Transit`, `AoiWindow`, `Illumination` and `Window` are `Ord`, so they sort and
-  serve as `BTreeMap`/`BTreeSet` keys; types holding an `f64` are `PartialOrd` at most, and the
-  root `Error` stays `Debug`-only because the `sgp4` errors it wraps are neither `Clone` nor
-  `PartialEq`.
+  serve as `BTreeMap`/`BTreeSet` keys; types holding an `f64` are `PartialOrd` at most. Every
+  error enum is `Clone + PartialEq`, so a whole `Result` can be compared without matching the
+  variant out.
 - `TimeWindow`, a trait over the concrete window types (`Transit`, `AoiWindow`, `Illumination`
   and `Window`). Implementing `with_bounds` supplies `clamp_to`, so
   `Illumination` and `Window` gain it and it is written once rather than per type.

@@ -2431,17 +2431,11 @@ mod geometry_tests {
     #[test]
     fn test_too_few_vertices() {
         let two = Polygon::new([(Degrees(0.0), Degrees(0.0)), (Degrees(1.0), Degrees(1.0))]);
-        assert!(matches!(
-            two,
-            Err(Error::Aoi(super::Error::TooFewVertices(2)))
-        ));
+        assert_eq!(two, Err(Error::Aoi(super::Error::TooFewVertices(2))));
 
         // Three vertices that collapse to one.
         let collapsed = Polygon::new([(Degrees(5.0), Degrees(5.0)); 3]);
-        assert!(matches!(
-            collapsed,
-            Err(Error::Aoi(super::Error::TooFewVertices(1)))
-        ));
+        assert_eq!(collapsed, Err(Error::Aoi(super::Error::TooFewVertices(1))));
     }
 
     #[test]
@@ -2451,7 +2445,8 @@ mod geometry_tests {
             (Degrees(91.0), Degrees(10.0)),
             (Degrees(10.0), Degrees(10.0)),
         ]);
-        assert!(matches!(bad, Err(Error::Aoi(super::Error::Latitude(_)))));
+        // The reported latitude is the offending one, not just any.
+        assert_eq!(bad, Err(Error::Aoi(super::Error::Latitude(91.0))));
     }
 
     /// A non-finite latitude fails the range test; a non-finite longitude has

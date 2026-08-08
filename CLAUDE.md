@@ -101,10 +101,11 @@ forcing a builder API on them is the worse trade. The cost on the error enums is
 
 ### Derives
 
-The sub-error enums (`aoi::Error`, `roots::Error`, `detect::Error`, `TleParseError`) are
-`Clone + PartialEq`; the **root `Error` stops at `Debug`** and cannot be completed. It wraps
-`sgp4::Error`, `sgp4::TleError` and `sgp4::ElementsError`, none of which implement either. A
-caller comparing errors has to match the variant out first.
+**Every error enum is `Clone + PartialEq`, the root `Error` included.** The three foreign types it
+wraps (`sgp4::Error`, `sgp4::TleError`, `sgp4::ElementsError`) all derive both, so nothing forces
+the root to stop at `Debug` — a caller can `assert_eq!` on a whole `Result` without matching the
+variant out first, which is what makes the sub-error derives reachable at all. `Eq` is out
+everywhere: `roots::Error::FailedToConverge` carries `f64`s.
 
 **Where a generic is only held behind a shared reference, the trait impls are hand-written**
 (`TransitIter`, `ObservationIter`, `AoiIter`, `ElevationAboveMin`, `GroundTrackInside`, and

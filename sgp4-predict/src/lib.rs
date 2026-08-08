@@ -279,7 +279,7 @@ impl Predictor {
 }
 
 /// Errors returned by this crate.
-#[derive(Debug, ThisError)]
+#[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
     #[error("TLE format error: {0}")]
