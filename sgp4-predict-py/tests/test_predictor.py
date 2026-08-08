@@ -493,26 +493,3 @@ def test_skip_leading_partial_false_recovers_a_pass_already_in_progress():
     )
     assert kept.start < midpoint
     assert abs((kept.start - t0.start).total_seconds()) < 2.0
-
-
-def test_iterator_repr_reports_the_options_it_was_given():
-    """Only values this test supplied are asserted — a library default that
-    moves is not this test's business."""
-    p = make_predictor()
-    assert (
-        repr(p.apsis_iter(INTERVAL, step=timedelta(seconds=5)))
-        == "ApsisIter(step=0:00:05)"
-    )
-
-    illumination = repr(p.illumination_iter(INTERVAL, walk_step=timedelta(seconds=45)))
-    assert illumination.startswith("IlluminationIter(")
-    assert "walk_step=0:00:45" in illumination
-
-    transits = repr(
-        p.transits_iter(
-            GLASGOW, INTERVAL, min_elevation_deg=5.0, max_step=timedelta(minutes=2)
-        )
-    )
-    assert transits.startswith("TransitIter(")
-    assert "max_step=0:02:00" in transits
-    assert "skip_leading_partial=True" in transits  # Python-cased, not Rust's `true`

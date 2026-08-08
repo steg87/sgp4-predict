@@ -115,13 +115,8 @@ for an area the ground track crosses faster than that. It also raises the scan's
 bound wherever it exceeds it, so a `min_step` above that pins every step there and a small area is
 passed straight over.
 
-Every detection method takes its tuning as keyword-only arguments, and an iterator's `repr` prints
-the resolved set — which is where to read a default you did not override:
-
-```python
->>> predictor.aoi_iter(scotland, window, walk_step=timedelta(seconds=1))
-AoiIter(min_step=0:00:01, max_step=0:10:00, walk_step=0:00:01, max_window_duration=1:00:00, skip_leading_partial=True, clamp_to_interval=False)
-```
+Every detection method takes its tuning the same way, as keyword-only arguments left at the
+library's defaults unless passed.
 
 `Polygon` edges are **great-circle arcs**, so two vertices at the same latitude are not joined along
 the parallel: the arc bows toward the nearer pole, by about 0.05° for the 7° ring above and roughly

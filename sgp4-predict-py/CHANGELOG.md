@@ -16,7 +16,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - Detection tuning as keyword-only arguments on `transits_iter`, `aoi_iter`, `apsis_iter`,
   `illumination_iter`, `detect_transit`, `detect_aoi` and `max_elevation` — scan and walk steps, the
   window-duration caps, and how partial windows at the interval edges are treated. Anything left
-  unset keeps the library's default, and `repr()` on a returned iterator prints the resolved set.
+  unset keeps the library's default.
 
 - Area-of-interest detection: `Predictor.aoi_iter` and `detect_aoi` yield the `AoiWindow`s during
   which the sub-satellite point is inside an area. `Polygon`, `Rectangle` and `Ellipse` describe the

@@ -61,17 +61,6 @@ impl Refinement {
     }
 }
 
-/// Render a resolved duration knob the way Python prints a `timedelta`
-/// (`0:00:10`), not the way chrono's `Display` does (`PT10S`).
-fn td(py: Python<'_>, d: Duration) -> PyResult<String> {
-    Ok(d.into_pyobject(py)?.str()?.to_string())
-}
-
-/// `bool`'s `Display` is Rust-cased; a repr has to read as Python.
-fn py_bool(b: bool) -> &'static str {
-    if b { "True" } else { "False" }
-}
-
 // ── PredictionIter ─────────────────────────────────────────────────────────────
 
 /// Lazy iterator yielding `(datetime, StateVectorTeme)` at regular intervals.
@@ -132,7 +121,6 @@ impl GroundTrackIter {
 #[derive(Debug)]
 pub struct ApsisIter {
     inner: sgp4_predict::ApsisIter,
-    opts: ApsisIterOpts,
 }
 
 #[gen_stub_pymethods]
@@ -156,12 +144,6 @@ impl ApsisIter {
             Some(Err(e)) => Err(to_py_err(e)),
         }
     }
-
-    /// The resolved tuning options, so an unset keyword argument's default is
-    /// readable off the iterator it produced.
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(format!("ApsisIter(step={})", td(py, self.opts.step)?))
-    }
 }
 
 // ── IlluminationIter ───────────────────────────────────────────────────────────
@@ -172,7 +154,6 @@ impl ApsisIter {
 #[derive(Debug)]
 pub struct IlluminationIter {
     inner: sgp4_predict::IlluminationIter,
-    opts: IlluminationIterOpts,
 }
 
 #[gen_stub_pymethods]
@@ -196,16 +177,6 @@ impl IlluminationIter {
             Some(Err(e)) => Err(to_py_err(e)),
         }
     }
-
-    /// The resolved tuning options. See `ApsisIter.__repr__`.
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(format!(
-            "IlluminationIter(step={}, walk_step={}, max_window_duration={})",
-            td(py, self.opts.step)?,
-            td(py, self.opts.walk_step)?,
-            td(py, self.opts.max_window_duration)?,
-        ))
-    }
 }
 
 // ── TransitIter ────────────────────────────────────────────────────────────────
@@ -224,7 +195,6 @@ struct TransitIterOwned {
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 pub struct TransitIter {
     inner: TransitIterOwned,
-    opts: TransitIterOpts,
 }
 
 #[gen_stub_pymethods]
@@ -244,21 +214,6 @@ impl TransitIter {
             Some(Err(e)) => Err(to_py_err(e)),
         })
     }
-
-    /// The resolved tuning options. See `ApsisIter.__repr__`.
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let o = &self.opts;
-        Ok(format!(
-            "TransitIter(min_step={}, max_step={}, walk_step={}, max_transit_duration={}, \
-             skip_leading_partial={}, clamp_to_interval={})",
-            td(py, o.min_step)?,
-            td(py, o.max_step)?,
-            td(py, o.walk_step)?,
-            td(py, o.max_transit_duration)?,
-            py_bool(o.skip_leading_partial),
-            py_bool(o.clamp_to_interval),
-        ))
-    }
 }
 
 // ── AoiIter ────────────────────────────────────────────────────────────────────
@@ -277,7 +232,6 @@ struct AoiIterOwned {
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 pub struct AoiIter {
     inner: AoiIterOwned,
-    opts: AoiIterOpts,
 }
 
 #[gen_stub_pymethods]
@@ -296,21 +250,6 @@ impl AoiIter {
             })),
             Some(Err(e)) => Err(to_py_err(e)),
         })
-    }
-
-    /// The resolved tuning options. See `ApsisIter.__repr__`.
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let o = &self.opts;
-        Ok(format!(
-            "AoiIter(min_step={}, max_step={}, walk_step={}, max_window_duration={}, \
-             skip_leading_partial={}, clamp_to_interval={})",
-            td(py, o.min_step)?,
-            td(py, o.max_step)?,
-            td(py, o.walk_step)?,
-            td(py, o.max_window_duration)?,
-            py_bool(o.skip_leading_partial),
-            py_bool(o.clamp_to_interval),
-        ))
     }
 }
 
@@ -533,7 +472,7 @@ impl Predictor {
     /// `min_elevation_deg`: minimum elevation above the horizon in degrees.
     ///
     /// The keyword-only arguments tune the coarse scan; each defaults to the
-    /// library's own value, which the returned iterator's `repr` prints.
+    /// library's own value.
     ///
     /// `min_step` and `max_step` bound the adaptive scan step: `min_step` is
     /// also the shortest pass the scan is guaranteed to see, and `max_step` is
@@ -596,7 +535,6 @@ impl Predictor {
                 },
             }
             .build(),
-            opts,
         })
     }
 
@@ -629,7 +567,7 @@ impl Predictor {
     /// `interval` must expose `.start` and `.end` datetime properties.
     ///
     /// The keyword-only arguments tune the coarse scan; each defaults to the
-    /// library's own value, which the returned iterator's `repr` prints.
+    /// library's own value.
     ///
     /// `min_step` is the lower bound of the adaptive coarse-scan step, and also the
     /// shortest crossing the scan is guaranteed to see; lower it below the default
@@ -691,7 +629,6 @@ impl Predictor {
                 },
             }
             .build(),
-            opts,
         })
     }
 
@@ -728,8 +665,7 @@ impl Predictor {
     ///
     /// `interval` must expose `.start` and `.end` datetime properties.
     /// `step` is the fixed step used to scan for radial-velocity sign changes,
-    /// defaulting to the library's own value, which the returned iterator's
-    /// `repr` prints.
+    /// defaulting to the library's own value.
     #[pyo3(signature = (interval, *, step = None))]
     fn apsis_iter(
         &self,
@@ -737,12 +673,12 @@ impl Predictor {
         step: Option<Duration>,
     ) -> PyResult<ApsisIter> {
         let (start, end) = extract_interval(interval)?;
-        let opts = apsis_opts(step);
         Ok(ApsisIter {
-            inner: self
-                .inner
-                .apsis_iter_with_opts(start..end, opts, self.inner.refinement()),
-            opts,
+            inner: self.inner.apsis_iter_with_opts(
+                start..end,
+                apsis_opts(step),
+                self.inner.refinement(),
+            ),
         })
     }
 
@@ -751,8 +687,8 @@ impl Predictor {
     /// `interval` must expose `.start` and `.end` datetime properties.
     ///
     /// The keyword-only arguments tune the coarse scan; each defaults to the
-    /// library's own value, which the returned iterator's `repr` prints. `step`
-    /// is the fixed step used to scan for shadow-boundary crossings and
+    /// library's own value. `step` is the fixed step used to scan for
+    /// shadow-boundary crossings and
     /// `walk_step` the one used to pin down a window's true start and end.
     /// An eclipse window longer than
     /// `max_window_duration` raises `RuntimeError`; sunlit windows are the gaps
@@ -766,14 +702,12 @@ impl Predictor {
         max_window_duration: Option<Duration>,
     ) -> PyResult<IlluminationIter> {
         let (start, end) = extract_interval(interval)?;
-        let opts = illumination_opts(step, walk_step, max_window_duration);
         Ok(IlluminationIter {
             inner: self.inner.illumination_iter_with_opts(
                 start..end,
-                opts,
+                illumination_opts(step, walk_step, max_window_duration),
                 self.inner.refinement(),
             ),
-            opts,
         })
     }
 

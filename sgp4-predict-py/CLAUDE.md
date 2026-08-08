@@ -25,9 +25,9 @@ PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
 
 Every method with a `*_with_opts` sibling in the library takes that struct's fields as keyword-only arguments, each `Option` defaulting to `None`. The builders in `predictor.rs` resolve `None` against the library's own `Default`, so a value is never written twice and the bindings cannot drift from the library; the unit tests there pin that and the per-kwarg wiring.
 
-Literal defaults in the `#[pyo3(signature = …)]` were tried and rejected: pyo3-stub-gen and `__text_signature__` both render an expression like `Duration::seconds(60)` as `...`, so the value is invisible in the stub _and_ duplicated in Rust. Instead the four detection iterators carry a copy of their resolved `*Opts` and print it from `__repr__`, which is what makes a default discoverable from Python — and it reports overrides in the same breath. The repr tests assert only values the test itself passed in: asserting the defaults would make every library tuning change break pytest, which is noise, not a signal.
+A default's value is not visible from Python. Anything the bindings could show is the _requested_ value, not the one the run uses — the library clamps afterwards (`aoi.rs`'s `step_bounds`, `MIN_POSITIVE_STEP` elsewhere) — so showing it would need the library to resolve its `*Opts` and hand the resolved struct back.
 
-The `Refinement` used by the iterators still comes from `Predictor.with_refinement`, not a per-call kwarg.
+The `Refinement` used by the iterators comes from `Predictor.with_refinement`, not a per-call kwarg.
 
 ## Conventions
 
