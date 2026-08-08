@@ -59,6 +59,12 @@
 //! [`Observation::azimuth`]/[`elevation`](Observation::elevation) are
 //! [`Radians`], and `min_elevation` parameters accept either.
 //!
+//! # Handling errors
+//!
+//! Every iterator yields [`Result`]. [`FallibleIter`] turns the loop-body `?`
+//! into one call on the iterator: `.log_errors()` to skip a failed event,
+//! `.tolerate_errors(n)` to stop once failures persist.
+//!
 //! # Cargo features
 //!
 //! - `generics` — exposes the generic event/window detection building blocks
@@ -77,6 +83,7 @@ mod angle;
 mod aoi;
 mod apsides;
 mod detect;
+mod fallible;
 mod frames;
 mod illumination;
 mod observe;
@@ -101,6 +108,7 @@ pub use crate::{
     },
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
     detect::Error as DetectError,
+    fallible::{FallibleIter, OnError, Tolerate},
     frames::{EcefState, EnuState, Geodetic, LatLon, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationIterOpts, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
@@ -126,9 +134,9 @@ pub use crate::detect::{
 /// ```
 pub mod prelude {
     pub use crate::{
-        AoiWindow, ApsisEvent, Classification, Degrees, Elements, Error, GroundObserver,
-        IlluminationState, LatLon, Observation, Observer, Polygon, Predictor, Radians, Result,
-        TimeWindow, Tle, TleRecord, Transit,
+        AoiWindow, ApsisEvent, Classification, Degrees, Elements, Error, FallibleIter,
+        GroundObserver, IlluminationState, LatLon, Observation, Observer, Polygon, Predictor,
+        Radians, Result, TimeWindow, Tle, TleRecord, Transit,
     };
 }
 
