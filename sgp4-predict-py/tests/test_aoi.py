@@ -420,3 +420,13 @@ def test_aoi_iter_over_an_area_never_overflown_is_empty():
     # A small circle in the mid-Pacific, well off a single day's ground track.
     area = Ellipse.circle((-40.0, -140.0), 0.5)
     assert list(p.aoi_iter(area, Interval(START, START + timedelta(hours=2)))) == []
+
+
+def test_aoi_iter_repr_shows_the_resolved_options():
+    p = make_predictor()
+    assert repr(
+        p.aoi_iter(europe_polygon(), INTERVAL, max_window_duration=timedelta(hours=2))
+    ) == (
+        "AoiIter(min_step=0:00:01, max_step=0:10:00, walk_step=0:00:05, "
+        "max_window_duration=2:00:00, skip_leading_partial=True, clamp_to_interval=False)"
+    )

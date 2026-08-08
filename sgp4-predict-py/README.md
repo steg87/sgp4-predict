@@ -110,10 +110,18 @@ predictor.aoi_iter(band, window, max_window_duration=timedelta(hours=2))
 An area the ground track never leaves at all — a whole-Earth box, or a band wider than the orbit's
 inclination reaches — has no window end to find, so it raises whatever the cap is set to.
 
-The other knob is `min_step`, the shortest crossing the scan is guaranteed to see. Lower it below
-the default second for an area the ground track crosses faster than that. It also raises the scan's
-ten-minute upper bound wherever it exceeds it, so a `min_step` above that pins every step there and
-a small area is passed straight over.
+`min_step` is the shortest crossing the scan is guaranteed to see. Lower it below the default second
+for an area the ground track crosses faster than that. It also raises the scan's ten-minute upper
+bound wherever it exceeds it, so a `min_step` above that pins every step there and a small area is
+passed straight over.
+
+Every detection method takes its tuning as keyword-only arguments, and an iterator's `repr` prints
+the resolved set — which is where to read a default you did not override:
+
+```python
+>>> predictor.aoi_iter(scotland, window, walk_step=timedelta(seconds=1))
+AoiIter(min_step=0:00:01, max_step=0:10:00, walk_step=0:00:01, max_window_duration=1:00:00, skip_leading_partial=True, clamp_to_interval=False)
+```
 
 `Polygon` edges are **great-circle arcs**, so two vertices at the same latitude are not joined along
 the parallel: the arc bows toward the nearer pole, by about 0.05° for the 7° ring above and roughly

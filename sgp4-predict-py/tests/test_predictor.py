@@ -425,3 +425,88 @@ def test_value_types_compare_and_hash():
     transits = list(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0))
     assert len(set(transits)) == len(transits)
     assert transits[0] == transits[0]
+
+
+# ── tuning kwargs ─────────────────────────────────────────────────────────────
+
+
+def test_tuning_kwargs_are_keyword_only():
+    p = make_predictor()
+    with pytest.raises(TypeError):
+        p.apsis_iter(INTERVAL, timedelta(seconds=30))
+
+
+def test_transits_iter_max_transit_duration_raises():
+    """A cap below any real pass turns the walk into a RuntimeError."""
+    p = make_predictor()
+    it = p.transits_iter(
+        GLASGOW,
+        INTERVAL,
+        min_elevation_deg=5.0,
+        max_transit_duration=timedelta(seconds=1),
+    )
+    with pytest.raises(RuntimeError):
+        list(it)
+
+
+def test_detect_transit_max_transit_duration_raises():
+    p = make_predictor()
+    t0 = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
+    midpoint = t0.start + (t0.end - t0.start) / 2
+    with pytest.raises(RuntimeError):
+        p.detect_transit(
+            midpoint,
+            GLASGOW,
+            min_elevation_deg=5.0,
+            max_transit_duration=timedelta(seconds=1),
+        )
+
+
+def test_illumination_iter_max_window_duration_raises():
+    p = make_predictor()
+    it = p.illumination_iter(
+        Interval(START, START + timedelta(hours=3)),
+        max_window_duration=timedelta(seconds=1),
+    )
+    with pytest.raises(RuntimeError):
+        list(it)
+
+
+def test_skip_leading_partial_false_recovers_a_pass_already_in_progress():
+    """An interval opening mid-pass drops it by default, keeps it when asked."""
+    p = make_predictor()
+    t0 = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
+    midpoint = t0.start + (t0.end - t0.start) / 2
+    interval = Interval(midpoint, END)
+
+    assert (
+        next(iter(p.transits_iter(GLASGOW, interval, min_elevation_deg=5.0))).start
+        > midpoint
+    )
+
+    kept = next(
+        iter(
+            p.transits_iter(
+                GLASGOW, interval, min_elevation_deg=5.0, skip_leading_partial=False
+            )
+        )
+    )
+    assert kept.start < midpoint
+    assert abs((kept.start - t0.start).total_seconds()) < 2.0
+
+
+def test_iterator_repr_shows_the_resolved_options():
+    """The repr answers both "what is the default" and "did my kwarg land"."""
+    p = make_predictor()
+    assert repr(p.apsis_iter(INTERVAL)) == "ApsisIter(step=0:01:00)"
+    assert (
+        repr(p.apsis_iter(INTERVAL, step=timedelta(seconds=5)))
+        == "ApsisIter(step=0:00:05)"
+    )
+    assert repr(p.illumination_iter(INTERVAL)) == (
+        "IlluminationIter(step=0:01:00, walk_step=0:00:30, max_window_duration=1:00:00)"
+    )
+    assert repr(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)) == (
+        "TransitIter(min_step=0:00:10, max_step=0:10:00, walk_step=0:00:30, "
+        "max_transit_duration=1:00:00, skip_leading_partial=True, clamp_to_interval=False)"
+    )
