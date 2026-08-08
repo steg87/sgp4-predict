@@ -78,6 +78,9 @@ pub trait FallibleIter<T>: Iterator<Item = Result<T>> + Sized {
 
     /// Discards errors silently, yielding only the successful items.
     ///
+    /// [`Iterator::flatten`] does the same thing on an iterator of `Result`,
+    /// but does not say so at the call site.
+    ///
     /// ```
     /// use sgp4_predict::{Error, FallibleIter, Result};
     ///
