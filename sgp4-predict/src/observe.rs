@@ -6,6 +6,7 @@
 //! [`Predictor::observe_at`]: crate::Predictor::observe_at
 
 use chrono::{DateTime, Duration, Utc};
+use std::fmt;
 
 use crate::{
     Error, Predictor, Result,
@@ -56,11 +57,29 @@ pub struct Observation {
 /// Iterator over time-stamped [`Observation`]s at regular intervals.
 ///
 /// Created by [`Predictor::observation_iter`](crate::Predictor::observation_iter).
-#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ObservationIter<'a, O: Observer> {
     predict_iter: PredictionIter,
     observer: &'a O,
+}
+
+// `O` is only ever held behind a shared reference, so a derive's `O: Debug` /
+// `O: Clone` bounds would be a false requirement on caller-supplied observers.
+impl<O: Observer> fmt::Debug for ObservationIter<'_, O> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ObservationIter")
+            .field("predict_iter", &self.predict_iter)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<O: Observer> Clone for ObservationIter<'_, O> {
+    fn clone(&self) -> Self {
+        Self {
+            predict_iter: self.predict_iter.clone(),
+            observer: self.observer,
+        }
+    }
 }
 
 impl<'a, O: Observer> ObservationIter<'a, O> {

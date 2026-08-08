@@ -22,7 +22,7 @@ use crate::{
 /// when a derivative is available and a secant/bisection step otherwise,
 /// converging once the crossing is pinned down to `time_tolerance` seconds.
 #[gen_stub_pyclass]
-#[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, PartialEq)]
 pub struct Refinement {
     pub(crate) inner: sgp4_predict::Refinement,

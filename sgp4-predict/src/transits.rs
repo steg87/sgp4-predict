@@ -18,6 +18,7 @@
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
 use chrono::{DateTime, Duration, Utc};
+use std::fmt;
 
 use crate::{
     Predictor, Result,
@@ -71,11 +72,32 @@ impl time::TimeWindow for Transit {
 /// Event function: the satellite's elevation above `min_elevation`, with its
 /// rate of change as the derivative (enabling Newton-Raphson refinement and
 /// adaptive stepping).
-#[derive(Debug, Clone)]
 pub(crate) struct ElevationAboveMin<'a, O: Observer> {
     predictor: Predictor,
     observer: &'a O,
     min_elevation: f64,
+}
+
+// `O` is only ever held behind a shared reference, so the bounds a derive
+// would emit (`O: Debug`, `O: Clone`) are a false requirement on
+// caller-supplied observers. Same reasoning in `TransitIter` below.
+impl<O: Observer> fmt::Debug for ElevationAboveMin<'_, O> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ElevationAboveMin")
+            .field("predictor", &self.predictor)
+            .field("min_elevation", &self.min_elevation)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<O: Observer> Clone for ElevationAboveMin<'_, O> {
+    fn clone(&self) -> Self {
+        Self {
+            predictor: self.predictor.clone(),
+            observer: self.observer,
+            min_elevation: self.min_elevation,
+        }
+    }
 }
 
 impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
@@ -156,10 +178,25 @@ impl Default for MaxElevationOpts {
 /// Iterator over satellite passes visible to an observer within a time interval.
 ///
 /// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
-#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct TransitIter<'a, O: Observer> {
     inner: WindowIter<ElevationAboveMin<'a, O>, ThresholdStep>,
+}
+
+impl<O: Observer> fmt::Debug for TransitIter<'_, O> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransitIter")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl<O: Observer> Clone for TransitIter<'_, O> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<'a, O: Observer> TransitIter<'a, O> {

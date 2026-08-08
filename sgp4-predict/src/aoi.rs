@@ -44,6 +44,7 @@
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
+use std::fmt;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::Elements;
@@ -135,6 +136,10 @@ pub enum FillRule {
 /// ])?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
+///
+/// `==` compares the vertex list, not the region: the same ring listed from a
+/// different starting vertex, or in the opposite direction, compares unequal
+/// even though both cover the same area.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Polygon {
     /// Vertices as unit vectors, deduplicated, ring closing implicitly.
@@ -548,6 +553,10 @@ impl Area for Rectangle {
 /// let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
+///
+/// `==` compares the fields, not the region: two circles with different
+/// bearings compare unequal, even though the bearing means nothing when the
+/// semi-axes are equal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ellipse {
     centre: [f64; 3],
@@ -727,10 +736,28 @@ impl time::TimeWindow for AoiWindow {
 /// No rate is supplied: the offset is not differentiable across the medial
 /// axis or a vertex bisector, which is exactly the geometry that matters here,
 /// and the bracketed solver converges on the time bracket regardless.
-#[derive(Debug, Clone)]
 pub(crate) struct GroundTrackInside<'a, A: Area> {
     predictor: Predictor,
     area: &'a A,
+}
+
+// `A` is only ever held behind a shared reference, so a derive's `A: Debug` /
+// `A: Clone` bounds would be a false requirement on caller-supplied areas.
+impl<A: Area> fmt::Debug for GroundTrackInside<'_, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GroundTrackInside")
+            .field("predictor", &self.predictor)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<A: Area> Clone for GroundTrackInside<'_, A> {
+    fn clone(&self) -> Self {
+        Self {
+            predictor: self.predictor.clone(),
+            area: self.area,
+        }
+    }
 }
 
 impl<'a, A: Area> EventFunction for GroundTrackInside<'a, A> {
@@ -872,10 +899,25 @@ fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
 /// inside an area.
 ///
 /// Created by [`Predictor::aoi_iter`](crate::Predictor::aoi_iter).
-#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct AoiIter<'a, A: Area> {
     inner: WindowIter<GroundTrackInside<'a, A>, ProximityStep>,
+}
+
+impl<A: Area> fmt::Debug for AoiIter<'_, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AoiIter")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl<A: Area> Clone for AoiIter<'_, A> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<'a, A: Area> AoiIter<'a, A> {

@@ -29,7 +29,7 @@ pub(crate) const WGS84_F: f64 = 1.0 / 298.257_223_563;
 pub(crate) const WGS84_E2: f64 = WGS84_F * (2.0 - WGS84_F);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct JulianDate(f64);
+pub(crate) struct JulianDate(f64);
 
 /// State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
 pub type TemeState = StateVector<markers::Teme>;

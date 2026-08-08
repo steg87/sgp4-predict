@@ -99,6 +99,30 @@ forcing a builder API on them is the worse trade. The cost on the error enums is
 `match` needs a `_` arm: `sgp4-predict-py/src/errors.rs` has one, mapping unknown variants to
 `PyRuntimeError` since a new variant is likelier a runtime failure than bad input.
 
+### Derives
+
+The sub-error enums (`aoi::Error`, `roots::Error`, `detect::Error`, `TleParseError`) are
+`Clone + PartialEq`; the **root `Error` stops at `Debug`** and cannot be completed. It wraps
+`sgp4::Error`, `sgp4::TleError` and `sgp4::ElementsError`, none of which implement either. A
+caller comparing errors has to match the variant out first.
+
+**Where a generic is only held behind a shared reference, the trait impls are hand-written**
+(`TransitIter`, `ObservationIter`, `AoiIter`, `ElevationAboveMin`, `GroundTrackInside`, and
+`ValueFn`/`RateFn` in `detect.rs`). A derive bounds on the type parameter itself, so
+`#[derive(Clone)]` on `TransitIter<'a, O>` would emit `where O: Clone` for a field that is a
+`&'a O` — making the iterator un-`Clone` for any caller-supplied `Observer` that isn't. `ValueFn`
+is the sharper case: `F` is always a closure and closures are never `Debug`, so a derived `Debug`
+would be dead for the type's entire intended use and would propagate up through
+`WindowDetector`/`DetectIter` to make the whole `generics` surface un-`Debug`. Do not "simplify"
+these back to derives.
+
+`Copy` on `GroundObserver`, `Observation` and `Apsis` is a one-way door — removing it is breaking,
+and it forecloses ever adding a non-`Copy` field (a station name on `GroundObserver` is the
+obvious candidate). Accepted: they are small numeric records and pass-by-value is how they read.
+
+The window types' derived `Ord` is field-order dependent, and the chronological order is a
+documented promise. `time.rs`'s `test_window_ordering_is_chronological` pins it for all four.
+
 ## Repo infrastructure
 
 - **Git hooks**: managed by `prek` (`prek.toml`). Pre-commit runs fmt+clippy; pre-push runs test+coverage. Contributors install with `prek install`.

@@ -20,6 +20,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   `AoiWindow` satisfies `IntervalRange`.
 - `LatLon` and `Geodetic` types, `Predictor.sub_point` — the geodetic point directly beneath the
   satellite — and `Predictor.ground_track_iter`, sampling those points at a fixed cadence.
+- Value equality (`==`) on the result and input types — `Transit`, `AoiWindow`, `Illumination`,
+  `Observation`, `Apsis`, `Tle`, `Refinement`, `Vec3` and the state vectors. `Transit`,
+  `AoiWindow`, `Illumination` and `Tle` are also hashable, so they work as `dict` keys and in
+  `set`s.
 
 ## [0.1.0] - 2026-07-28
 

@@ -190,6 +190,44 @@ mod tests {
     use chrono::TimeZone;
 
     #[test]
+    fn test_window_ordering_is_chronological() {
+        // The window types derive `Ord`, so the sort order is silently
+        // field-order dependent — moving a field above `start` would reorder
+        // every `BTreeSet` of them with nothing else failing.
+        use crate::detect::Window;
+        use crate::illumination::{Illumination, IlluminationState};
+        use crate::{AoiWindow, Transit};
+
+        let t = |h| Utc.with_ymd_and_hms(2024, 1, 1, h, 0, 0).unwrap();
+
+        assert!(Transit::new(t(0), t(1)) < Transit::new(t(2), t(3)));
+        assert!(AoiWindow::new(t(0), t(1)) < AoiWindow::new(t(2), t(3)));
+        // Equal starts fall through to the end, then to the payload field.
+        assert!(
+            Window {
+                start: t(0),
+                end: t(1),
+                positive: false
+            } < Window {
+                start: t(0),
+                end: t(2),
+                positive: false
+            }
+        );
+        assert!(
+            Illumination {
+                start: t(0),
+                end: t(1),
+                state: IlluminationState::Sunlit,
+            } < Illumination {
+                start: t(0),
+                end: t(1),
+                state: IlluminationState::Eclipse,
+            }
+        );
+    }
+
+    #[test]
     fn test_datetime_roundtrip() {
         // datetime_to_f64 followed by f64_to_datetime must preserve the value
         // to at least millisecond precision; f64 has ~7 fractional decimal

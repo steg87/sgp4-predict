@@ -351,3 +351,30 @@ fn test_transits_to_csv() {
 
     println!("Wrote {} transits to {}", count, filepath);
 }
+
+#[test]
+fn test_iterators_are_clone_and_debug_for_a_bare_observer() {
+    // `Observer` is a caller-implemented trait; the iterators hold it behind a
+    // shared reference, so neither `Clone` nor `Debug` on the observer should
+    // be a prerequisite. A derive would have made both bounds required.
+    struct Bare;
+    impl sgp4_predict::Observer for Bare {
+        fn latitude(&self) -> Degrees {
+            Degrees(55.8642)
+        }
+        fn longitude(&self) -> Degrees {
+            Degrees(-4.2518)
+        }
+        fn altitude(&self) -> f64 {
+            40.0
+        }
+    }
+
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let interval =
+        common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-21T12:00:00Z");
+    let it = p.transits_iter(&Bare, interval.clone(), Degrees(0.0));
+    let _ = format!("{:?}", it.clone());
+    let obs = p.observation_iter(&Bare, interval, Duration::seconds(60));
+    let _ = format!("{:?}", obs.clone());
+}

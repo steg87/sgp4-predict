@@ -61,6 +61,7 @@
 #![cfg_attr(not(feature = "generics"), allow(dead_code))]
 
 use chrono::{DateTime, Duration, Utc};
+use std::fmt;
 use std::ops::Range;
 use thiserror::Error as ThisError;
 
@@ -100,8 +101,16 @@ pub trait EventFunction {
 
 /// Adapts a `FnMut(DateTime<Utc>) -> Result<f64>` closure into an
 /// [`EventFunction`] with no derivative.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct ValueFn<F>(pub F);
+
+// `F` is a closure, which never implements `Debug`. A derive would bound on it
+// and take the whole builder chain down with it.
+impl<F> fmt::Debug for ValueFn<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ValueFn(..)")
+    }
+}
 
 impl<F: FnMut(DateTime<Utc>) -> Result<f64>> EventFunction for ValueFn<F> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
@@ -115,8 +124,14 @@ impl<F: FnMut(DateTime<Utc>) -> Result<f64>> EventFunction for ValueFn<F> {
 
 /// Adapts a `FnMut(DateTime<Utc>) -> Result<(f64, f64)>` closure returning
 /// `(value, rate)` into an [`EventFunction`] with a derivative.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct RateFn<F>(pub F);
+
+impl<F> fmt::Debug for RateFn<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("RateFn(..)")
+    }
+}
 
 impl<F: FnMut(DateTime<Utc>) -> Result<(f64, f64)>> EventFunction for RateFn<F> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
