@@ -105,9 +105,15 @@ pub trait TimeWindow: IntervalRange + Sized {
     /// let window = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
     ///
+    /// // Unlike `intersection`, this gives back a `Transit`, not a bare range.
     /// let clamped = transit.clamp_to(&window).unwrap();
-    /// assert_eq!(clamped.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
-    /// assert_eq!(clamped.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
+    /// assert_eq!(
+    ///     clamped,
+    ///     Transit::new(
+    ///         Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap(),
+    ///         Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).unwrap(),
+    ///     )
+    /// );
     ///
     /// // Fully outside returns None.
     /// let disjoint = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
@@ -270,9 +276,14 @@ mod tests {
         let clamped = window
             .clamp_to(&(start + Duration::minutes(30)..start + Duration::hours(2)))
             .unwrap();
-        assert_eq!(clamped.start, start + Duration::minutes(30));
-        assert_eq!(clamped.end, start + Duration::hours(1));
-        assert_eq!(clamped.state, IlluminationState::Eclipse);
+        assert_eq!(
+            clamped,
+            Illumination {
+                start: start + Duration::minutes(30),
+                end: start + Duration::hours(1),
+                state: IlluminationState::Eclipse,
+            }
+        );
 
         assert!(
             window

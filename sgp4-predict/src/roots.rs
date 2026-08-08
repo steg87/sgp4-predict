@@ -260,7 +260,7 @@ mod tests {
     fn test_refinement_solve_unbracketed() {
         let result =
             Refinement::default().solve(2.4, 3.0, |x| Ok::<_, Infallible>((x.powi(3) - 8.0, None)));
-        assert!(matches!(result, Err(Error::Unbracketed)));
+        assert_eq!(result, Err(Error::Unbracketed));
     }
 
     #[test]
@@ -282,6 +282,7 @@ mod tests {
         let result = Refinement::default().solve(0.0, 1.0, |_| {
             Err::<(f64, Option<f64>), _>(TestError("boom"))
         });
-        assert!(matches!(result, Err(Error::CostFn(_))));
+        // `Error: PartialEq` pins the propagated error itself, not just its shape.
+        assert_eq!(result, Err(Error::CostFn("boom".to_string())));
     }
 }

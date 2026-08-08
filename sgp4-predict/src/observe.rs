@@ -182,8 +182,6 @@ mod tests {
         // A stationary ground observer has no velocity in ECEF.
         let obs = GroundObserver::new(Degrees(28.6), Degrees(77.2), 100.0);
         let ecef = obs.to_ecef();
-        assert_eq!(ecef.velocity.x, 0.0);
-        assert_eq!(ecef.velocity.y, 0.0);
-        assert_eq!(ecef.velocity.z, 0.0);
+        assert_eq!(ecef.velocity, crate::vectors::Velocity::new(0.0, 0.0, 0.0));
     }
 }
