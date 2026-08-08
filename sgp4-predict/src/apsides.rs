@@ -23,7 +23,7 @@ use crate::{
 ///
 /// Pass a customised value to
 /// [`Predictor::apsis_iter_with_opts`](crate::Predictor::apsis_iter_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ApsisIterOpts {
     /// Fixed step used to scan for `r·v` sign changes.
     pub step: Duration,
@@ -38,7 +38,7 @@ impl Default for ApsisIterOpts {
 }
 
 /// The type of an apsis event.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ApsisEvent {
     /// Point of closest approach to Earth (minimum altitude).
     Perigee,
@@ -47,7 +47,7 @@ pub enum ApsisEvent {
 }
 
 /// A detected apsis event with refined time and altitude.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Apsis {
     /// Time of the apsis.
     pub time: DateTime<Utc>,
@@ -61,6 +61,7 @@ pub struct Apsis {
 ///
 /// Zero crossings are apsides: falling (positive → negative) at apogee,
 /// rising (negative → positive) at perigee.
+#[derive(Debug, Clone)]
 pub(crate) struct RadialVelocity {
     predictor: Predictor,
 }
@@ -80,6 +81,7 @@ impl EventFunction for RadialVelocity {
 /// Created by [`Predictor::apsis_iter`](crate::Predictor::apsis_iter).
 /// Scans in fixed steps (60 seconds by default) and refines each crossing
 /// with the bracketed hybrid solver.
+#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ApsisIter {
     predictor: Predictor,

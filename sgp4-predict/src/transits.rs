@@ -18,6 +18,7 @@
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
 use chrono::{DateTime, Duration, Utc};
+use std::fmt;
 
 use crate::{
     Predictor, Result,
@@ -38,8 +39,8 @@ use crate::{
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific pass,
 /// and [`TimeWindow`](crate::TimeWindow) for
-/// [`clamp`](crate::TimeWindow::clamp).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// [`clamp_to`](crate::TimeWindow::clamp_to).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Transit {
     /// Acquisition of Signal: when the satellite rises above `min_elevation`.
     pub start: DateTime<Utc>,
@@ -77,6 +78,28 @@ pub(crate) struct ElevationAboveMin<'a, O: Observer> {
     min_elevation: f64,
 }
 
+// `O` is only ever held behind a shared reference, so the bounds a derive
+// would emit (`O: Debug`, `O: Clone`) are a false requirement on
+// caller-supplied observers. Same reasoning in `TransitIter` below.
+impl<O: Observer> fmt::Debug for ElevationAboveMin<'_, O> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ElevationAboveMin")
+            .field("predictor", &self.predictor)
+            .field("min_elevation", &self.min_elevation)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<O: Observer> Clone for ElevationAboveMin<'_, O> {
+    fn clone(&self) -> Self {
+        Self {
+            predictor: self.predictor.clone(),
+            observer: self.observer,
+            min_elevation: self.min_elevation,
+        }
+    }
+}
+
 impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
         let (el, el_rate) = self
@@ -97,7 +120,7 @@ impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
 ///
 /// Pass a customised value to
 /// [`Predictor::transits_iter_with_opts`](crate::Predictor::transits_iter_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TransitIterOpts {
     /// Lower bound of the adaptive coarse-scan step (`ThresholdStep::min`).
     pub min_step: Duration,
@@ -138,7 +161,7 @@ impl Default for TransitIterOpts {
 ///
 /// Pass a customised value to
 /// [`Predictor::max_elevation_with_opts`](crate::Predictor::max_elevation_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaxElevationOpts {
     /// Fixed step used to scan for elevation-rate zero crossings.
     pub scan_step: Duration,
@@ -158,6 +181,22 @@ impl Default for MaxElevationOpts {
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct TransitIter<'a, O: Observer> {
     inner: WindowIter<ElevationAboveMin<'a, O>, ThresholdStep>,
+}
+
+impl<O: Observer> fmt::Debug for TransitIter<'_, O> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransitIter")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl<O: Observer> Clone for TransitIter<'_, O> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<'a, O: Observer> TransitIter<'a, O> {

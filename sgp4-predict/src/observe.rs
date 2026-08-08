@@ -6,6 +6,7 @@
 //! [`Predictor::observe_at`]: crate::Predictor::observe_at
 
 use chrono::{DateTime, Duration, Utc};
+use std::fmt;
 
 use crate::{
     Error, Predictor, Result,
@@ -40,7 +41,7 @@ impl<T: Observer> ObserverExt for T {}
 /// Range is in **metres**, range rate in **metres per second**. Use
 /// `.to_degrees()` on [`azimuth`](Observation::azimuth) or
 /// [`elevation`](Observation::elevation) for degree equivalents.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Observation {
     /// Azimuth from north, measured clockwise, in `(-π, π]`. Call
     /// [`normalized`](Radians::normalized) for the `[0, 2π)` convention.
@@ -60,6 +61,25 @@ pub struct Observation {
 pub struct ObservationIter<'a, O: Observer> {
     predict_iter: PredictionIter,
     observer: &'a O,
+}
+
+// `O` is only ever held behind a shared reference, so a derive's `O: Debug` /
+// `O: Clone` bounds would be a false requirement on caller-supplied observers.
+impl<O: Observer> fmt::Debug for ObservationIter<'_, O> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ObservationIter")
+            .field("predict_iter", &self.predict_iter)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<O: Observer> Clone for ObservationIter<'_, O> {
+    fn clone(&self) -> Self {
+        Self {
+            predict_iter: self.predict_iter.clone(),
+            observer: self.observer,
+        }
+    }
 }
 
 impl<'a, O: Observer> ObservationIter<'a, O> {
@@ -162,8 +182,6 @@ mod tests {
         // A stationary ground observer has no velocity in ECEF.
         let obs = GroundObserver::new(Degrees(28.6), Degrees(77.2), 100.0);
         let ecef = obs.to_ecef();
-        assert_eq!(ecef.velocity.x, 0.0);
-        assert_eq!(ecef.velocity.y, 0.0);
-        assert_eq!(ecef.velocity.z, 0.0);
+        assert_eq!(ecef.velocity, crate::vectors::Velocity::new(0.0, 0.0, 0.0));
     }
 }

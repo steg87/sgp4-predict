@@ -79,3 +79,17 @@ fn test_equator_crossings() {
         );
     }
 }
+
+#[test]
+fn test_closure_built_iter_is_debug_and_clone() {
+    // Closures are never `Debug`, so a derived `Debug` on `ValueFn` would be
+    // dead and would make the whole builder chain un-`Debug`.
+    let start = common::datetime("2025-12-20T12:00:00Z");
+    let iter = EventIter::builder()
+        .interval(start..start + Duration::hours(1))
+        .function(|_t| Ok(0.0))
+        .step(FixedStep(Duration::seconds(60)))
+        .build()
+        .unwrap();
+    let _ = format!("{:?}", iter.clone());
+}

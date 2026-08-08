@@ -13,7 +13,7 @@ use crate::errors::to_py_err;
 /// tuple works too.
 #[gen_stub_pyclass]
 #[pyclass(eq, frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LatLon {
     inner: sgp4_predict::LatLon,
 }
@@ -60,7 +60,7 @@ impl LatLon {
 /// A geodetic position on or above the WGS-84 ellipsoid.
 #[gen_stub_pyclass]
 #[pyclass(eq, frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Geodetic {
     inner: sgp4_predict::Geodetic,
 }
@@ -161,7 +161,7 @@ impl From<FillRule> for sgp4_predict::FillRule {
 /// vertices are antipodal, or if the polygon does not fit inside a hemisphere.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Polygon {
     inner: sgp4_predict::Polygon,
     // Kept alongside `inner`, which has no accessor for it. Only `new` writes
@@ -227,7 +227,7 @@ impl Polygon {
 /// meridian, so use `latitude_band` for a box spanning every longitude.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rectangle {
     inner: sgp4_predict::Rectangle,
 }
@@ -298,7 +298,7 @@ impl Rectangle {
 /// `nan` or infinite.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Ellipse {
     inner: sgp4_predict::Ellipse,
 }
@@ -386,7 +386,7 @@ impl Ellipse {
 
 /// The library's `AoiIter` is generic over one `Area`, so the Python side needs a
 /// single concrete type covering all three shapes.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum AreaKind {
     Polygon(sgp4_predict::Polygon),
     Rectangle(sgp4_predict::Rectangle),
@@ -395,6 +395,7 @@ pub(crate) enum AreaKind {
 
 /// The borrowed counterpart, for the one-shot paths that don't outlive the
 /// argument and so need no clone.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum AreaRef<'a> {
     Polygon(&'a sgp4_predict::Polygon),
     Rectangle(&'a sgp4_predict::Rectangle),

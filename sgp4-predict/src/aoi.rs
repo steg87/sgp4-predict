@@ -44,6 +44,7 @@
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
+use std::fmt;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::Elements;
@@ -95,7 +96,7 @@ impl<A: Area + ?Sized> Area for &A {
 }
 
 /// How the interior of a self-intersecting [`Polygon`] is determined.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum FillRule {
     /// Inside wherever the winding number is non-zero. A ring that crosses
     /// itself stays filled.
@@ -135,7 +136,11 @@ pub enum FillRule {
 /// ])?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+///
+/// `==` compares the vertex list, not the region: the same ring listed from a
+/// different starting vertex, or in the opposite direction, compares unequal
+/// even though both cover the same area.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Polygon {
     /// Vertices as unit vectors, deduplicated, ring closing implicitly.
     verts: Vec<[f64; 3]>,
@@ -337,7 +342,7 @@ impl Area for Polygon {
 /// let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rectangle {
     south: f64,
     north: f64,
@@ -348,13 +353,13 @@ pub struct Rectangle {
     sides: Option<Sides>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct Sides {
     corners: [[f64; 3]; 4],
     meridians: [Meridian; 2],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Meridian {
     /// Normal of the meridian's great-circle plane.
     normal: [f64; 3],
@@ -548,7 +553,11 @@ impl Area for Rectangle {
 /// let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+///
+/// `==` compares the fields, not the region: two circles with different
+/// bearings compare unequal, even though the bearing means nothing when the
+/// semi-axes are equal.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Ellipse {
     centre: [f64; 3],
     /// Both equal to `centre` when the ellipse is a circle.
@@ -690,8 +699,8 @@ impl Area for Ellipse {
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific
 /// overpass, and [`TimeWindow`](crate::TimeWindow) for
-/// [`clamp`](crate::TimeWindow::clamp).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// [`clamp_to`](crate::TimeWindow::clamp_to).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AoiWindow {
     /// When the ground track crosses into the area.
     pub start: DateTime<Utc>,
@@ -732,6 +741,25 @@ pub(crate) struct GroundTrackInside<'a, A: Area> {
     area: &'a A,
 }
 
+// `A` is only ever held behind a shared reference, so a derive's `A: Debug` /
+// `A: Clone` bounds would be a false requirement on caller-supplied areas.
+impl<A: Area> fmt::Debug for GroundTrackInside<'_, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GroundTrackInside")
+            .field("predictor", &self.predictor)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<A: Area> Clone for GroundTrackInside<'_, A> {
+    fn clone(&self) -> Self {
+        Self {
+            predictor: self.predictor.clone(),
+            area: self.area,
+        }
+    }
+}
+
 impl<'a, A: Area> EventFunction for GroundTrackInside<'a, A> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
         let point = self.predictor.sub_point(t)?;
@@ -755,7 +783,7 @@ impl<'a, A: Area> EventFunction for GroundTrackInside<'a, A> {
 /// The `min` floor is the one exception, and the reason it exists: without it
 /// the step collapses to zero at the boundary and the scan stalls. A chord the
 /// ground track traverses in less than `min` can still be missed.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ProximityStep {
     min: Duration,
     max: Duration,
@@ -812,7 +840,7 @@ fn max_sub_point_rate(elements: &Elements) -> f64 {
 ///
 /// Pass a customised value to
 /// [`Predictor::aoi_iter_with_opts`](crate::Predictor::aoi_iter_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AoiIterOpts {
     /// Lower bound of the adaptive coarse-scan step. Also the shortest
     /// crossing the scan is guaranteed to see, so lower it for an area the
@@ -874,6 +902,22 @@ fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct AoiIter<'a, A: Area> {
     inner: WindowIter<GroundTrackInside<'a, A>, ProximityStep>,
+}
+
+impl<A: Area> fmt::Debug for AoiIter<'_, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AoiIter")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl<A: Area> Clone for AoiIter<'_, A> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<'a, A: Area> AoiIter<'a, A> {
@@ -1012,7 +1056,7 @@ impl Predictor {
 }
 
 /// Errors from constructing an [`Area`].
-#[derive(Debug, ThisError)]
+#[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
     #[error("polygon needs at least 3 distinct vertices, got {0}")]
@@ -2387,17 +2431,11 @@ mod geometry_tests {
     #[test]
     fn test_too_few_vertices() {
         let two = Polygon::new([(Degrees(0.0), Degrees(0.0)), (Degrees(1.0), Degrees(1.0))]);
-        assert!(matches!(
-            two,
-            Err(Error::Aoi(super::Error::TooFewVertices(2)))
-        ));
+        assert_eq!(two, Err(Error::Aoi(super::Error::TooFewVertices(2))));
 
         // Three vertices that collapse to one.
         let collapsed = Polygon::new([(Degrees(5.0), Degrees(5.0)); 3]);
-        assert!(matches!(
-            collapsed,
-            Err(Error::Aoi(super::Error::TooFewVertices(1)))
-        ));
+        assert_eq!(collapsed, Err(Error::Aoi(super::Error::TooFewVertices(1))));
     }
 
     #[test]
@@ -2407,7 +2445,8 @@ mod geometry_tests {
             (Degrees(91.0), Degrees(10.0)),
             (Degrees(10.0), Degrees(10.0)),
         ]);
-        assert!(matches!(bad, Err(Error::Aoi(super::Error::Latitude(_)))));
+        // The reported latitude is the offending one, not just any.
+        assert_eq!(bad, Err(Error::Aoi(super::Error::Latitude(91.0))));
     }
 
     /// A non-finite latitude fails the range test; a non-finite longitude has

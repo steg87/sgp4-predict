@@ -87,6 +87,7 @@ impl From<sgp4_predict::Classification> for Classification {
 /// ```
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
 pub struct Elements {
     pub(crate) inner: sgp4_predict::Elements,
 }

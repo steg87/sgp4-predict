@@ -61,6 +61,7 @@
 #![cfg_attr(not(feature = "generics"), allow(dead_code))]
 
 use chrono::{DateTime, Duration, Utc};
+use std::fmt;
 use std::ops::Range;
 use thiserror::Error as ThisError;
 
@@ -72,7 +73,7 @@ use crate::{
 };
 
 /// One evaluation of an [`EventFunction`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sample {
     /// Time at which the function was evaluated.
     pub time: DateTime<Utc>,
@@ -100,7 +101,16 @@ pub trait EventFunction {
 
 /// Adapts a `FnMut(DateTime<Utc>) -> Result<f64>` closure into an
 /// [`EventFunction`] with no derivative.
+#[derive(Clone, Copy)]
 pub struct ValueFn<F>(pub F);
+
+// `F` is a closure, which never implements `Debug`. A derive would bound on it
+// and take the whole builder chain down with it.
+impl<F> fmt::Debug for ValueFn<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ValueFn(..)")
+    }
+}
 
 impl<F: FnMut(DateTime<Utc>) -> Result<f64>> EventFunction for ValueFn<F> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
@@ -114,7 +124,14 @@ impl<F: FnMut(DateTime<Utc>) -> Result<f64>> EventFunction for ValueFn<F> {
 
 /// Adapts a `FnMut(DateTime<Utc>) -> Result<(f64, f64)>` closure returning
 /// `(value, rate)` into an [`EventFunction`] with a derivative.
+#[derive(Clone, Copy)]
 pub struct RateFn<F>(pub F);
+
+impl<F> fmt::Debug for RateFn<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("RateFn(..)")
+    }
+}
 
 impl<F: FnMut(DateTime<Utc>) -> Result<(f64, f64)>> EventFunction for RateFn<F> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
@@ -138,7 +155,7 @@ pub trait StepStrategy {
 }
 
 /// Advance by a constant duration each step.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FixedStep(pub Duration);
 
 impl StepStrategy for FixedStep {
@@ -159,7 +176,7 @@ impl StepStrategy for FixedStep {
 /// [`AoiIterOpts`](crate::AoiIterOpts) does. Honouring `max` instead would
 /// take `min`-sized steps only where the crossing is imminent — precisely
 /// where a step too large jumps clean over the window and reports nothing.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ThresholdStep {
     /// Smallest step taken when the crossing is imminent.
     pub min: Duration,
@@ -232,6 +249,7 @@ enum Phase {
 /// sample lands on `interval.start()`), stops scanning once that time leaves
 /// the interval, then drains [`Detector::finish`]. Errors are yielded as
 /// items and iteration continues from the following sample.
+#[derive(Debug, Clone)]
 // Also covers the `EventIter` and `WindowIter` aliases.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DetectIter<D> {
@@ -296,7 +314,7 @@ impl<D: Detector> Iterator for DetectIter<D> {
 }
 
 /// The direction of a zero crossing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     /// The function value went from negative to positive.
     Rising,
@@ -305,7 +323,7 @@ pub enum Direction {
 }
 
 /// A refined zero crossing of an [`EventFunction`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Crossing {
     /// Refined time of the crossing.
     pub time: DateTime<Utc>,
@@ -482,6 +500,7 @@ fn resolve_positive_window<F: EventFunction>(
 /// A [`Detector`] that yields the refined zero [`Crossing`]s of an
 /// [`EventFunction`]. Build one with [`EventIter::builder`], or with
 /// [`CrossingDetector::new`] for use in a custom [`DetectIter`].
+#[derive(Debug, Clone)]
 pub struct CrossingDetector<F, S> {
     f: F,
     step: S,
@@ -534,7 +553,7 @@ impl<F: EventFunction, S: StepStrategy> Detector for CrossingDetector<F, S> {
 }
 
 /// An interval over which the event function held one sign.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Window {
     /// Start of the window: a refined crossing, or the interval start for a
     /// leading partial window.
@@ -589,6 +608,7 @@ impl TimeWindow for Window {
 /// [cti]: WindowIterBuilder::clamp_to_interval
 /// [ilp]: WindowIterBuilder::include_leading_partial
 /// [inw]: WindowIterBuilder::include_negative_windows
+#[derive(Debug, Clone)]
 pub struct WindowDetector<F, S> {
     f: F,
     step: S,
@@ -757,6 +777,7 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
 /// event function rewrites the type parameter, and `build()` only exists
 /// once every `Missing` slot is filled — a forgotten function is a compile
 /// error, not a runtime one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Missing;
 
 /// Iterator over the zero [`Crossing`]s of an [`EventFunction`].
@@ -790,6 +811,7 @@ fn missing_interval(kind: &str) -> crate::Error {
 }
 
 /// Builder for [`EventIter`]. Obtain via [`EventIter::builder`].
+#[derive(Debug, Clone)]
 #[must_use = "a builder does nothing until `.build()` is called"]
 pub struct EventIterBuilder<F = Missing, S = FixedStep> {
     interval: Option<Range<DateTime<Utc>>>,
@@ -890,6 +912,7 @@ const DEFAULT_MAX_WINDOW_DURATION: Duration = Duration::hours(1);
 pub(crate) const MIN_POSITIVE_STEP: Duration = Duration::seconds(1);
 
 /// Builder for [`WindowIter`]. Obtain via [`WindowIter::builder`].
+#[derive(Debug, Clone)]
 #[must_use = "a builder does nothing until `.build()` is called"]
 pub struct WindowIterBuilder<F = Missing, S = FixedStep> {
     interval: Option<Range<DateTime<Utc>>>,
@@ -1066,7 +1089,7 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
 }
 
 /// Errors that can occur during generic event detection.
-#[derive(Debug, ThisError)]
+#[derive(Debug, Clone, PartialEq, Eq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
     #[error(

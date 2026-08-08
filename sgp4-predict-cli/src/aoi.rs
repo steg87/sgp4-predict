@@ -19,6 +19,7 @@ use sgp4_predict::{Degrees, Ellipse, Polygon, Rectangle};
 /// AoiShape`: callers match once and pass the concrete shape to a generic
 /// function, which keeps the dispatch at the call site instead of on every
 /// sample.
+#[derive(Debug, Clone, PartialEq)]
 pub enum AoiShape {
     Rectangle(Rectangle),
     Ellipse(Ellipse),

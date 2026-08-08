@@ -28,7 +28,8 @@ pub(crate) const WGS84_F: f64 = 1.0 / 298.257_223_563;
 /// WGS-84 first eccentricity squared, `f(2 − f)`.
 pub(crate) const WGS84_E2: f64 = WGS84_F * (2.0 - WGS84_F);
 
-pub struct JulianDate(f64);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub(crate) struct JulianDate(f64);
 
 /// State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
 pub type TemeState = StateVector<markers::Teme>;
@@ -368,15 +369,15 @@ pub(crate) fn sun_position_eci(t: DateTime<Utc>) -> [f64; 3] {
 
 mod markers {
     /// Marker struct for TEME frame
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Teme;
 
     /// Marker struct for ECEF frame
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Ecef;
 
     /// Marker struct for ENU frame
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Enu;
 }
 

@@ -7,7 +7,8 @@ use crate::elements::Elements;
 
 /// A satellite TLE (Two-Line Element set) identified by a name and two TLE lines.
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, hash, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Tle {
     satellite_name: String,
     line_1: String,

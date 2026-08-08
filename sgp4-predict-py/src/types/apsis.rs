@@ -22,7 +22,8 @@ pub enum ApsisEvent {
 
 /// A detected apsis event with refined time and altitude.
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct Apsis {
     pub time: DateTime<Utc>,
     pub event: ApsisEvent,

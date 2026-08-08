@@ -51,9 +51,11 @@ Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at c
 
 Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Transit` can be passed directly as an interval to `prediction_iter` or `observation_iter` to iterate over one pass.
 
-The two traits are deliberately separate. `IntervalRange` only _reads_ an interval, which is why every iterator takes `impl IntervalRange` — a caller's own type can span time without being reconstructible. `TimeWindow: IntervalRange + Sized` adds the one method that can't be derived from reading, `with_bounds(start, end) -> Self`, and gets `clamp` for free; it is implemented by the concrete detection results (`Transit`, `AoiWindow`, `Illumination`, `detect::Window`) only — `Range<DateTime<Utc>>` has no payload to preserve, so its `clamp` would just duplicate `IntervalRange::intersection`. Do not merge `with_bounds` into `IntervalRange` — that would force every interval-shaped type to be constructible and break the `impl IntervalRange` parameters.
+The two traits are deliberately separate. `IntervalRange` only _reads_ an interval, which is why every iterator takes `impl IntervalRange` — a caller's own type can span time without being reconstructible. `TimeWindow: IntervalRange + Sized` adds the one method that can't be derived from reading, `with_bounds(start, end) -> Self`, and gets `clamp_to` for free; it is implemented by the concrete detection results (`Transit`, `AoiWindow`, `Illumination`, `detect::Window`) only — `Range<DateTime<Utc>>` has no payload to preserve, so its `clamp_to` would just duplicate `IntervalRange::intersection`. Do not merge `with_bounds` into `IntervalRange` — that would force every interval-shaped type to be constructible and break the `impl IntervalRange` parameters.
 
-`with_bounds` takes `&self` and rebuilds with `..*self` rather than mutating, so payload fields (`Illumination::state`, `Window::positive`) survive clamping. New window types belong here rather than growing another inherent `clamp`.
+`with_bounds` takes `&self` and rebuilds with `..*self` rather than mutating, so payload fields (`Illumination::state`, `Window::positive`) survive clamping. New window types belong here rather than growing another inherent `clamp_to`.
+
+`clamp_to` is named that way to stay clear of `Ord::clamp`. The two would collide on every implementor: `Ord::clamp` takes `self` by value and `clamp_to` takes `&self`, so method resolution reaches the by-value receiver first and `Ord::clamp` wins outright. Their arities differ, so today it is a compile error rather than a silently wrong call — do not rely on that. The window types are `DateTime` pairs and so are totally ordered; they derive `Ord` and belong in a `BTreeSet`, which is what the name buys.
 
 `DateTimeIter` substitutes 1 s for a **non-positive** step only — a zero step never advances `next_time` and would yield the same instant forever, which previously hung `prediction_iter`/`observation_iter`. Any positive step is used as given, including sub-second ones: this is a _sampling_ iterator, so `Duration::milliseconds(100)` is legitimate, unlike for the coarse detection scans. Do not "make it consistent" with those — flooring here silently decimates a caller's sample rate.
 
@@ -96,6 +98,31 @@ way to use them, would stop compiling downstream. Adding an `Opts` field stays a
 forcing a builder API on them is the worse trade. The cost on the error enums is that a downstream
 `match` needs a `_` arm: `sgp4-predict-py/src/errors.rs` has one, mapping unknown variants to
 `PyRuntimeError` since a new variant is likelier a runtime failure than bad input.
+
+### Derives
+
+**Every error enum is `Clone + PartialEq`, the root `Error` included.** The three foreign types it
+wraps (`sgp4::Error`, `sgp4::TleError`, `sgp4::ElementsError`) all derive both, so nothing forces
+the root to stop at `Debug` — a caller can `assert_eq!` on a whole `Result` without matching the
+variant out first, which is what makes the sub-error derives reachable at all. `Eq` is out
+everywhere: `roots::Error::FailedToConverge` carries `f64`s.
+
+**Where a generic is only held behind a shared reference, the trait impls are hand-written**
+(`TransitIter`, `ObservationIter`, `AoiIter`, `ElevationAboveMin`, `GroundTrackInside`, and
+`ValueFn`/`RateFn` in `detect.rs`). A derive bounds on the type parameter itself, so
+`#[derive(Clone)]` on `TransitIter<'a, O>` would emit `where O: Clone` for a field that is a
+`&'a O` — making the iterator un-`Clone` for any caller-supplied `Observer` that isn't. `ValueFn`
+is the sharper case: `F` is always a closure and closures are never `Debug`, so a derived `Debug`
+would be dead for the type's entire intended use and would propagate up through
+`WindowDetector`/`DetectIter` to make the whole `generics` surface un-`Debug`. Do not "simplify"
+these back to derives.
+
+`Copy` on `GroundObserver`, `Observation` and `Apsis` is a one-way door — removing it is breaking,
+and it forecloses ever adding a non-`Copy` field (a station name on `GroundObserver` is the
+obvious candidate). Accepted: they are small numeric records and pass-by-value is how they read.
+
+The window types' derived `Ord` is field-order dependent, and the chronological order is a
+documented promise. `time.rs`'s `test_window_ordering_is_chronological` pins it for all four.
 
 ## Repo infrastructure
 

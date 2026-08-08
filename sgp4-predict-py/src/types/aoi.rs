@@ -4,8 +4,8 @@ use pyo3_stub_gen::derive::*;
 
 /// The window during which the satellite's ground track lies inside an area.
 #[gen_stub_pyclass]
-#[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
-#[derive(PartialEq)]
+#[pyclass(eq, hash, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AoiWindow {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,

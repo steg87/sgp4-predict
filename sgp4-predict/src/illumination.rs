@@ -33,7 +33,7 @@ use crate::{
 ///
 /// Pass a customised value to
 /// [`Predictor::illumination_iter_with_opts`](crate::Predictor::illumination_iter_with_opts).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IlluminationIterOpts {
     /// Fixed step used to scan for shadow-boundary crossings.
     pub step: Duration,
@@ -58,7 +58,7 @@ impl Default for IlluminationIterOpts {
 }
 
 /// Whether the satellite is in sunlight or in Earth's shadow.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IlluminationState {
     /// The satellite is illuminated by the Sun.
     Sunlit,
@@ -71,8 +71,8 @@ pub enum IlluminationState {
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators, and
 /// [`TimeWindow`](crate::TimeWindow) for
-/// [`clamp`](crate::TimeWindow::clamp), which preserves the `state`.
-#[derive(Debug, Clone, Copy)]
+/// [`clamp_to`](crate::TimeWindow::clamp_to), which preserves the `state`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Illumination {
     /// Start of the window (inclusive).
     pub start: DateTime<Utc>,
@@ -103,6 +103,7 @@ impl time::TimeWindow for Illumination {
 
 /// Event function: the cylindrical-shadow value (positive in eclipse,
 /// negative when sunlit).
+#[derive(Debug, Clone)]
 pub(crate) struct ShadowFunction {
     predictor: Predictor,
 }
@@ -125,6 +126,7 @@ impl EventFunction for ShadowFunction {
 /// Windows that extend beyond the search interval are clamped to its boundaries:
 /// the first window always starts at `interval.start` and the last always ends at
 /// `interval.end`, regardless of when the illumination state actually changed.
+#[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct IlluminationIter {
     inner: WindowIter<ShadowFunction, FixedStep>,

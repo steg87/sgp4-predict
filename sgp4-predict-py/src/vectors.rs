@@ -8,7 +8,8 @@ use crate::types::Observation;
 
 /// A 3-component vector (x, y, z).  Used for position (metres) and velocity (m/s).
 #[gen_stub_pyclass]
-#[pyclass(frozen, name = "Vec3", module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, frozen, name = "Vec3", module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct PyVec3 {
     #[pyo3(get)]
     pub x: f64,
@@ -34,7 +35,8 @@ impl PyVec3 {
 /// State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
 /// Positions in metres, velocities in m/s.
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct StateVectorTeme {
     pub(crate) inner: TemeState,
 }
@@ -79,7 +81,8 @@ impl StateVectorTeme {
 /// State vector in the Earth-Centred Earth-Fixed (ECEF) frame.
 /// Positions in metres, velocities in m/s.
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct StateVectorEcef {
     pub(crate) inner: EcefState,
 }
@@ -118,7 +121,8 @@ impl StateVectorEcef {
 /// State vector in the East-North-Up (ENU) frame relative to a ground observer.
 /// Positions in metres, velocities in m/s.
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "sgp4_predict._sgp4_predict")]
+#[pyclass(eq, frozen, module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug, PartialEq)]
 pub struct StateVectorEnu {
     pub(crate) inner: EnuState,
 }

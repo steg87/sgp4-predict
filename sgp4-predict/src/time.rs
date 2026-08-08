@@ -105,17 +105,23 @@ pub trait TimeWindow: IntervalRange + Sized {
     /// let window = Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap()
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
     ///
-    /// let clamped = transit.clamp(&window).unwrap();
-    /// assert_eq!(clamped.start, Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap());
-    /// assert_eq!(clamped.end,   Utc.with_ymd_and_hms(2024, 1, 1, 1,  0, 0).unwrap());
+    /// // Unlike `intersection`, this gives back a `Transit`, not a bare range.
+    /// let clamped = transit.clamp_to(&window).unwrap();
+    /// assert_eq!(
+    ///     clamped,
+    ///     Transit::new(
+    ///         Utc.with_ymd_and_hms(2024, 1, 1, 0, 30, 0).unwrap(),
+    ///         Utc.with_ymd_and_hms(2024, 1, 1, 1, 0, 0).unwrap(),
+    ///     )
+    /// );
     ///
     /// // Fully outside returns None.
     /// let disjoint = Utc.with_ymd_and_hms(2024, 1, 1, 2, 0, 0).unwrap()
     ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 3, 0, 0).unwrap();
-    /// assert!(transit.clamp(&disjoint).is_none());
+    /// assert!(transit.clamp_to(&disjoint).is_none());
     /// ```
     #[must_use = "returns the clamped copy; the receiver is unchanged"]
-    fn clamp(&self, interval: &impl IntervalRange) -> Option<Self> {
+    fn clamp_to(&self, interval: &impl IntervalRange) -> Option<Self> {
         self.intersection(interval)
             .map(|r| self.with_bounds(r.start, r.end))
     }
@@ -131,6 +137,7 @@ pub trait TimeWindow: IntervalRange + Sized {
 /// advance and would iterate forever. Any positive step is used as given —
 /// this is a sampling iterator, so sub-second steps are meaningful here even
 /// though they are not for the coarse detection scans.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct DateTimeIter {
     interval: Range<DateTime<Utc>>,
@@ -189,6 +196,44 @@ mod tests {
     use chrono::TimeZone;
 
     #[test]
+    fn test_window_ordering_is_chronological() {
+        // The window types derive `Ord`, so the sort order is silently
+        // field-order dependent — moving a field above `start` would reorder
+        // every `BTreeSet` of them with nothing else failing.
+        use crate::detect::Window;
+        use crate::illumination::{Illumination, IlluminationState};
+        use crate::{AoiWindow, Transit};
+
+        let t = |h| Utc.with_ymd_and_hms(2024, 1, 1, h, 0, 0).unwrap();
+
+        assert!(Transit::new(t(0), t(1)) < Transit::new(t(2), t(3)));
+        assert!(AoiWindow::new(t(0), t(1)) < AoiWindow::new(t(2), t(3)));
+        // Equal starts fall through to the end, then to the payload field.
+        assert!(
+            Window {
+                start: t(0),
+                end: t(1),
+                positive: false
+            } < Window {
+                start: t(0),
+                end: t(2),
+                positive: false
+            }
+        );
+        assert!(
+            Illumination {
+                start: t(0),
+                end: t(1),
+                state: IlluminationState::Sunlit,
+            } < Illumination {
+                start: t(0),
+                end: t(1),
+                state: IlluminationState::Eclipse,
+            }
+        );
+    }
+
+    #[test]
     fn test_datetime_roundtrip() {
         // datetime_to_f64 followed by f64_to_datetime must preserve the value
         // to at least millisecond precision; f64 has ~7 fractional decimal
@@ -217,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_clamp_preserves_payload_fields() {
-        // The blanket clamp rebuilds via with_bounds, so fields other than the
+        // The blanket clamp_to rebuilds via with_bounds, so fields other than the
         // bounds must survive it.
         use crate::{Illumination, IlluminationState};
 
@@ -229,15 +274,20 @@ mod tests {
         };
 
         let clamped = window
-            .clamp(&(start + Duration::minutes(30)..start + Duration::hours(2)))
+            .clamp_to(&(start + Duration::minutes(30)..start + Duration::hours(2)))
             .unwrap();
-        assert_eq!(clamped.start, start + Duration::minutes(30));
-        assert_eq!(clamped.end, start + Duration::hours(1));
-        assert_eq!(clamped.state, IlluminationState::Eclipse);
+        assert_eq!(
+            clamped,
+            Illumination {
+                start: start + Duration::minutes(30),
+                end: start + Duration::hours(1),
+                state: IlluminationState::Eclipse,
+            }
+        );
 
         assert!(
             window
-                .clamp(&(start + Duration::hours(3)..start + Duration::hours(4)))
+                .clamp_to(&(start + Duration::hours(3)..start + Duration::hours(4)))
                 .is_none()
         );
     }

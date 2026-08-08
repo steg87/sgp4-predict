@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::{path::PathBuf, time::Duration};
 
-#[derive(Parser)]
+#[derive(Debug, Clone, Parser)]
 #[command(
     name = "sgp4-predict",
     about = "SGP4 satellite prediction CLI",
@@ -40,7 +40,7 @@ impl Args {
     }
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Compute satellite observations over a time interval
     Observations(ObservationsArgs),
@@ -66,13 +66,13 @@ pub enum Command {
     Man,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct GsArgs {
     #[command(subcommand)]
     pub command: GsCommand,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum GsCommand {
     /// Add a ground station, prompting for each field
     Add(GsAddArgs),
@@ -84,7 +84,7 @@ pub enum GsCommand {
     List(GsListArgs),
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct GsAddArgs {
     /// Ground station id, used later as `--gs <ID>`; prompted for if omitted
     #[arg(value_name = "ID")]
@@ -95,7 +95,7 @@ pub struct GsAddArgs {
     pub force: bool,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct GsRemoveArgs {
     /// Ground station id to remove
     #[arg(value_name = "ID")]
@@ -106,20 +106,20 @@ pub struct GsRemoveArgs {
     pub force: bool,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct GsListArgs {
     /// Output format
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct AoiCommandArgs {
     #[command(subcommand)]
     pub command: AoiCommand,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum AoiCommand {
     /// Add an area of interest
     Add(AoiAddArgs),
@@ -131,7 +131,7 @@ pub enum AoiCommand {
     List(AoiListArgs),
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct AoiAddArgs {
     /// AOI id, used later as `--aoi <ID>`; prompted for if omitted
     #[arg(value_name = "ID")]
@@ -148,7 +148,7 @@ pub struct AoiAddArgs {
 
 /// The shape an AOI takes. Its *definition* is always prompted for — there is
 /// deliberately no flag carrying coordinates, matching `gs add`.
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum)]
 pub enum Shape {
     /// Latitude/longitude box, given by its south/north/west/east bounds
     Box,
@@ -168,7 +168,7 @@ are for `gs add`. Edit the config file directly to write an AOI out by hand.
 
     sgp4-predict aoi add scotland --shape box";
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct AoiRemoveArgs {
     /// AOI id to remove
     #[arg(value_name = "ID")]
@@ -179,14 +179,14 @@ pub struct AoiRemoveArgs {
     pub force: bool,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct AoiListArgs {
     /// Output format
     #[arg(long, value_enum, default_value_t = Format::Text)]
     pub format: Format,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct CompletionsArgs {
     /// Shell to generate completions for
     #[arg(value_enum)]
@@ -194,7 +194,7 @@ pub struct CompletionsArgs {
 }
 
 /// Arguments shared by all subcommands.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct CommonArgs {
     /// Start time, e.g. "2026-03-25 10:00:00" or "2026-03-25T10:00:00Z" (default: now, always UTC)
     #[arg(long, value_parser = parse_start_time)]
@@ -222,7 +222,7 @@ pub struct CommonArgs {
 }
 
 /// Tabular output format.
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum)]
 pub enum Format {
     /// Fixed-width columns with a header, for reading
     Text,
@@ -258,7 +258,7 @@ default path is not an error; a missing --config path is.
 ///
 /// `ObserverArgs::validate` enforces that `--gs` is present and names a station
 /// the config defines; `ObserverArgs::resolve` turns it into a ground location.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct ObserverArgs {
     /// Ground station id from the config file
     #[arg(long, value_name = "ID", long_help = GS_LONG_HELP)]
@@ -272,7 +272,7 @@ Ground station id, looked up in the `groundstations` map of the config file
 Required. If the id is missing or unknown, the error lists the ids the config
 does define.";
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct ObservationsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -285,7 +285,7 @@ pub struct ObservationsArgs {
     pub step: Duration,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct TransitsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -312,7 +312,7 @@ pub struct TransitsArgs {
 
 /// `TransitIterOpts` and `MaxElevationOpts` as flags. Defaults mirror those
 /// structs' `Default` impls, so passing none of these reproduces `transits_iter`.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Detection tuning")]
 pub struct TransitTuningArgs {
     /// Lower bound of the adaptive coarse-scan step
@@ -346,7 +346,7 @@ pub struct TransitTuningArgs {
     pub tca_scan_step: Duration,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct StateVectorsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -360,7 +360,7 @@ pub struct StateVectorsArgs {
     pub frame: Frame,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum)]
 pub enum Frame {
     Teme,
     Ecef,
@@ -376,7 +376,7 @@ pub fn value_name(value: impl ValueEnum) -> String {
         .to_string()
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct ApsidesArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -389,7 +389,7 @@ pub struct ApsidesArgs {
 }
 
 /// `ApsisIterOpts` as flags.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Detection tuning")]
 pub struct ApsisTuningArgs {
     /// Fixed step used to scan for radial-velocity sign changes
@@ -397,7 +397,7 @@ pub struct ApsisTuningArgs {
     pub step: Duration,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct GroundTrackArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -407,7 +407,7 @@ pub struct GroundTrackArgs {
     pub step: Duration,
 }
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct AoiWindowsArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -423,7 +423,7 @@ pub struct AoiWindowsArgs {
 }
 
 /// `AoiIterOpts` as flags.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Detection tuning")]
 pub struct AoiTuningArgs {
     /// Lower bound of the adaptive coarse-scan step, and so the shortest
@@ -459,7 +459,7 @@ pub struct AoiTuningArgs {
 ///
 /// `AoiArgs::validate` enforces that `--aoi` is present and names an AOI the
 /// config can build; `AoiArgs::resolve` returns the built shape.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct AoiArgs {
     /// Area of interest id from the config file
     #[arg(long = "aoi", value_name = "ID", long_help = AOI_LONG_HELP)]
@@ -473,7 +473,7 @@ Area of interest id, looked up in the `aois` map of the config file
 Required. If the id is missing or unknown, the error lists the ids the config
 does define. Add one with `sgp4-predict aoi add`.";
 
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct IlluminationArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -486,7 +486,7 @@ pub struct IlluminationArgs {
 }
 
 /// `IlluminationIterOpts` as flags.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Detection tuning")]
 pub struct IlluminationTuningArgs {
     /// Fixed step used to scan for shadow-boundary crossings
@@ -507,7 +507,7 @@ pub struct IlluminationTuningArgs {
 ///
 /// Applied with `Predictor::with_refinement` rather than passed per call, so it
 /// reaches the one-shot refinements (`max_elevation`) as well as the iterators.
-#[derive(clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Root finder")]
 pub struct RefinementArgs {
     /// Convergence threshold on the bracket width, in seconds

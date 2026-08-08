@@ -409,3 +409,19 @@ def test_tle_to_elements():
     assert el.object_name == TLE_ID
     p = Predictor(el)
     assert p.epoch.year == 2025
+
+
+def test_value_types_compare_and_hash():
+    tle = Tle(TLE_ID, TLE_L1, TLE_L2)
+    assert tle == Tle(TLE_ID, TLE_L1, TLE_L2)
+    assert tle != Tle("OTHER", TLE_L1, TLE_L2)
+    assert len({tle, Tle(TLE_ID, TLE_L1, TLE_L2)}) == 1
+
+    p = make_predictor()
+    assert p.propagate(START) == p.propagate(START)
+    assert p.propagate(START) != p.propagate(START + timedelta(minutes=1))
+    assert p.observe_at(START, GLASGOW) == p.observe_at(START, GLASGOW)
+
+    transits = list(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0))
+    assert len(set(transits)) == len(transits)
+    assert transits[0] == transits[0]
