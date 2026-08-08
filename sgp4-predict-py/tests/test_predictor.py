@@ -16,6 +16,7 @@ from sgp4_predict import (
     Interval,
     IntervalRange,
     Predictor,
+    Refinement,
     Tle,
 )
 
@@ -425,3 +426,78 @@ def test_value_types_compare_and_hash():
     transits = list(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0))
     assert len(set(transits)) == len(transits)
     assert transits[0] == transits[0]
+
+
+# ── tuning kwargs ─────────────────────────────────────────────────────────────
+
+
+def test_tuning_kwargs_are_keyword_only():
+    p = make_predictor()
+    with pytest.raises(TypeError):
+        p.apsis_iter(INTERVAL, timedelta(seconds=30))
+
+
+def test_transits_iter_max_transit_duration_raises():
+    """A cap below any real pass turns the walk into a RuntimeError."""
+    p = make_predictor()
+    it = p.transits_iter(
+        GLASGOW,
+        INTERVAL,
+        min_elevation_deg=5.0,
+        max_transit_duration=timedelta(seconds=1),
+    )
+    with pytest.raises(RuntimeError):
+        list(it)
+
+
+def test_detect_transit_max_transit_duration_raises():
+    p = make_predictor()
+    t0 = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
+    midpoint = t0.start + (t0.end - t0.start) / 2
+    with pytest.raises(RuntimeError):
+        p.detect_transit(
+            midpoint,
+            GLASGOW,
+            min_elevation_deg=5.0,
+            max_transit_duration=timedelta(seconds=1),
+        )
+
+
+def test_illumination_iter_max_window_duration_raises():
+    p = make_predictor()
+    it = p.illumination_iter(
+        Interval(START, START + timedelta(hours=3)),
+        max_window_duration=timedelta(seconds=1),
+    )
+    with pytest.raises(RuntimeError):
+        list(it)
+
+
+def test_skip_leading_partial_false_recovers_a_pass_already_in_progress():
+    """An interval opening mid-pass drops it by default, keeps it when asked."""
+    p = make_predictor()
+    t0 = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
+    midpoint = t0.start + (t0.end - t0.start) / 2
+    interval = Interval(midpoint, END)
+
+    assert (
+        next(iter(p.transits_iter(GLASGOW, interval, min_elevation_deg=5.0))).start
+        > midpoint
+    )
+
+    kept = next(
+        iter(
+            p.transits_iter(
+                GLASGOW, interval, min_elevation_deg=5.0, skip_leading_partial=False
+            )
+        )
+    )
+    assert kept.start < midpoint
+    assert abs((kept.start - t0.start).total_seconds()) < 2.0
+
+
+def test_refinement_takes_keyword_only_arguments():
+    assert Refinement(time_tolerance=1e-6).time_tolerance == 1e-6
+    assert Refinement(time_tolerance=1e-6).max_iter == Refinement().max_iter
+    with pytest.raises(TypeError):
+        Refinement(1e-6)

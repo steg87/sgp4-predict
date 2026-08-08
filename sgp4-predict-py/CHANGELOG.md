@@ -13,6 +13,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Added
 
+- Detection tuning as keyword-only arguments on `transits_iter`, `aoi_iter`, `apsis_iter`,
+  `illumination_iter`, `detect_transit`, `detect_aoi` and `max_elevation` — scan and walk steps, the
+  window-duration caps, and how partial windows at the interval edges are treated. Anything left
+  unset keeps the library's default.
+- `Refinement(time_tolerance=…, max_iter=…)` — keyword-only, each defaulting to the library's value;
+  the class previously took no arguments, so both fields had to be assigned after construction.
 - Area-of-interest detection: `Predictor.aoi_iter` and `detect_aoi` yield the `AoiWindow`s during
   which the sub-satellite point is inside an area. `Polygon`, `Rectangle` and `Ellipse` describe the
   region; each also exposes `signed_angular_offset_deg`. Points are `LatLon` objects, `Geodetic`
