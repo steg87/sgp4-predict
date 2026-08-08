@@ -27,6 +27,36 @@ A Rust library wrapping the `sgp4` crate to provide higher-level prediction and 
 
 Refinement is threaded into the underlying `WindowIter`/`EventIter` builder at construction (`.refinement(refinement)`), not mutated afterwards: there is deliberately **no** post-construction `with_refinement` on these iterators. `Predictor::with_refinement` is different — it configures the `Predictor` before any iterator exists, and `Predictor::refinement()` reads it back.
 
+### Iterator error handling (`fallible.rs`)
+
+The iterators keep yielding `Result` rather than swallowing errors, because the two error classes
+that reach `next()` want opposite handling. **Local**: `Roots::FailedToConverge`,
+`Roots::Unbracketed`, `Detect::WindowTooLong` — one event failed to refine, and `DetectIter`
+advances `current` before calling `detect_event`, so the scan is not wedged; skipping is right.
+**Sticky**: `Error::Sgp4` is degenerate propagation state, deterministic in the elements and `t`, so
+a decayed TLE fails at *every* sample. Blanket-skipping turns that into an empty iterator —
+indistinguishable from "no passes this week", a silent no-op in scheduling code. Only the call site
+knows which it can tolerate. Dropping `Result` is also a one-way door: an adapter is additive at any
+time, error reporting cannot be added back.
+
+`FallibleIter` is a blanket impl over `Iterator<Item = Result<T>>`, so all eight fallible iterators
+gain it including the lifetime-parameterised ones, with no existing signature changed.
+
+- **`Tolerate` counts _consecutive_ errors, resetting the run on any `Ok`.** This is the
+  data-derived substitute for an `Error::is_transient()` classifier: an unbroken run of N failures
+  is observed evidence the object is dead, so it degrades correctly for variants not yet added
+  (`Error` is `#[non_exhaustive]`) and cannot mis-classify `Error::Custom`. `until_error` is
+  `tolerate_errors(0)`.
+- **`skip_errors`/`log_errors` reuse `OnError` through `fn(Error)` coercion**, not closures, so both
+  return a nameable type and there is one skip-style struct rather than three.
+- `skip_errors` duplicates `Iterator::flatten`, which also drops the `Err`s, and is kept anyway:
+  `flatten` on a `Result` iterator reads like a bug. Prefer `skip_errors` at every call site —
+  `tests/examples.rs` uses it throughout.
+- `Tolerate` owns its terminating error and lends it back; hence the `&mut` iteration in the docs.
+
+Deliberately absent: an `inspect_errors` that would let `log_errors` and `tolerate_errors` chain.
+`Iterator::inspect` covers it in one line today.
+
 ### Generic detection (`detect.rs`, opt-in `generics` feature)
 
 `detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) powers `ApsisIter`, `TransitIter` and `IlluminationIter` internally, so the module always compiles — but its crate-root re-exports are gated behind the off-by-default `generics` feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
@@ -81,7 +111,8 @@ line. `DetectIter` covers the `EventIter` and `WindowIter` aliases too. Do not "
 adding method-level attributes to those types; they are already covered and would be redundant.
 
 Method-level `#[must_use]` is only for methods whose _type_ should not be must-use:
-`TimeWindow::clamp` and `IntervalRange::intersection` (`Option` is not must-use), and
+`TimeWindow::clamp`, `IntervalRange::intersection` and `Tolerate::error`/`into_error` (`Option` is
+not must-use), and
 `TimeWindow::with_bounds`, `Predictor::with_refinement` and `Polygon::with_fill_rule` (the
 receiving type is normally stored, not consumed), and
 `Degrees::normalized`/`Radians::normalized` (which read like in-place mutators).
@@ -109,7 +140,10 @@ everywhere: `roots::Error::FailedToConverge` carries `f64`s.
 
 **Where a generic is only held behind a shared reference, the trait impls are hand-written**
 (`TransitIter`, `ObservationIter`, `AoiIter`, `ElevationAboveMin`, `GroundTrackInside`, and
-`ValueFn`/`RateFn` in `detect.rs`). A derive bounds on the type parameter itself, so
+`ValueFn`/`RateFn` in `detect.rs`). `OnError`'s `Debug` is hand-written for the same reason —
+`on_error`'s general case is a closure, so a derive's `F: Debug` bound would be dead exactly where
+the type is most used. It is `Clone` but deliberately not `Copy`: std's iterator adapters aren't,
+because a `Copy` iterator gets silently copied into a `for` loop leaving the original unadvanced. A derive bounds on the type parameter itself, so
 `#[derive(Clone)]` on `TransitIter<'a, O>` would emit `where O: Clone` for a field that is a
 `&'a O` — making the iterator un-`Clone` for any caller-supplied `Observer` that isn't. `ValueFn`
 is the sharper case: `F` is always a closure and closures are never `Debug`, so a derived `Debug`

@@ -31,12 +31,21 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   serve as `BTreeMap`/`BTreeSet` keys; types holding an `f64` are `PartialOrd` at most. Every
   error enum is `Clone + PartialEq`, so a whole `Result` can be compared without matching the
   variant out.
+- `FallibleIter`, an extension trait on every iterator yielding `Result`, replacing the loop-body
+  `?` with one call on the iterator itself. `on_error`, `skip_errors` and `log_errors` consume the
+  error and carry on, for the failures that affect a single event; `tolerate_errors(n)` and
+  `until_error` stop once errors persist and retain the one that stopped them, for the failures
+  that will repeat at every sample. It is in the prelude.
 - `TimeWindow`, a trait over the concrete window types (`Transit`, `AoiWindow`, `Illumination`
   and `Window`). Implementing `with_bounds` supplies `clamp_to`, so
   `Illumination` and `Window` gain it and it is written once rather than per type.
 
 ### Changed
 
+- Errors that are returned to the caller are no longer also logged. Refinement failures, the
+  window-boundary give-up and illumination window failures each emitted a `warn` on the way out,
+  which double-reported every error once the caller handled it — and twice over when that handler
+  was `log_errors`. Logging is the caller's decision; `FallibleIter` is how to make it.
 - The public `Error` enums (`sgp4_predict::Error`, `aoi::Error`, `roots::Error`, `DetectError`) are
   `#[non_exhaustive]`, so adding a variant is no longer a breaking change. A downstream `match` on
   one now needs a `_` arm. The `*Opts` structs stay exhaustive, so `..Default::default()` keeps

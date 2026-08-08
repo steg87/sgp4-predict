@@ -2,7 +2,8 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
-    Degrees, GroundObserver, IlluminationState, IntervalRange, Observation, Predictor, Transit,
+    Degrees, FallibleIter, GroundObserver, IlluminationState, IntervalRange, Observation,
+    Predictor, Transit,
 };
 
 /// Propagate the satellite state in TEME and ECEF frames for the next day, sampled every 15 minutes.
@@ -17,7 +18,7 @@ fn daily_state_vectors() {
     println!("time,x [km],y [km],z [km],vx [km/s],vy [km/s],vz [km/s]");
     for (t, teme) in p
         .prediction_iter(start..end, Duration::minutes(15))
-        .flatten()
+        .skip_errors()
     {
         println!(
             "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3}",
@@ -142,7 +143,7 @@ fn ground_station_passes() {
     println!("start,end,aos_azimuth_deg,los_azimuth_deg,tca_elevation_deg,duration");
     for pass in p
         .transits_iter(&gs, start..end, Degrees(10.0))
-        .flatten()
+        .skip_errors()
         .map(|t| GroundStationPass {
             start: t.start(),
             end: t.end(),
@@ -179,7 +180,7 @@ fn sunlight_windows() {
     println!("start,end,duration");
     for window in p
         .illumination_iter(start..end)
-        .flatten()
+        .skip_errors()
         .filter(|w| w.state == IlluminationState::Sunlit)
     {
         println!(
@@ -208,11 +209,14 @@ fn eclipse_transits() {
     let mut n_transits = 0;
     let mut n_windows = 0;
     println!("start,end,duration");
-    for transit in p.transits_iter(&gs, start..end, Degrees(30.0)).flatten() {
+    for transit in p
+        .transits_iter(&gs, start..end, Degrees(30.0))
+        .skip_errors()
+    {
         n_transits += 1;
         for window in p
             .illumination_iter(transit)
-            .flatten()
+            .skip_errors()
             .filter(|w| matches!(w.state, IlluminationState::Eclipse))
         {
             n_windows += 1;
@@ -229,6 +233,55 @@ fn eclipse_transits() {
     println!("{} transits filtered out", n_transits - n_windows);
 }
 
+/// Handle both iterator error classes in one scan: skip the individual passes that fail to refine,
+/// but stop and report if propagation itself starts failing.
+#[test]
+fn resilient_pass_scan() {
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+
+    let start = p.epoch();
+    let end = start + Duration::days(3);
+
+    // A pass that fails to refine is a local failure — the scan has already moved past it, so the
+    // next pass is unaffected. Drop it and keep a count. `skip_errors()` discards silently and
+    // `log_errors()` logs at warn; `on_error` is the one that can also count.
+    let mut unrefined = 0usize;
+    let passes = p
+        .transits_iter(&gs, start..end, Degrees(10.0))
+        .on_error(|e| {
+            unrefined += 1;
+            tracing::warn!(error = %e, "skipping unrefined pass");
+        });
+
+    println!("start,end,samples");
+    for transit in passes {
+        // A propagation failure is deterministic in the elements, so it repeats at every sample: a
+        // run of them means the TLE is unusable, not that one sample was awkward. Stop after three
+        // in a row. `until_error()` is the zero-tolerance case.
+        let mut samples = p
+            .observation_iter(&gs, transit, Duration::seconds(10))
+            .tolerate_errors(3);
+
+        // Iterate `&mut` so the adapter survives the loop and can be asked why it stopped.
+        let n = samples.by_ref().count();
+
+        if let Some(e) = samples.error() {
+            println!("propagation gave up mid-pass: {e}");
+            break;
+        }
+
+        println!(
+            "{},{},{n}",
+            transit.start.format("%Y-%m-%d %H:%M:%S"),
+            transit.end.format("%Y-%m-%d %H:%M:%S"),
+        );
+    }
+
+    println!("{unrefined} passes dropped");
+}
+
 /// Calculate all apogee and perigee events for the next 3 days.
 #[test]
 fn apsides() {
@@ -241,7 +294,7 @@ fn apsides() {
     let end = start + Duration::days(3);
 
     println!("time,event,altitude [km]");
-    for apsis in p.apsis_iter(start..end).flatten() {
+    for apsis in p.apsis_iter(start..end).skip_errors() {
         println!(
             "{},{},{:.3}",
             apsis.time.format("%Y-%m-%d %H:%M:%S"),

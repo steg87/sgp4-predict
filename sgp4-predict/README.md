@@ -63,6 +63,13 @@ area-of-interest overpasses (`aoi_iter`), and answers point queries such as `pro
 other tuning knobs, and `Predictor::with_refinement` configures the root finder that pins down event
 times. See the [`Predictor` docs](https://docs.rs/sgp4-predict/latest/sgp4_predict/struct.Predictor.html).
 
+## Handling errors
+
+Every iterator yields `Result`, which is the `let transit = transit?;` above.
+[`FallibleIter`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.FallibleIter.html) moves
+that onto the iterator: skip the failures that affect a single event, or stop once they persist.
+The `resilient_pass_scan` example in [`tests/examples.rs`](tests/examples.rs) uses both in one scan.
+
 ## Areas of interest
 
 `Polygon` describes a region on the ground as a ring of latitude/longitude vertices — concave and
