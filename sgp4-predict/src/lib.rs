@@ -250,6 +250,7 @@ impl Predictor {
     /// a separate argument from `opts`, so pass `predictor.refinement()` to
     /// preserve whatever this `Predictor` was already configured with instead
     /// of silently reverting to [`Refinement::default()`].
+    #[must_use]
     pub fn refinement(&self) -> Refinement {
         self.refinement
     }
@@ -274,6 +275,7 @@ impl Predictor {
     }
 
     /// Return the epoch of the TLE.
+    #[must_use]
     pub fn epoch(&self) -> DateTime<Utc> {
         DateTime::<Utc>::from_naive_utc_and_offset(self.elements.datetime, Utc)
     }
@@ -281,6 +283,7 @@ impl Predictor {
     /// Return the age of the TLE relative to `now`.
     ///
     /// Positive means the TLE epoch is in the past (normal operation).
+    #[must_use]
     pub fn tle_age(&self, now: DateTime<Utc>) -> Duration {
         now.signed_duration_since(self.epoch())
     }

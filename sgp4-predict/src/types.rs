@@ -154,6 +154,7 @@ impl GroundObserver {
     /// - `latitude` — geodetic latitude (positive north)
     /// - `longitude` — geodetic longitude (positive east)
     /// - `altitude` — height above the WGS-84 ellipsoid in metres
+    #[must_use]
     pub const fn new(latitude: Degrees, longitude: Degrees, altitude: f64) -> Self {
         Self {
             latitude,
