@@ -40,8 +40,15 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - `TimeWindow`, a trait over the concrete window types (`Transit`, `AoiWindow`, `Illumination`
   and `Window`). Implementing `with_bounds` supplies `clamp_to`, so
   `Illumination` and `Window` gain it and it is written once rather than per type.
+- `RootsError`, the payload of `Error::Roots`, is exported alongside `AoiError` and `DetectError`.
+  It was reachable through that variant but could not be named.
 
 ### Changed
+
+- The overview of the `generics` feature — what the layers are, and a worked equator-crossing
+  example — is published in the crate documentation. It lived on a private module, so it appeared
+  nowhere in the rendered docs.
+- Every public item now carries documentation, enforced by `#![warn(missing_docs)]`.
 
 - Errors that are returned to the caller are no longer also logged. Refinement failures, the
   window-boundary give-up and illumination window failures each emitted a `warn` on the way out,

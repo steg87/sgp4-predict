@@ -26,6 +26,7 @@ pub struct Vec3<K, F> {
 }
 
 impl<K, F> Vec3<K, F> {
+    /// Build a vector from its components.
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self {
             x,
@@ -56,11 +57,14 @@ impl<K, F> std::ops::Sub for Vec3<K, F> {
 /// [`EnuState`]: crate::EnuState
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct StateVector<F> {
+    /// Position in frame `F`, in metres.
     pub position: Position<F>,
+    /// Velocity in frame `F`, in metres per second.
     pub velocity: Velocity<F>,
 }
 
 impl<F> StateVector<F> {
+    /// Pair a position and a velocity in the same frame.
     #[must_use]
     pub fn new(position: Position<F>, velocity: Velocity<F>) -> Self {
         Self { position, velocity }

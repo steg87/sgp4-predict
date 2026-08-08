@@ -93,6 +93,12 @@ The two traits are deliberately separate. `IntervalRange` only _reads_ an interv
 
 - **Code comments**: terse, and only where the code is non-obvious. Explain _why_ the code is the way it is — never how it used to be, why it changed, what was tried instead, or anything that reads as a transcript of the discussion that produced it. Describe what is there, in the present tense, as if it had always been that way.
 - **User-facing docs** (READMEs, `docs/`, docstrings) are for someone picking the library up, not a record of how it got here. Same rule: no history, no rejected alternatives, no edge cases that only came up in review. Design rationale belongs in this file instead.
+- **`#![warn(missing_docs)]` is on the library**, and `make lint`'s `-D warnings` makes it fatal, so a new public item — including an error variant or a variant's field — fails CI until it is documented. Same mechanism as `clippy::must_use_candidate`; it is not something to remember.
+
+- **The user-facing overview of the `generics` feature lives in `lib.rs`'s crate docs**, not in `detect.rs`. `detect` is a private module whose items are re-exported, so rustdoc renders nothing for its `//!` block — anything written there is invisible. `detect.rs` keeps only a short orientation note for maintainers. The equator-crossing doctest is gated with `cfg_attr(feature = "generics", doc = "```no_run")` so it compiles under `--all-features` and is skipped otherwise.
+
+- **Every `Error` variant's payload type is exported**, `RootsError` included. A variant whose payload cannot be named forces the caller into a wildcard match.
+
 - **Standalone docs** (`docs/`, READMEs) have exactly two jobs: get a new user to their first working prediction, and take an existing user up to the advanced `generics` surface. They are not a feature tour and not an API reference — rustdoc and `examples/` are. **Never describe an API in a doc file unless the description is testable.** A runnable snippet is fine — it breaks when it drifts. Prose is not: no function signatures, no tables of methods, no lists of a module's exports or an enum's variants. Every one of those is a second copy of something rustdoc already generates, and it silently goes stale. Link to the item instead. Same for concepts: if a docstring or an example already covers it, point at it rather than restating it.
 
   **Every sentence must earn its place — if it does not, cut it.** Prefer a runnable snippet to prose describing one. No design decisions or rationale in the docs at all; that goes in this file. Edge cases go in a `//` comment at the code, or in the function's docstring when a caller could actually hit one — never in a standalone page.
@@ -172,6 +178,7 @@ Full process in `docs/RELEASING.md`. `release-prepare.yml` (manual dispatch) bum
 Points that are deliberate and easy to "fix" wrongly:
 
 - `release.toml`'s changelog pattern is anchored (`(?m)^## \[Unreleased\]$`). Unanchored, it also matches each changelog preamble's prose reference to that heading and trips `exactly = 1`.
+- The second replacement block bumps the library README's `sgp4-predict = "…"` install snippet. It uses `min = 0`, not `exactly = 1`, because `pre-release-replacements` run per crate and only one of the three READMEs carries such a line.
 - `release-prepare.yml` runs `cargo release version` and `cargo release replace` as separate steps rather than the all-in-one `cargo release <level>` — the all-in-one **commits**, and `create-pull-request` needs the changes left in the working tree.
 - Pre-releases (`0.2.0-rc.1`) skip the changelog roll; `extract-changelog.sh` reads `[Unreleased]` for any version with a pre-release suffix, so an rc ships the pending notes and the final release rolls them.
 - `release-prepare.yml` opens its PR branches under `release/…`, so `release.yml` triggers on `main` and `*.x` only. **Never add `release/**`to those triggers** — it would publish a release PR branch on push, before review. Maintenance branches are named`<major>.<minor>.x`(e.g.`1.1.x`) for the same reason.

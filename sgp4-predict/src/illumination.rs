@@ -133,6 +133,9 @@ pub struct IlluminationIter {
 }
 
 impl IlluminationIter {
+    /// Partition `interval` into sunlit and eclipse windows. Prefer
+    /// [`Predictor::illumination_iter`](crate::Predictor::illumination_iter),
+    /// which supplies the defaults.
     pub fn new(
         predictor: Predictor,
         interval: impl time::IntervalRange,

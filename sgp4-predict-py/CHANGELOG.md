@@ -31,6 +31,22 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   `AoiWindow`, `Illumination` and `Tle` are also hashable, so they work as `dict` keys and in
   `set`s.
 
+### Fixed
+
+- Wheels ship a `py.typed` marker. Without it PEP 561 tells type checkers to ignore the bundled
+  stubs, so the package was effectively untyped despite advertising `Typing :: Typed`.
+- Wheels ship the generated stub. It was excluded from the repository and the release build does
+  not regenerate it, so every class other than the handful redeclared by hand — `Transit`,
+  `Observation`, `Apsis`, `Tle`, `GroundObserver`, `Vec3`, the state vectors and all the iterators
+  — arrived with no type information at all.
+- Iterating any iterator yields its item type rather than `T | None`. `__next__` was declared
+  `Optional`, so `for transit in predictor.transits_iter(...)` bound `Transit | None` and every
+  subsequent attribute access was reported as an error.
+- Docstrings reach the editor. `Predictor`, `Elements`, `Polygon`, `Rectangle` and `Ellipse` were
+  redeclared in the hand-written stub to narrow argument types, which replaced the generated
+  declarations and dropped every method docstring with them. The argument types are now narrowed at
+  the source instead, so the documentation and the types arrive together.
+
 ## [0.1.0] - 2026-07-28
 
 Initial release — Python bindings (PyO3) for `sgp4-predict`.

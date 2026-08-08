@@ -89,6 +89,9 @@ pub struct ApsisIter {
 }
 
 impl ApsisIter {
+    /// Scan `interval` for apsides. Prefer
+    /// [`Predictor::apsis_iter`](crate::Predictor::apsis_iter), which supplies
+    /// the defaults.
     pub fn new(
         predictor: Predictor,
         interval: impl time::IntervalRange,

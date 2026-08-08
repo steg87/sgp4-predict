@@ -147,6 +147,7 @@ pub struct DateTimeIter {
 }
 
 impl DateTimeIter {
+    /// Step through `interval` every `step`, from its start.
     pub fn new(interval: impl IntervalRange, step: Duration) -> Self {
         Self {
             interval: interval.start()..interval.end(),

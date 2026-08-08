@@ -8,11 +8,11 @@
 
 Higher-level satellite prediction on top of the [`sgp4`](https://crates.io/crates/sgp4) crate.
 Give it a TLE and it will propagate state vectors, compute ground observations, and find passes,
-apsides, and sunlit windows over any time range.
+overpasses of an area on the ground, apsides, and sunlit windows over any time range.
 
 ```toml
 [dependencies]
-sgp4-predict = "0.1"
+sgp4-predict = "0.2"
 ```
 
 ## Quick start
@@ -180,6 +180,22 @@ impl Observer for Site {
     fn altitude(&self) -> f64      { self.elevation_m }
 }
 ```
+
+## Detecting other events
+
+Transits, apsides, illumination and area overpasses are all thin wrappers over one generic layer:
+a scalar event function `f(t)`, a step strategy that samples it, and a bracketed solver that refines
+each sign change. The `generics` feature exposes that layer, so an event kind this crate does not
+cover — ascending-node crossings, say — needs no bespoke iterator.
+
+```toml
+sgp4-predict = { version = "0.2", features = ["generics"] }
+```
+
+`EventIter` yields refined point crossings and `WindowIter` pairs them into intervals; both are
+built through a builder taking the function, the step strategy and the interval. The
+[module documentation](https://docs.rs/sgp4-predict/latest/sgp4_predict/#cargo-features) has a
+worked equator-crossing example, and [`tests/detect.rs`](tests/detect.rs) exercises the rest.
 
 ## Units
 

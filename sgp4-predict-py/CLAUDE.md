@@ -19,7 +19,15 @@ PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
 
 `make stubs` inside `sgp4-predict-py/` fails when `VIRTUAL_ENV` points elsewhere — use the explicit command above instead.
 
-**Known stub-gen limitation**: pyo3-stub-gen silently drops static methods whose parameters are `&Bound<'_, PyAny>` (e.g. `Elements.from_dict`). Such methods work at runtime but never appear in `_sgp4_predict/__init__.pyi`. If that becomes a problem, override the signature in the hand-maintained `sgp4_predict/__init__.pyi`.
+## Type stubs
+
+`python/sgp4_predict/_sgp4_predict/__init__.pyi` is **generated but committed**, because the release workflow only runs `maturin build` on a clean checkout — an ignored stub would simply be absent from every published wheel, leaving everything it declares untyped. `python.yml` regenerates it and fails on a diff, so it cannot drift. `py.typed` sits beside it; without that marker PEP 561 tells type checkers to ignore the stubs entirely.
+
+A `&Bound<'_, PyAny>` parameter would otherwise land in the stub as `typing.Any`, so each one carries `#[gen_stub(override_type(type_repr = …, imports = …))]` naming the Python type it really accepts — `sgp4_predict.IntervalRange`, `sgp4_predict.Area`, `sgp4_predict.LatLonLike`, `builtins.dict`. The resulting import cycle between the two stub files is fine; type checkers resolve stub imports lazily.
+
+`__next__` returns `PyResult<Option<T>>`, but pyo3 turns `Ok(None)` into `StopIteration` rather than yielding it, so each one carries `#[gen_stub(override_return_type(…))]` naming `T`. Without it every `for x in iter:` binds `T | None` and reads as a type error downstream.
+
+Consequently the hand-maintained `sgp4_predict/__init__.pyi` holds **only** what cannot be generated: the `IntervalRange` protocol, the `Interval` class, and the `LatLonLike`/`Area` aliases. Do not redeclare a generated class there — a redeclaration _replaces_ it, silently dropping every docstring the Rust source supplies.
 
 ## Tuning knobs
 
@@ -41,7 +49,7 @@ In Rust, `Observer` is the _trait_ and `GroundObserver` the concrete type; in Py
 
 `AreaRef<'a>` is the borrowed twin of `AreaKind`, for `detect_aoi`, which does not outlive its argument. All three pyclasses are `frozen`, so `Bound::cast::<Polygon>()?.get()` yields a reference and the vertex vector is never cloned; `extract_area` clones out of an `AreaRef` rather than duplicating the dispatch. Note pyo3 spells this `cast`, not `downcast`. `extract_lat_lon` uses `cast` for that reason plus one more: the tuple form is the documented common case, and only `cast` misses without constructing a Python exception.
 
-Constructors take `&Bound<'_, PyAny>` so a point may be a `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple. pyo3-stub-gen therefore widens them to `Any`, so `Polygon`/`Rectangle`/`Ellipse` are redeclared in the hand-maintained `sgp4_predict/__init__.pyi` — and a redeclaration there _replaces_ the generated class rather than merging with it, so every member has to be repeated.
+Constructors take `&Bound<'_, PyAny>` so a point may be a `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple; each is annotated back to `sgp4_predict.LatLonLike` for the stub, as described above.
 
 The cap `max_window_duration` sets is only escapable for an area the track actually leaves — a whole-Earth box has no window end, so it raises whatever the cap is.
 

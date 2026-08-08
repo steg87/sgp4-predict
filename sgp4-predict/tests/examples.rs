@@ -69,11 +69,11 @@ fn current_ground_station_pass() {
 
     // Sample observations across the detected pass so we can see the full arc.
     println!("time,azimuth [deg],elevation [deg],range [km],range rate [km/s]");
-    for observation in p
+    for (t, obs) in p
         .observation_iter(&gs, detected, Duration::seconds(10))
         .include_end()
+        .skip_errors()
     {
-        let (t, obs) = observation.expect("error calculating observation");
         println!(
             "{},{:.2},{:.2},{:.3},{:.3}",
             t.format("%Y-%m-%d %H:%M:%S"),
@@ -104,13 +104,13 @@ fn next_ground_station_pass() {
         .expect("error calculating transit");
 
     println!("time,azimuth [deg], elevation [deg], range [km], range rate [km/s]");
-    for observation in p
+    for (t, observation) in p
         // Transit implements IntervalRange, so it doubles as the interval here.
         .observation_iter(&gs, next_transit, Duration::seconds(10))
         // Sample the transit end time as well as the regular steps.
         .include_end()
+        .skip_errors()
     {
-        let (t, observation) = observation.expect("error calculating observation");
         println!(
             "{},{:.2},{:.2},{:.3},{:.3}",
             t.format("%Y-%m-%d %H:%M:%S"),
@@ -221,7 +221,7 @@ fn eclipse_transits() {
         {
             n_windows += 1;
             println!(
-                "{},{},{:.0}",
+                "{},{},{}",
                 window.start.format("%Y-%m-%d %H:%M:%S"),
                 window.end.format("%Y-%m-%d %H:%M:%S"),
                 humantime::format_duration(std::time::Duration::from_secs(
@@ -280,6 +280,45 @@ fn resilient_pass_scan() {
     }
 
     println!("{unrefined} passes dropped");
+}
+
+/// Find the overpasses of a region on the ground over the next week, and report the sub-satellite
+/// point at each boundary crossing.
+#[test]
+fn area_of_interest_overpasses() {
+    use sgp4_predict::Rectangle;
+
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+
+    // A latitude/longitude box: its north and south edges follow their parallels exactly. A
+    // `Polygon` of the same four corners would bow poleward; `Ellipse` covers circular footprints.
+    let area = Rectangle::new(
+        (Degrees(50.0), Degrees(-10.0)),
+        (Degrees(60.0), Degrees(2.0)),
+    )
+    .unwrap();
+
+    let start = p.epoch();
+    let end = start + Duration::days(7);
+
+    println!("entry,exit,entry_lat,entry_lon,exit_lat,exit_lon,duration");
+    for window in p.aoi_iter(&area, start..end).skip_errors() {
+        let entry = p.sub_point(window.start).expect("propagation error");
+        let exit = p.sub_point(window.end).expect("propagation error");
+        println!(
+            "{},{},{:.4},{:.4},{:.4},{:.4},{}",
+            window.start.format("%Y-%m-%d %H:%M:%S"),
+            window.end.format("%Y-%m-%d %H:%M:%S"),
+            entry.latitude,
+            entry.longitude,
+            exit.latitude,
+            exit.longitude,
+            humantime::format_duration(std::time::Duration::from_secs(
+                window.duration().num_seconds() as u64
+            )),
+        );
+    }
 }
 
 /// Calculate all apogee and perigee events for the next 3 days.

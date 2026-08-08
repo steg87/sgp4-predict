@@ -737,6 +737,7 @@ pub struct AoiWindow {
 }
 
 impl AoiWindow {
+    /// Build a window from its entry and exit times.
     #[must_use]
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
@@ -950,6 +951,9 @@ impl<A: Area> Clone for AoiIter<'_, A> {
 }
 
 impl<'a, A: Area> AoiIter<'a, A> {
+    /// Scan `interval` for windows over `area`. Prefer
+    /// [`Predictor::aoi_iter`](crate::Predictor::aoi_iter), which supplies the
+    /// defaults.
     pub fn new(
         predictor: Predictor,
         area: &'a A,
@@ -1088,31 +1092,58 @@ impl Predictor {
 #[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
+    /// Fewer than three distinct vertices remained after deduplication.
     #[error("polygon needs at least 3 distinct vertices, got {0}")]
     TooFewVertices(usize),
+    /// A latitude fell outside `[-90, 90]`.
     #[error("latitude {0} is outside [-90, 90]")]
     Latitude(f64),
+    /// An angle was NaN or infinite. `what` names the argument it came from.
     #[error("{what} is not finite: {value}")]
-    NotFinite { what: &'static str, value: f64 },
+    NotFinite {
+        /// Which argument was non-finite.
+        what: &'static str,
+        /// The offending value.
+        value: f64,
+    },
+    /// Two consecutive vertices are antipodal, so no unique great-circle arc
+    /// joins them.
     #[error("polygon edge {index} joins antipodal vertices; no unique great-circle arc joins them")]
-    AntipodalEdge { index: usize },
+    AntipodalEdge {
+        /// Index of the edge's first vertex.
+        index: usize,
+    },
+    /// The polygon does not fit inside a hemisphere. See [`Polygon`].
     #[error(
         "polygon spans {radius_deg:.1}° from its centre and does not fit within a hemisphere; \
          split it into smaller polygons, or describe the complementary region instead"
     )]
-    LargerThanHemisphere { radius_deg: f64 },
+    LargerThanHemisphere {
+        /// Angular radius of the smallest cap on the centroid axis that
+        /// contains the ring.
+        radius_deg: f64,
+    },
+    /// The box has no extent in latitude, in longitude, or in both.
     #[error(
         "rectangle is empty: south {south}° must lie below north {north}°, and the corners \
          must differ in longitude — note that -180° and 180° are the same meridian, so use \
          `Rectangle::latitude_band` for a box spanning every longitude"
     )]
-    EmptyRectangle { south: f64, north: f64 },
+    EmptyRectangle {
+        /// The southern bound, in degrees.
+        south: f64,
+        /// The northern bound, in degrees.
+        north: f64,
+    },
+    /// A semi-axis fell outside `(0, 90°)`.
     #[error(
         "ellipse semi-axes must both lie in (0, 90°), got semi_axis_a {semi_axis_a_deg}° and \
          semi_axis_b {semi_axis_b_deg}°"
     )]
     EllipseAxes {
+        /// The first semi-axis, in degrees.
         semi_axis_a_deg: f64,
+        /// The second semi-axis, in degrees.
         semi_axis_b_deg: f64,
     },
 }
@@ -1176,9 +1207,7 @@ fn cycled(v: &[[f64; 3]]) -> impl Iterator<Item = &[f64; 3]> {
 /// exact; only the *magnitude* of the offset is distorted relative to true
 /// ellipsoidal distance, and [`Area`] does not promise that magnitude.
 fn unit_from_lat_lon(p: LatLon) -> [f64; 3] {
-    let (sin_lat, cos_lat) = p.latitude.radians().sin_cos();
-    let (sin_lon, cos_lon) = p.longitude.radians().sin_cos();
-    [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat]
+    unit_from_radians(p.latitude.radians(), p.longitude.radians())
 }
 
 fn unit_from_radians(lat: f64, lon: f64) -> [f64; 3] {
@@ -2523,8 +2552,7 @@ mod geometry_tests {
     }
 
     /// A non-finite latitude fails the range test; a non-finite longitude has
-    /// no range to fail, so it needs its own check. Both must be an error
-    /// rather than the panic a NaN vertex used to reach in `normalize`.
+    /// no range to fail, so it needs its own check.
     #[test]
     fn test_non_finite_coordinates_rejected() {
         for lon in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {

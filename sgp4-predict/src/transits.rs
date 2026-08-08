@@ -49,6 +49,7 @@ pub struct Transit {
 }
 
 impl Transit {
+    /// Build a transit from its AoS and LoS times.
     #[must_use]
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
@@ -201,6 +202,9 @@ impl<O: Observer> Clone for TransitIter<'_, O> {
 }
 
 impl<'a, O: Observer> TransitIter<'a, O> {
+    /// Scan `interval` for passes above `min_elevation` radians. Prefer
+    /// [`Predictor::transits_iter`](crate::Predictor::transits_iter), which
+    /// takes either angle unit and supplies the defaults.
     pub fn new(
         predictor: Predictor,
         observer: &'a O,

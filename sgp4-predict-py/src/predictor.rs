@@ -85,6 +85,7 @@ impl PredictionIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, StateVectorTeme]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, StateVectorTeme)>> {
         match self.inner.next() {
             None => Ok(None),
@@ -111,6 +112,7 @@ impl GroundTrackIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, Geodetic]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Geodetic)>> {
         match self.inner.next() {
             None => Ok(None),
@@ -137,6 +139,7 @@ impl ApsisIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "Apsis"))]
     fn __next__(&mut self) -> PyResult<Option<Apsis>> {
         match self.inner.next() {
             None => Ok(None),
@@ -170,6 +173,7 @@ impl IlluminationIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "Illumination"))]
     fn __next__(&mut self) -> PyResult<Option<Illumination>> {
         match self.inner.next() {
             None => Ok(None),
@@ -211,6 +215,7 @@ impl TransitIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "Transit"))]
     fn __next__(&mut self) -> PyResult<Option<Transit>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
@@ -248,6 +253,7 @@ impl AoiIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "AoiWindow"))]
     fn __next__(&mut self) -> PyResult<Option<AoiWindow>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
@@ -285,6 +291,7 @@ impl ObservationIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, Observation]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Observation)>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
@@ -442,6 +449,7 @@ impl Predictor {
     /// Pass an `Interval`, `Transit`, or `Illumination` object.
     fn prediction_iter(
         &self,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         step: Duration,
     ) -> PyResult<PredictionIter> {
@@ -458,6 +466,7 @@ impl Predictor {
     fn observation_iter(
         &self,
         observer: &GroundObserver,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         step: Duration,
     ) -> PyResult<ObservationIter> {
@@ -507,6 +516,7 @@ impl Predictor {
     fn transits_iter(
         &self,
         observer: &GroundObserver,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         min_elevation_deg: f64,
         min_step: Option<Duration>,
@@ -559,6 +569,7 @@ impl Predictor {
     /// Yields `(datetime, Geodetic)` sub-satellite points.
     fn ground_track_iter(
         &self,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         step: Duration,
     ) -> PyResult<GroundTrackIter> {
@@ -608,7 +619,9 @@ impl Predictor {
     ))]
     fn aoi_iter(
         &self,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.Area", imports = ("sgp4_predict")))]
         area: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         min_step: Option<Duration>,
         max_step: Option<Duration>,
@@ -651,13 +664,14 @@ impl Predictor {
     fn detect_aoi(
         &self,
         t: DateTime<Utc>,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.Area", imports = ("sgp4_predict")))]
         area: &Bound<'_, PyAny>,
         walk_step: Option<Duration>,
         max_window_duration: Option<Duration>,
     ) -> PyResult<Option<AoiWindow>> {
         let area = extract_area_ref(area)?;
-        // Named rather than the six-`Option` builder: `detect_window` reads only
-        // these two, and positionally they are interchangeable `Duration`s.
+        // Only these two fields reach `detect_window`; the rest stay at their
+        // defaults.
         let d = AoiIterOpts::default();
         let opts = AoiIterOpts {
             walk_step: walk_step.unwrap_or(d.walk_step),
@@ -683,6 +697,7 @@ impl Predictor {
     #[pyo3(signature = (interval, *, step = None))]
     fn apsis_iter(
         &self,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         step: Option<Duration>,
     ) -> PyResult<ApsisIter> {
@@ -710,6 +725,7 @@ impl Predictor {
     #[pyo3(signature = (interval, *, step = None, walk_step = None, max_window_duration = None))]
     fn illumination_iter(
         &self,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         step: Option<Duration>,
         walk_step: Option<Duration>,
@@ -779,6 +795,7 @@ impl Predictor {
     fn max_elevation(
         &self,
         observer: &GroundObserver,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.IntervalRange", imports = ("sgp4_predict")))]
         interval: &Bound<'_, PyAny>,
         scan_step: Option<Duration>,
     ) -> PyResult<(DateTime<Utc>, Observation)> {

@@ -188,7 +188,10 @@ impl Elements {
     ///
     /// Raises `ValueError` if the dict is missing required fields or has invalid values.
     #[staticmethod]
-    fn from_dict(data: &Bound<'_, PyAny>) -> PyResult<Self> {
+    fn from_dict(
+        #[gen_stub(override_type(type_repr = "builtins.dict", imports = ("builtins")))]
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<Self> {
         let json_module = data.py().import("json")?;
         let json_str: String = json_module.call_method1("dumps", (data,))?.extract()?;
         let inner: sgp4_predict::Elements =

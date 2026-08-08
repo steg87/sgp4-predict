@@ -31,3 +31,11 @@ file    = "CHANGELOG.md"
 search  = "(?m)^## \\[Unreleased\\]$"
 replace = "## [Unreleased]\n\n## [{{version}}] - {{date}}"
 exactly = 1
+
+# Keep the install snippet in the library README on the version being released.
+# `min = 0` because only that crate's README carries one.
+[[pre-release-replacements]]
+file    = "README.md"
+search  = "(?m)^sgp4-predict = \"[^\"]+\"$"
+replace = "sgp4-predict = \"{{version}}\""
+min     = 0
