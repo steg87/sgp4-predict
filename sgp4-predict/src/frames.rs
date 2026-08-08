@@ -45,6 +45,7 @@ impl TemeState {
     ///
     /// where `ω_Earth = [0, 0, ω_E]`. Expanding the cross product:
     ///   `ω_Earth × r_ECEF = [ω_E · ry, -ω_E · rx, 0]`
+    #[must_use]
     pub fn to_ecef(&self, t: DateTime<Utc>) -> EcefState {
         // Earth's sidereal rotation rate (rad/s), WGS-84
         const OMEGA_EARTH: f64 = 7.292_115_0e-5;
@@ -109,6 +110,7 @@ impl EcefState {
     /// point; see [`Predictor::sub_point`].
     ///
     /// [`Predictor::sub_point`]: crate::Predictor::sub_point
+    #[must_use]
     pub fn to_geodetic(&self) -> Geodetic {
         geodetic_from_ecef(self.position.x, self.position.y, self.position.z)
     }
@@ -134,6 +136,7 @@ pub struct LatLon {
 }
 
 impl LatLon {
+    #[must_use]
     pub const fn new(latitude: Degrees, longitude: Degrees) -> Self {
         Self {
             latitude,
@@ -181,6 +184,7 @@ pub struct Geodetic {
 impl Geodetic {
     /// Convert to an ECEF position, the inverse of
     /// [`EcefState::to_geodetic`]. Velocity is zero.
+    #[must_use]
     pub fn to_ecef(&self) -> EcefState {
         ecef_from_geodetic(self.latitude, self.longitude, self.altitude)
     }
@@ -255,6 +259,7 @@ pub type EnuState = StateVector<markers::Enu>;
 
 impl EnuState {
     /// Convert to an observation (range, range rate, azimuth, elevation)
+    #[must_use]
     pub fn to_observation(&self) -> Observation {
         let (e, n, u) = (self.position.x, self.position.y, self.position.z);
         let (ed, nd, ud) = (self.velocity.x, self.velocity.y, self.velocity.z);

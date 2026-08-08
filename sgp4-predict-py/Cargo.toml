@@ -21,3 +21,6 @@ serde_json = "1"
 [[bin]]
 name = "stub_gen"
 path = "src/bin/stub_gen.rs"
+
+[lints]
+workspace = true

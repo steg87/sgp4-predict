@@ -61,6 +61,7 @@ pub struct StateVector<F> {
 }
 
 impl<F> StateVector<F> {
+    #[must_use]
     pub fn new(position: Position<F>, velocity: Velocity<F>) -> Self {
         Self { position, velocity }
     }
@@ -69,6 +70,7 @@ impl<F> StateVector<F> {
     ///
     /// Positive when the satellite is moving away from the origin, negative when approaching.
     /// Zero at apogee and perigee.
+    #[must_use]
     pub fn radial_velocity(&self) -> f64 {
         self.position.x * self.velocity.x
             + self.position.y * self.velocity.y

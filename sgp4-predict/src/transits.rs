@@ -49,6 +49,7 @@ pub struct Transit {
 }
 
 impl Transit {
+    #[must_use]
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
     }

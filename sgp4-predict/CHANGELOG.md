@@ -52,7 +52,9 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   one now needs a `_` arm. The `*Opts` structs stay exhaustive, so `..Default::default()` keeps
   working.
 - Every iterator and builder type is `#[must_use]`. Dropping the result of a `*_iter` call, or of a
-  builder chain that never reaches `.build()`, now warns instead of silently doing nothing.
+  builder chain that never reaches `.build()`, now warns instead of silently doing nothing. Pure
+  getters and conversions (`Degrees::to_f64`, `Ellipse::foci`, `Predictor::epoch`, ...) are
+  `#[must_use]` too.
 - `Transit::clamp` and `AoiWindow::clamp` became `TimeWindow::clamp_to`; callers now need
   `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged. The name avoids
   `Ord::clamp`, which takes precedence in method resolution and would shadow it.

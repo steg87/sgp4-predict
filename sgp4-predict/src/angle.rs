@@ -18,16 +18,19 @@ pub struct Radians(pub f64);
 
 impl Degrees {
     /// Convert to radians.
+    #[must_use]
     pub fn to_radians(self) -> Radians {
         Radians(self.0.to_radians())
     }
 
     /// The underlying value.
+    #[must_use]
     pub fn to_f64(self) -> f64 {
         self.0
     }
 
     /// Shorthand for `.to_radians().to_f64()`.
+    #[must_use]
     pub fn radians(self) -> f64 {
         self.0.to_radians()
     }
@@ -39,6 +42,7 @@ impl Degrees {
     }
 
     /// Total ordering, delegating to `f64::total_cmp`.
+    #[must_use]
     pub fn total_cmp(&self, other: &Self) -> Ordering {
         self.0.total_cmp(&other.0)
     }
@@ -46,16 +50,19 @@ impl Degrees {
 
 impl Radians {
     /// Convert to degrees.
+    #[must_use]
     pub fn to_degrees(self) -> Degrees {
         Degrees(self.0.to_degrees())
     }
 
     /// The underlying value.
+    #[must_use]
     pub fn to_f64(self) -> f64 {
         self.0
     }
 
     /// Shorthand for `.to_degrees().to_f64()`.
+    #[must_use]
     pub fn degrees(self) -> f64 {
         self.0.to_degrees()
     }
@@ -67,6 +74,7 @@ impl Radians {
     }
 
     /// Total ordering, delegating to `f64::total_cmp`.
+    #[must_use]
     pub fn total_cmp(&self, other: &Self) -> Ordering {
         self.0.total_cmp(&other.0)
     }

@@ -110,17 +110,17 @@ silent no-op. Putting the attribute on the type covers the constructor, every `-
 line. `DetectIter` covers the `EventIter` and `WindowIter` aliases too. Do not "complete" this by
 adding method-level attributes to those types; they are already covered and would be redundant.
 
-Method-level `#[must_use]` is only for methods whose _type_ should not be must-use:
-`TimeWindow::clamp`, `IntervalRange::intersection` and `Tolerate::error`/`into_error` (`Option` is
-not must-use), and
+Method-level `#[must_use]` covers two groups. The first is methods whose _type_ should not be
+must-use: `TimeWindow::clamp`, `IntervalRange::intersection` and `Tolerate::error`/`into_error`
+(`Option` is not must-use), and
 `TimeWindow::with_bounds`, `Predictor::with_refinement` and `Polygon::with_fill_rule` (the
 receiving type is normally stored, not consumed), and
 `Degrees::normalized`/`Radians::normalized` (which read like in-place mutators).
 
-Clippy's `must_use_candidate` also flags every pure getter — `Degrees::to_f64`, `Ellipse::foci`,
-`Predictor::epoch`, and ~30 more. Those were considered and deliberately left off: they catch no
-real bug and the churn is not worth it. Adding one is fine; a mass sweep changes the policy and
-should be a decision, not a drive-by.
+The second is every pure getter, which `clippy::must_use_candidate` flags. The lint is `warn` in
+`[workspace.lints.clippy]` and `make lint`'s `-D warnings` makes it fatal, so the attribute is not
+something to remember to add — a new getter fails CI without it. Trait methods and `&mut self`
+methods are outside the lint's reach; leave them alone unless dropping the result is a real bug.
 
 **`#[non_exhaustive]` is on the four public `Error` enums and deliberately _not_ on the `*Opts`
 structs.** On a struct it forbids struct expressions from other crates entirely, _including_

@@ -1,3 +1,6 @@
 [workspace]
 members = ["sgp4-predict", "sgp4-predict-py", "sgp4-predict-cli"]
 resolver = "2"
+
+[workspace.lints.clippy]
+must_use_candidate = "warn"

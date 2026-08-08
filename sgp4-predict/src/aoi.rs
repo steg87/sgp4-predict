@@ -245,6 +245,7 @@ impl Polygon {
     }
 
     /// The polygon's vertices in ring order, after deduplication.
+    #[must_use]
     pub fn vertices(&self) -> impl DoubleEndedIterator<Item = LatLon> + ExactSizeIterator + '_ {
         self.verts.iter().map(|&v| lat_lon_from_unit(v))
     }
@@ -444,6 +445,7 @@ impl Rectangle {
     }
 
     /// The southern and northern latitude bounds.
+    #[must_use]
     pub fn latitudes(&self) -> (Degrees, Degrees) {
         (
             Radians(self.south).to_degrees(),
@@ -453,6 +455,7 @@ impl Rectangle {
 
     /// The western bound and the extent eastward from it. The extent is 360°
     /// for a box built by [`latitude_band`](Rectangle::latitude_band).
+    #[must_use]
     pub fn longitudes(&self) -> (Degrees, Degrees) {
         (
             Radians(self.west).to_degrees(),
@@ -670,11 +673,13 @@ impl Ellipse {
     }
 
     /// The ellipse's centre.
+    #[must_use]
     pub fn centre(&self) -> LatLon {
         lat_lon_from_unit(self.centre)
     }
 
     /// The two semi-axes, as angles, in the order they were given.
+    #[must_use]
     pub fn semi_axes(&self) -> (Degrees, Degrees) {
         (
             Radians(self.semi_axis_a).to_degrees(),
@@ -683,12 +688,14 @@ impl Ellipse {
     }
 
     /// Bearing of `semi_axis_a`, degrees clockwise from north.
+    #[must_use]
     pub fn bearing(&self) -> Degrees {
         Radians(self.bearing).to_degrees()
     }
 
     /// The two foci, which coincide with the centre when the ellipse is a
     /// circle.
+    #[must_use]
     pub fn foci(&self) -> (LatLon, LatLon) {
         (
             lat_lon_from_unit(self.foci[0]),
@@ -730,6 +737,7 @@ pub struct AoiWindow {
 }
 
 impl AoiWindow {
+    #[must_use]
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self { start, end }
     }
