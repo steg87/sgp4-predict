@@ -134,7 +134,7 @@ let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
 ```
 
 `Ellipse` covers circular and elliptical footprints. Semi-axes are angular, and the bearing turns the
-major axis clockwise from north:
+first of them clockwise from north; either may be the longer:
 
 ```rust,no_run
 use sgp4_predict::{Degrees, Ellipse, LatLon};

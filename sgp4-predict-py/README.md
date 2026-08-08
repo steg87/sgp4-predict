@@ -87,7 +87,7 @@ arctic = Rectangle.latitude_band(66.5, 90.0)
 
 # An ellipse, roughly 300 km by 120 km, major axis pointing north-east. Semi-axes
 # are angular — a degree of arc is about 111.2 km on the ground.
-north_sea = Ellipse((56.0, 2.0), semi_major_deg=2.7, semi_minor_deg=1.1, bearing_deg=45.0)
+north_sea = Ellipse((56.0, 2.0), semi_axis_a_deg=2.7, semi_axis_b_deg=1.1, bearing_deg=45.0)
 cape_town = Ellipse.circle((-33.9, 18.4), radius_deg=2.25)
 
 for overpass in predictor.aoi_iter(scotland, window):
@@ -96,7 +96,7 @@ for overpass in predictor.aoi_iter(scotland, window):
 
 A malformed area raises `ValueError` — fewer than three distinct vertices, a latitude outside
 `[-90, 90]`, a `nan` or infinite coordinate, a polygon larger than a hemisphere, an empty box, or
-ellipse semi-axes outside `0 < semi_minor_deg <= semi_major_deg < 90`.
+an ellipse semi-axis outside `(0, 90)`.
 
 A window longer than `max_window_duration` — one hour by default — raises `RuntimeError` rather than
 being yielded, since a window that long usually means the area is bigger than intended. Raise the

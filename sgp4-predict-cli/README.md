@@ -128,8 +128,8 @@ aois:
     shape: ellipse
     latitude: 56.0
     longitude: 2.0
-    semi_major: 2.7
-    semi_minor: 1.1
+    semi_axis_a: 2.7
+    semi_axis_b: 1.1
     bearing: 45.0
   cape-town:
     shape: circle
@@ -144,12 +144,12 @@ aois:
       - { latitude: 60.0, longitude: -1.0 }
 ```
 
-| `shape`   | Fields                                                                              |
-| --------- | ----------------------------------------------------------------------------------- |
-| `box`     | `south`, `north`, `west`, `east` — the box's bounds                                 |
-| `ellipse` | `latitude`, `longitude` (centre), `semi_major`, `semi_minor`, `bearing` (default 0) |
-| `circle`  | `latitude`, `longitude` (centre), `radius`                                          |
-| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs                   |
+| `shape`   | Fields                                                                                |
+| --------- | ------------------------------------------------------------------------------------- |
+| `box`     | `south`, `north`, `west`, `east` — the box's bounds                                   |
+| `ellipse` | `latitude`, `longitude` (centre), `semi_axis_a`, `semi_axis_b`, `bearing` (default 0) |
+| `circle`  | `latitude`, `longitude` (centre), `radius`                                            |
+| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs                     |
 
 **Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
 
@@ -169,24 +169,23 @@ Polygon edges, by contrast, are great-circle arcs, so they are not lines of cons
 a wide span they bow toward the nearer pole. Use `box` when the region really is a latitude/longitude
 box.
 
-An ellipse's semi-axes are **not** latitude and longitude extents. `semi_major` is half the _longer_
-axis and `semi_minor` half the _shorter_ (`0 < semi_minor <= semi_major < 90`), and `bearing` turns
-the major axis clockwise from north — `bearing: 0` runs it north–south, `bearing: 90` east–west:
+An ellipse's semi-axes are **not** latitude and longitude extents. `bearing` turns `semi_axis_a`
+clockwise from north and `semi_axis_b` is a quarter turn from it; each is in `(0, 90)` and either may
+be the longer, so a wider-than-long area needs no bearing:
 
 ```yaml
 tall: # 10 degrees north-south by 2 east-west
   shape: ellipse
   latitude: 0.0
   longitude: 0.0
-  semi_major: 10.0
-  semi_minor: 2.0
-wide: # the same ellipse turned a quarter turn
+  semi_axis_a: 10.0
+  semi_axis_b: 2.0
+wide: # 2 north-south by 10 east-west
   shape: ellipse
   latitude: 0.0
   longitude: 0.0
-  semi_major: 10.0
-  semi_minor: 2.0
-  bearing: 90.0
+  semi_axis_a: 2.0
+  semi_axis_b: 10.0
 ```
 
 ### Managing AOIs
@@ -243,7 +242,7 @@ id               shape    definition
 ------------------------------------
 cape-town        circle   latitude=-33.9 longitude=18.4 radius=2.25
 corridor         polygon  (54, -8) (54, -1) (60, -1)
-north-sea        ellipse  latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45
+north-sea        ellipse  latitude=56 longitude=2 semi_axis_a=2.7 semi_axis_b=1.1 bearing=45
 scotland         box      south=54 north=60 west=-8 east=-1
 ```
 

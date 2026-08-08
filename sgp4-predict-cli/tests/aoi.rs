@@ -72,7 +72,7 @@ fn test_add_stores_named_fields_for_every_shape() {
         "south: 54.0",
         "east: -1.0",
         "shape: ellipse",
-        "semi_major: 2.7",
+        "semi_axis_a: 2.7",
         "bearing: 45.0",
         "shape: circle",
         "radius: 2.25",
@@ -248,7 +248,7 @@ fn test_add_prompts_for_every_shape() {
     let listed = ok(&aoi(&config, &["list", "--format", "csv"], ""));
     assert!(listed.contains("scotland,box,south=54 north=60 west=-8 east=-1"));
     assert!(listed.contains(
-        "north-sea,ellipse,latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45"
+        "north-sea,ellipse,latitude=56 longitude=2 semi_axis_a=2.7 semi_axis_b=1.1 bearing=45"
     ));
     assert!(listed.contains("cape-town,circle,latitude=-33.9 longitude=18.4 radius=2.25"));
     // The definition contains commas, so CSV quotes it.
@@ -348,32 +348,25 @@ fn test_ellipse_prompts_bearing_before_the_axes() {
             .find(needle)
             .unwrap_or_else(|| panic!("missing {needle} in:\n{prompts}"))
     };
-    assert!(at("Bearing of the long axis") < at("Semi-major axis"));
-    assert!(at("Semi-major axis") < at("Semi-minor axis"));
+    assert!(at("Bearing of semi-axis A") < at("Semi-axis A"));
+    assert!(at("Semi-axis A") < at("Semi-axis B"));
     assert!(prompts.contains("ALONG that bearing"), "{prompts}");
     assert!(prompts.contains("ACROSS it"), "{prompts}");
 }
 
-/// A semi-minor axis larger than the semi-major is the likely confusion, so it
-/// is caught at the prompt with the fix spelled out, not at the end.
+/// Neither axis has to be the longer, so a wider-than-long area needs no
+/// bearing arithmetic: it is stored exactly as typed.
 #[test]
-fn test_semi_minor_above_semi_major_re_prompts_with_the_fix() {
-    let config = fresh_config("aoi_prompt_ellipse_swapped");
-    // Wanted 10 east-west by 2 north-south, entered the axes the wrong way round.
-    let out = aoi(&config, &["add"], "wide\ne\n0\n0\n90\n2\n10\n1\n");
-    ok(&out);
+fn test_ellipse_accepts_a_longer_second_axis() {
+    let config = fresh_config("aoi_prompt_ellipse_wide");
+    // 2 north-south by 10 east-west, entered in that order.
+    ok(&aoi(&config, &["add"], "wide\ne\n0\n0\n0\n2\n10\n"));
 
-    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
+    let listing = ok(&aoi(&config, &["list"], ""));
     assert!(
-        prompts.contains("cannot exceed the semi-major axis of 2"),
-        "{prompts}"
+        listing.contains("semi_axis_a=2 semi_axis_b=10"),
+        "{listing}"
     );
-    assert!(
-        prompts.contains("turn the bearing by 90 degrees"),
-        "{prompts}"
-    );
-    // The centre and bearing entered before the mistake survived it.
-    assert!(ok(&aoi(&config, &["list"], "")).contains("bearing=90"));
 }
 
 /// A malformed vertex re-asks at the same index, so earlier ones are kept.

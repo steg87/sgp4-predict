@@ -33,7 +33,9 @@ Relatedly, `build` widens `lon_span` to exactly `TAU` whenever it drops the side
 
 The two-foci definition (`d(F₁,p) + d(F₂,p) <= 2a`), not a projected planar ellipse. The value returned is `a − (d₁ + d₂)/2`, and **the halving is what makes it legal**: each distance is 1-Lipschitz along the surface, so the sum is 2-Lipschitz, and only half the shortfall is guaranteed not to exceed the distance to the boundary. Do not drop the `/2` to "tighten" it — the tighter value is the local gradient `|û₁ + û₂|`, which is not a bound along the whole path to the boundary. The under-estimate costs nothing but smaller steps, and for a circle the two foci coincide and the formula is exact.
 
-Focal separation comes from `cos a = cos b cos c`, the spherical right triangle at a minor-axis endpoint. `semi_major < 90°` is required to keep that ratio in `[0, 1]`; it also rules out an antipodal component, hence no bounding cap and no hemisphere restriction, unlike `Polygon`. `local_frame` falls back to the prime-meridian direction at a pole, where north is undefined.
+Focal separation comes from `cos a = cos b cos c`, the spherical right triangle at a minor-axis endpoint. Both semi-axes must be under 90° to keep that ratio in `[0, 1]`; it also rules out an antipodal component, hence no bounding cap and no hemisphere restriction, unlike `Polygon`. `local_frame` falls back to the prime-meridian direction at a pole, where north is undefined.
+
+**The constructor takes `semi_axis_a`/`semi_axis_b` in either size order and sorts them itself**, adding a quarter turn to the bearing when `b` is the longer, because the foci always lie on the major axis. Requiring the caller to pre-sort bought nothing — the only consumer of the ordering is that one formula — and cost them a bearing rotation to describe a wider-than-long area. Do not reintroduce the constraint. The pair is stored as given so the accessors round-trip; `signed_angular_offset` takes the `max` rather than caching a third field that `PartialEq` would have to keep in step.
 
 ## Non-finite input
 

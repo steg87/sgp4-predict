@@ -77,11 +77,12 @@ pub struct EllipseDef {
     pub latitude: f64,
     /// Centre longitude in degrees.
     pub longitude: f64,
-    /// Semi-major axis in degrees of arc (about 111.2 km per degree).
-    pub semi_major: f64,
-    /// Semi-minor axis in degrees of arc.
-    pub semi_minor: f64,
-    /// Bearing of the major axis, degrees clockwise from north.
+    /// Semi-axis along `bearing`, in degrees of arc (about 111.2 km per
+    /// degree). Either semi-axis may be the longer.
+    pub semi_axis_a: f64,
+    /// Semi-axis across `bearing`, in degrees of arc.
+    pub semi_axis_b: f64,
+    /// Bearing of `semi_axis_a`, degrees clockwise from north.
     #[serde(default)]
     pub bearing: f64,
 }

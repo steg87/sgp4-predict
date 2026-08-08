@@ -182,8 +182,8 @@ def test_ellipse_accessors_round_trip():
     e = Ellipse((56.0, 2.0), 2.7, 1.1, 45.0)
     assert abs(e.centre.latitude_deg - 56.0) < 1e-12
     assert abs(e.centre.longitude_deg - 2.0) < 1e-12
-    assert abs(e.semi_major_deg - 2.7) < 1e-12
-    assert abs(e.semi_minor_deg - 1.1) < 1e-12
+    assert abs(e.semi_axis_a_deg - 2.7) < 1e-12
+    assert abs(e.semi_axis_b_deg - 1.1) < 1e-12
     assert abs(e.bearing_deg - 45.0) < 1e-12
     first, second = e.foci
     assert first != second
@@ -198,16 +198,16 @@ def test_ellipse_circle_has_coincident_foci():
     assert abs(circle.signed_angular_offset_deg((58.0, 2.0)) - 0.0) < 1e-9
 
 
-def test_ellipse_rejects_minor_axis_above_major():
-    with pytest.raises(ValueError):
-        Ellipse((56.0, 2.0), 1.0, 2.0, 0.0)
-
-
 def test_ellipse_bearing_orients_the_major_axis():
     # Major axis east-west: reaches further in longitude than in latitude.
     e = Ellipse((0.0, 0.0), 10.0, 2.0, 90.0)
     assert e.signed_angular_offset_deg((0.0, 8.0)) > 0.0
     assert e.signed_angular_offset_deg((8.0, 0.0)) < 0.0
+
+    # The same area with the axes the other way round, no bearing needed.
+    wide = Ellipse((0.0, 0.0), 2.0, 10.0, 0.0)
+    assert wide.signed_angular_offset_deg((0.0, 8.0)) > 0.0
+    assert wide.signed_angular_offset_deg((8.0, 0.0)) < 0.0
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
