@@ -49,6 +49,9 @@ gain it including the lifetime-parameterised ones, with no existing signature ch
   `tolerate_errors(0)`.
 - **`skip_errors`/`log_errors` reuse `OnError` through `fn(Error)` coercion**, not closures, so both
   return a nameable type and there is one skip-style struct rather than three.
+- `skip_errors` duplicates `Iterator::flatten`, which also drops the `Err`s, and is kept anyway:
+  `flatten` on a `Result` iterator reads like a bug. Prefer `skip_errors` at every call site —
+  `tests/examples.rs` uses it throughout.
 - `Tolerate` owns its terminating error and lends it back; hence the `&mut` iteration in the docs.
 
 Deliberately absent: an `inspect_errors` that would let `log_errors` and `tolerate_errors` chain.

@@ -18,7 +18,7 @@ fn daily_state_vectors() {
     println!("time,x [km],y [km],z [km],vx [km/s],vy [km/s],vz [km/s]");
     for (t, teme) in p
         .prediction_iter(start..end, Duration::minutes(15))
-        .flatten()
+        .skip_errors()
     {
         println!(
             "{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3}",
@@ -143,7 +143,7 @@ fn ground_station_passes() {
     println!("start,end,aos_azimuth_deg,los_azimuth_deg,tca_elevation_deg,duration");
     for pass in p
         .transits_iter(&gs, start..end, Degrees(10.0))
-        .flatten()
+        .skip_errors()
         .map(|t| GroundStationPass {
             start: t.start(),
             end: t.end(),
@@ -180,7 +180,7 @@ fn sunlight_windows() {
     println!("start,end,duration");
     for window in p
         .illumination_iter(start..end)
-        .flatten()
+        .skip_errors()
         .filter(|w| w.state == IlluminationState::Sunlit)
     {
         println!(
@@ -209,11 +209,14 @@ fn eclipse_transits() {
     let mut n_transits = 0;
     let mut n_windows = 0;
     println!("start,end,duration");
-    for transit in p.transits_iter(&gs, start..end, Degrees(30.0)).flatten() {
+    for transit in p
+        .transits_iter(&gs, start..end, Degrees(30.0))
+        .skip_errors()
+    {
         n_transits += 1;
         for window in p
             .illumination_iter(transit)
-            .flatten()
+            .skip_errors()
             .filter(|w| matches!(w.state, IlluminationState::Eclipse))
         {
             n_windows += 1;
@@ -291,7 +294,7 @@ fn apsides() {
     let end = start + Duration::days(3);
 
     println!("time,event,altitude [km]");
-    for apsis in p.apsis_iter(start..end).flatten() {
+    for apsis in p.apsis_iter(start..end).skip_errors() {
         println!(
             "{},{},{:.3}",
             apsis.time.format("%Y-%m-%d %H:%M:%S"),
