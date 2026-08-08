@@ -288,14 +288,14 @@ impl Rectangle {
 /// foci sum to at most twice the semi-major axis.
 ///
 /// Semi-axes are angular — a degree of arc is about 111.2 km on the ground — and
-/// the bearing turns the major axis clockwise from north. At a pole, where north is
+/// the bearing turns `semi_axis_a_deg` clockwise from north, with `semi_axis_b_deg`
+/// a quarter turn from it. Either may be the longer. At a pole, where north is
 /// undefined, the bearing is measured from the prime meridian instead. The centre
 /// may be a `LatLon` object, a `Geodetic` object whose altitude is ignored, or a
 /// `(latitude_deg, longitude_deg)` tuple.
 ///
-/// Raises `ValueError` if `0 < semi_minor_deg <= semi_major_deg < 90` does not
-/// hold, if the centre's latitude is outside [-90, 90], or if any argument is
-/// `nan` or infinite.
+/// Raises `ValueError` if either semi-axis is outside `(0, 90)`, if the centre's
+/// latitude is outside [-90, 90], or if any argument is `nan` or infinite.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, Clone, PartialEq)]
@@ -307,17 +307,17 @@ pub struct Ellipse {
 #[pymethods]
 impl Ellipse {
     #[new]
-    #[pyo3(signature = (centre, semi_major_deg, semi_minor_deg, bearing_deg = 0.0))]
+    #[pyo3(signature = (centre, semi_axis_a_deg, semi_axis_b_deg, bearing_deg = 0.0))]
     fn new(
         centre: &Bound<'_, PyAny>,
-        semi_major_deg: f64,
-        semi_minor_deg: f64,
+        semi_axis_a_deg: f64,
+        semi_axis_b_deg: f64,
         bearing_deg: f64,
     ) -> PyResult<Self> {
         let inner = sgp4_predict::Ellipse::new(
             extract_lat_lon(centre)?,
-            Degrees(semi_major_deg),
-            Degrees(semi_minor_deg),
+            Degrees(semi_axis_a_deg),
+            Degrees(semi_axis_b_deg),
             Degrees(bearing_deg),
         )
         .map_err(to_py_err)?;
@@ -338,19 +338,19 @@ impl Ellipse {
         LatLon::from_inner(self.inner.centre())
     }
 
-    /// The semi-major axis, in degrees of arc.
+    /// The semi-axis along `bearing_deg`, in degrees of arc.
     #[getter]
-    fn semi_major_deg(&self) -> f64 {
+    fn semi_axis_a_deg(&self) -> f64 {
         self.inner.semi_axes().0.to_f64()
     }
 
-    /// The semi-minor axis, in degrees of arc.
+    /// The semi-axis across `bearing_deg`, in degrees of arc.
     #[getter]
-    fn semi_minor_deg(&self) -> f64 {
+    fn semi_axis_b_deg(&self) -> f64 {
         self.inner.semi_axes().1.to_f64()
     }
 
-    /// Bearing of the major axis, degrees clockwise from north.
+    /// Bearing of `semi_axis_a_deg`, degrees clockwise from north.
     #[getter]
     fn bearing_deg(&self) -> f64 {
         self.inner.bearing().to_f64()
@@ -372,11 +372,11 @@ impl Ellipse {
     fn __repr__(&self) -> String {
         let centre = self.centre();
         format!(
-            "Ellipse(centre=({}, {}), semi_major_deg={}, semi_minor_deg={}, bearing_deg={})",
+            "Ellipse(centre=({}, {}), semi_axis_a_deg={}, semi_axis_b_deg={}, bearing_deg={})",
             centre.latitude_deg(),
             centre.longitude_deg(),
-            self.semi_major_deg(),
-            self.semi_minor_deg(),
+            self.semi_axis_a_deg(),
+            self.semi_axis_b_deg(),
             self.bearing_deg()
         )
     }

@@ -193,53 +193,35 @@ fn prompt_box(lines: &mut Lines) -> anyhow::Result<AoiDef> {
 
 /// Ask for an ellipse, **bearing first**.
 ///
-/// The semi-axes are not latitude and longitude extents — semi-major is simply
-/// the longer one, and the bearing is what points it. Asking for the bearing
-/// first means the two axes can be described as along and across it, rather
-/// than leaving the reader to work out which is which.
+/// The semi-axes are not latitude and longitude extents, and neither has to be
+/// the longer. Asking for the bearing first means the two can be described as
+/// along and across it, rather than leaving the reader to work out which is
+/// which.
 fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AoiDef> {
     let latitude = prompt_latitude(lines, "Centre latitude (degrees)")?;
     let longitude = prompt_f64(lines, "Centre longitude (degrees)", None)?;
     let bearing = prompt_f64(
         lines,
-        "Bearing of the long axis, degrees clockwise from north (0 = north-south)",
+        "Bearing of semi-axis A, degrees clockwise from north (0 = north-south)",
         Some(0.0),
     )?;
 
-    let semi_major = prompt_retry(
+    let semi_axis_a = prompt_bounded(
         lines,
-        "Semi-major axis, half the length ALONG that bearing (degrees)",
-        |input| {
-            let value = number(input)?;
-            anyhow::ensure!(
-                value > 0.0 && value < 90.0,
-                "must be greater than 0 and less than 90 degrees, got {value}"
-            );
-            Ok(value)
-        },
+        "Semi-axis A, half the extent ALONG that bearing (degrees)",
+        90.0,
     )?;
-    // Checked here, not at `build()`, so the fix is offered while the value is
-    // still on screen instead of after every field has been entered.
-    let semi_minor = prompt_retry(
+    let semi_axis_b = prompt_bounded(
         lines,
-        "Semi-minor axis, half the width ACROSS it (degrees)",
-        |input| {
-            let value = number(input)?;
-            anyhow::ensure!(value > 0.0, "must be greater than 0, got {value}");
-            anyhow::ensure!(
-                value <= semi_major,
-                "cannot exceed the semi-major axis of {semi_major}; for a wider-than-long \
-                 AOI, swap the two and turn the bearing by 90 degrees"
-            );
-            Ok(value)
-        },
+        "Semi-axis B, half the extent ACROSS it (degrees)",
+        90.0,
     )?;
 
     Ok(AoiDef::Ellipse(EllipseDef {
         latitude,
         longitude,
-        semi_major,
-        semi_minor,
+        semi_axis_a,
+        semi_axis_b,
         bearing,
     }))
 }

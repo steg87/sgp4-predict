@@ -19,7 +19,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - An `aois:` map in the config file, alongside `groundstations:`. Each AOI is tagged with its
   `shape` — `box`, `ellipse`, `circle`, or `polygon` — and given as named fields; everything is in
   degrees. A `box` is its four bounds (`south`, `north`, `west`, `east`), running eastward from
-  `west` so that an `east` at a smaller longitude wraps the antimeridian.
+  `west` so that an `east` at a smaller longitude wraps the antimeridian. An `ellipse` is its centre,
+  `semi_axis_a` along `bearing` and `semi_axis_b` across it, either of which may be the longer.
 - `aoi add|remove|list` (aliases `rm`, `ls`) to manage those AOIs. `aoi add` prompts field by field
   like `gs add`, accepting each shape name's initial (`b`/`e`/`c`/`p`), and reads polygon vertices
   one per line until a blank line. The id and `--shape` may be given as arguments; coordinates never

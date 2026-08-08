@@ -27,8 +27,8 @@ aois:
     shape: ellipse
     latitude: 52.0
     longitude: 10.0
-    semi_major: 14.0
-    semi_minor: 4.0
+    semi_axis_a: 14.0
+    semi_axis_b: 4.0
     bearing: 60.0
   europe-circle:
     shape: circle
@@ -202,15 +202,15 @@ aois:
     shape: ellipse
     latitude: 0.0
     longitude: 0.0
-    semi_major: 1.0
-    semi_minor: 5.0
+    semi_axis_a: 95.0
+    semi_axis_b: 5.0
 ",
     )
     .unwrap();
 
     let message = err(&run(&path, &["--aoi", "broken", "--duration", "1d"]));
     assert!(message.contains("aoi 'broken'"), "{message}");
-    assert!(message.contains("semi-minor"), "{message}");
+    assert!(message.contains("semi_axis_a 95"), "{message}");
 }
 
 /// The AOI is resolved before the TLE, so a bad id fails without waiting on

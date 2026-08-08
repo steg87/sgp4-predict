@@ -62,7 +62,7 @@ Prompts and confirmations go to **stderr**, so `gs list` stays pipeable and prom
 
 **Prompts re-ask on a malformed line rather than aborting** (`prompt_retry`) — a typo five fields in would otherwise discard everything before it. EOF ends a prompt loop (`prompt` errors there), so a scripted caller cannot spin forever; keep that property when adding prompts. The polygon vertex loop re-asks _at the same index_ on a bad line, and on a blank line before the third vertex.
 
-Range checks live in the prompts (`prompt_latitude`, `prompt_bounded`, and the pairwise north-above-south / east-off-west's-meridian / semi-minor-under-semi-major checks), not in a value parser — there is no parser left to put them in. Keep them there, because a prompt can _re-ask_; the alternative is `build()` rejecting the shape after every field is entered and discarding all of it. The pairwise checks close over the earlier value, which is why each is inline rather than a shared helper.
+Range checks live in the prompts (`prompt_latitude`, `prompt_bounded`, and the pairwise north-above-south / east-off-west's-meridian checks), not in a value parser — there is no parser left to put them in. Keep them there, because a prompt can _re-ask_; the alternative is `build()` rejecting the shape after every field is entered and discarding all of it. The pairwise checks close over the earlier value, which is why each is inline rather than a shared helper.
 
 `number()` and `prompt_f64` reject non-finite values: `nan`/`inf` parse as `f64` and pass every range check silently, so a non-finite West longitude makes the East prompt unsatisfiable (`(value - west).rem_euclid(360.0)` is NaN and no comparison against it is true).
 

@@ -39,8 +39,8 @@ impl AoiDef {
             )?),
             AoiDef::Ellipse(e) => AoiShape::Ellipse(Ellipse::new(
                 (Degrees(e.latitude), Degrees(e.longitude)),
-                Degrees(e.semi_major),
-                Degrees(e.semi_minor),
+                Degrees(e.semi_axis_a),
+                Degrees(e.semi_axis_b),
                 Degrees(e.bearing),
             )?),
             AoiDef::Circle(c) => AoiShape::Ellipse(Ellipse::circle(
@@ -76,8 +76,8 @@ impl AoiDef {
                 b.south, b.north, b.west, b.east
             ),
             AoiDef::Ellipse(e) => format!(
-                "latitude={} longitude={} semi_major={} semi_minor={} bearing={}",
-                e.latitude, e.longitude, e.semi_major, e.semi_minor, e.bearing
+                "latitude={} longitude={} semi_axis_a={} semi_axis_b={} bearing={}",
+                e.latitude, e.longitude, e.semi_axis_a, e.semi_axis_b, e.bearing
             ),
             AoiDef::Circle(c) => format!(
                 "latitude={} longitude={} radius={}",
@@ -145,8 +145,8 @@ aois:
     shape: ellipse
     latitude: 56.0
     longitude: 2.0
-    semi_major: 2.7
-    semi_minor: 1.1
+    semi_axis_a: 2.7
+    semi_axis_b: 1.1
     bearing: 45.0
   cape-town:
     shape: circle
@@ -237,8 +237,8 @@ aois:
     shape: ellipse
     latitude: 0.0
     longitude: 0.0
-    semi_major: 10.0
-    semi_minor: 2.0
+    semi_axis_a: 10.0
+    semi_axis_b: 2.0
 ",
         )
         .unwrap();
@@ -262,7 +262,7 @@ aois:
         assert_eq!(describe("scotland"), "south=54 north=60 west=-8 east=-1");
         assert_eq!(
             describe("north-sea"),
-            "latitude=56 longitude=2 semi_major=2.7 semi_minor=1.1 bearing=45"
+            "latitude=56 longitude=2 semi_axis_a=2.7 semi_axis_b=1.1 bearing=45"
         );
         assert_eq!(
             describe("cape-town"),
@@ -329,14 +329,14 @@ aois:
     shape: ellipse
     latitude: 0.0
     longitude: 0.0
-    semi_major: 1.0
-    semi_minor: 5.0
+    semi_axis_a: 95.0
+    semi_axis_b: 5.0
 ",
         )
         .unwrap();
         let err = args(Some("broken")).validate(&config).unwrap_err();
         assert!(err.to_string().contains("aoi 'broken'"), "{err}");
-        assert!(format!("{err:#}").contains("semi-minor"), "{err:#}");
+        assert!(format!("{err:#}").contains("semi_axis_a 95"), "{err:#}");
         // find_aoi still works, so `aoi remove` can delete it.
         assert!(config.find_aoi("broken").is_ok());
     }

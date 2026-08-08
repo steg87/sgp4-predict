@@ -532,8 +532,13 @@ impl Area for Rectangle {
 /// twice the semi-major axis — the spherical reading of the planar definition.
 /// A [`circle`](Ellipse::circle) is the case where the two foci coincide.
 ///
+/// The bearing aims `semi_axis_a`, and `semi_axis_b` is a quarter turn from it.
+/// Either may be the longer — whichever it is becomes the major axis — so a
+/// wider-than-long area is just a larger `semi_axis_b`, with no bearing to work
+/// out.
+///
 /// Semi-axes are **angular**, like every other measurement here. A degree of
-/// arc is about 111.2 km on the ground, so a 300 km semi-major axis is roughly
+/// arc is about 111.2 km on the ground, so a 300 km semi-axis is roughly
 /// `Degrees(2.7)`.
 ///
 /// # Examples
@@ -549,29 +554,38 @@ impl Area for Rectangle {
 ///     Degrees(45.0),
 /// )?;
 ///
+/// // The same area, described the other way round.
+/// let same = Ellipse::new(
+///     LatLon { latitude: Degrees(56.0), longitude: Degrees(2.0) },
+///     Degrees(1.1),
+///     Degrees(2.7),
+///     Degrees(135.0),
+/// )?;
+///
 /// // A circular area 500 km across.
 /// let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
 ///
-/// `==` compares the fields, not the region: two circles with different
-/// bearings compare unequal, even though the bearing means nothing when the
-/// semi-axes are equal.
+/// `==` compares the fields, not the region: the two ellipses above cover the
+/// same ground but compare unequal, as do two circles with different bearings,
+/// even though the bearing means nothing when the semi-axes are equal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ellipse {
     centre: [f64; 3],
     /// Both equal to `centre` when the ellipse is a circle.
     foci: [[f64; 3]; 2],
-    semi_major: f64,
-    semi_minor: f64,
+    semi_axis_a: f64,
+    semi_axis_b: f64,
     /// Normalized into `[0, 2π)`.
     bearing: f64,
 }
 
 impl Ellipse {
-    /// Build an ellipse from its centre, semi-axes, and the bearing of its
-    /// major axis — degrees clockwise from north, so `0` aims the major axis
-    /// at the pole and `90` aims it east.
+    /// Build an ellipse from its centre, semi-axes, and the bearing of
+    /// `semi_axis_a` — degrees clockwise from north, so `0` aims it at the pole
+    /// and `90` aims it east. `semi_axis_b` is a quarter turn from that, and
+    /// either axis may be the longer.
     ///
     /// At a pole, where north is undefined, the bearing is measured from the
     /// direction of the prime meridian instead.
@@ -582,11 +596,11 @@ impl Ellipse {
     /// - [`Error::NotFinite`] if the centre's longitude, either semi-axis, or
     ///   the bearing is NaN or infinite. Longitude and bearing are themselves
     ///   unbounded — they wrap — so only finiteness is checked.
-    /// - [`Error::EllipseAxes`] unless `0 < semi_minor <= semi_major < 90°`.
+    /// - [`Error::EllipseAxes`] unless both semi-axes are in `(0, 90°)`.
     pub fn new(
         centre: impl Into<LatLon>,
-        semi_major: Degrees,
-        semi_minor: Degrees,
+        semi_axis_a: Degrees,
+        semi_axis_b: Degrees,
         bearing: Degrees,
     ) -> Result<Self> {
         let centre = centre.into();
@@ -595,28 +609,35 @@ impl Ellipse {
         let bearing_rad = checked_angle(bearing, "ellipse bearing")?;
 
         let (a, b) = (
-            checked_angle(semi_major, "ellipse semi-major axis")?,
-            checked_angle(semi_minor, "ellipse semi-minor axis")?,
+            checked_angle(semi_axis_a, "ellipse semi-axis a")?,
+            checked_angle(semi_axis_b, "ellipse semi-axis b")?,
         );
-        if !(b > 0.0 && b <= a + COINCIDENT && a < FRAC_PI_2 - COINCIDENT) {
+        if !(a > 0.0 && b > 0.0 && a.max(b) < FRAC_PI_2 - COINCIDENT) {
             return Err(Error::EllipseAxes {
-                semi_major_deg: semi_major.to_f64(),
-                semi_minor_deg: semi_minor.to_f64(),
+                semi_axis_a_deg: semi_axis_a.to_f64(),
+                semi_axis_b_deg: semi_axis_b.to_f64(),
             }
             .into());
         }
-        let b = b.min(a);
+
+        // The foci lie on the longer axis, so a longer `b` puts them a quarter
+        // turn off the bearing.
+        let (major, minor, direction) = if b > a {
+            (b, a, bearing_rad + FRAC_PI_2)
+        } else {
+            (a, b, bearing_rad)
+        };
 
         // Half the focal separation, from the spherical right triangle joining
         // the centre, one focus and a minor-axis endpoint: `cos a = cos b cos c`.
         // The endpoint is `a` from each focus, since the two distances there
         // are equal and sum to `2a`.
-        let c = (a.cos() / b.cos()).clamp(-1.0, 1.0).acos();
+        let c = (major.cos() / minor.cos()).clamp(-1.0, 1.0).acos();
 
         let centre = unit_from_lat_lon(centre);
         let (north, east) = local_frame(centre);
-        let (sin_brg, cos_brg) = bearing_rad.sin_cos();
-        let major = [
+        let (sin_brg, cos_brg) = direction.sin_cos();
+        let major_axis = [
             north[0] * cos_brg + east[0] * sin_brg,
             north[1] * cos_brg + east[1] * sin_brg,
             north[2] * cos_brg + east[2] * sin_brg,
@@ -624,17 +645,17 @@ impl Ellipse {
         let (sin_c, cos_c) = c.sin_cos();
         let focus = |sign: f64| {
             [
-                centre[0] * cos_c + sign * major[0] * sin_c,
-                centre[1] * cos_c + sign * major[1] * sin_c,
-                centre[2] * cos_c + sign * major[2] * sin_c,
+                centre[0] * cos_c + sign * major_axis[0] * sin_c,
+                centre[1] * cos_c + sign * major_axis[1] * sin_c,
+                centre[2] * cos_c + sign * major_axis[2] * sin_c,
             ]
         };
 
         Ok(Self {
             centre,
             foci: [focus(1.0), focus(-1.0)],
-            semi_major: a,
-            semi_minor: b,
+            semi_axis_a: a,
+            semi_axis_b: b,
             bearing: bearing.normalized().radians(),
         })
     }
@@ -653,15 +674,15 @@ impl Ellipse {
         lat_lon_from_unit(self.centre)
     }
 
-    /// The semi-major and semi-minor axes, as angles.
+    /// The two semi-axes, as angles, in the order they were given.
     pub fn semi_axes(&self) -> (Degrees, Degrees) {
         (
-            Radians(self.semi_major).to_degrees(),
-            Radians(self.semi_minor).to_degrees(),
+            Radians(self.semi_axis_a).to_degrees(),
+            Radians(self.semi_axis_b).to_degrees(),
         )
     }
 
-    /// Bearing of the major axis, degrees clockwise from north.
+    /// Bearing of `semi_axis_a`, degrees clockwise from north.
     pub fn bearing(&self) -> Degrees {
         Radians(self.bearing).to_degrees()
     }
@@ -685,7 +706,7 @@ impl Area for Ellipse {
         // sum is 2-Lipschitz and half the shortfall from `2a` can never exceed
         // the distance to the boundary — an under-estimate for an eccentric
         // ellipse, exact for a circle, where the two terms coincide.
-        let d = self.semi_major - sum / 2.0;
+        let d = self.semi_axis_a.max(self.semi_axis_b) - sum / 2.0;
         if d.abs() < ON_BOUNDARY {
             return Radians(0.0);
         }
@@ -1079,12 +1100,12 @@ pub enum Error {
     )]
     EmptyRectangle { south: f64, north: f64 },
     #[error(
-        "ellipse semi-axes must satisfy 0 < semi-minor ({semi_minor_deg}°) <= semi-major \
-         ({semi_major_deg}°) < 90°"
+        "ellipse semi-axes must both lie in (0, 90°), got semi_axis_a {semi_axis_a_deg}° and \
+         semi_axis_b {semi_axis_b_deg}°"
     )]
     EllipseAxes {
-        semi_major_deg: f64,
-        semi_minor_deg: f64,
+        semi_axis_a_deg: f64,
+        semi_axis_b_deg: f64,
     },
 }
 
@@ -1726,18 +1747,19 @@ mod ellipse_tests {
     #[test]
     fn test_invalid_axes_rejected() {
         let centre = (Degrees(56.0), Degrees(2.0));
-        for (major, minor) in [
-            (1.0, 2.0),  // minor exceeds major
+        for (a, b) in [
             (1.0, 0.0),  // degenerate
             (1.0, -1.0), // negative
+            (0.0, 1.0),
             (90.0, 1.0), // a hemisphere across
             (120.0, 1.0),
+            (1.0, 95.0), // the bound applies to either axis
         ] {
-            let err = Ellipse::new(centre, Degrees(major), Degrees(minor), Degrees(0.0))
-                .expect_err("should be rejected");
+            let err =
+                Ellipse::new(centre, Degrees(a), Degrees(b), Degrees(0.0)).expect_err("rejected");
             assert!(
                 matches!(err, Error::Aoi(super::Error::EllipseAxes { .. })),
-                "{major}/{minor} gave {err}"
+                "{a}/{b} gave {err}"
             );
         }
         assert!(matches!(
@@ -1770,11 +1792,11 @@ mod ellipse_tests {
                     Ellipse::new(centre, Degrees(2.7), Degrees(1.1), Degrees(bad)),
                 ),
                 (
-                    "semi-major",
+                    "semi-axis a",
                     Ellipse::new(centre, Degrees(bad), Degrees(1.1), Degrees(45.0)),
                 ),
                 (
-                    "semi-minor",
+                    "semi-axis b",
                     Ellipse::new(centre, Degrees(2.7), Degrees(bad), Degrees(45.0)),
                 ),
                 ("radius", Ellipse::circle(centre, Degrees(bad))),
@@ -1814,6 +1836,34 @@ mod ellipse_tests {
         )
         .expect("valid ellipse");
         assert!((wrapped.bearing().to_f64() - 270.0).abs() < 1e-12);
+    }
+
+    /// Swapping the semi-axes and turning the bearing a quarter turn describes
+    /// the same region, which is what lets either axis be the longer.
+    #[test]
+    fn test_swapped_axes_cover_the_same_region() {
+        let centre = (Degrees(56.0), Degrees(2.0));
+        let wide = Ellipse::new(centre, Degrees(1.1), Degrees(2.7), Degrees(135.0))
+            .expect("valid ellipse");
+        let long = north_sea();
+
+        // The foci are a pair, not a sequence: turning the bearing the other
+        // way is equally valid and lists them the other way round.
+        let (f1, f2) = wide.foci();
+        let (g1, g2) = long.foci();
+        let [f1, f2, g1, g2] = [f1, f2, g1, g2].map(unit_from_lat_lon);
+        assert!(
+            (coincident(f1, g1) && coincident(f2, g2))
+                || (coincident(f1, g2) && coincident(f2, g1))
+        );
+
+        for p in super::geometry_tests::sphere_points(500) {
+            let p = lat_lon_from_unit(p);
+            assert!(
+                (offset(&wide, p) - offset(&long, p)).abs() < 1e-12,
+                "offsets differ at {p:?}"
+            );
+        }
     }
 }
 
