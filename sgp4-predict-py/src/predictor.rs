@@ -33,10 +33,17 @@ pub struct Refinement {
 #[gen_stub_pymethods]
 #[pymethods]
 impl Refinement {
+    /// Both arguments are keyword-only; either left unset keeps the library's
+    /// default.
     #[new]
-    fn new() -> Self {
+    #[pyo3(signature = (*, time_tolerance = None, max_iter = None))]
+    fn new(time_tolerance: Option<f64>, max_iter: Option<usize>) -> Self {
+        let d = sgp4_predict::Refinement::default();
         Self {
-            inner: sgp4_predict::Refinement::default(),
+            inner: sgp4_predict::Refinement {
+                time_tolerance: time_tolerance.unwrap_or(d.time_tolerance),
+                max_iter: max_iter.unwrap_or(d.max_iter),
+            },
         }
     }
 
@@ -828,6 +835,10 @@ mod tests {
         );
         assert_eq!(apsis_opts(None), ApsisIterOpts::default());
         assert_eq!(max_elevation_opts(None), MaxElevationOpts::default());
+        assert_eq!(
+            Refinement::new(None, None).inner,
+            sgp4_predict::Refinement::default()
+        );
     }
 
     /// Distinct values per parameter, so a field wired to the wrong kwarg is
@@ -886,5 +897,9 @@ mod tests {
 
         assert_eq!(apsis_opts(Some(secs(1))).step, secs(1));
         assert_eq!(max_elevation_opts(Some(secs(1))).scan_step, secs(1));
+
+        let refinement = Refinement::new(Some(1e-6), Some(7)).inner;
+        assert_eq!(refinement.time_tolerance, 1e-6);
+        assert_eq!(refinement.max_iter, 7);
     }
 }

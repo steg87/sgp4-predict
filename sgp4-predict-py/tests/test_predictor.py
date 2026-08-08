@@ -16,6 +16,7 @@ from sgp4_predict import (
     Interval,
     IntervalRange,
     Predictor,
+    Refinement,
     Tle,
 )
 
@@ -493,3 +494,10 @@ def test_skip_leading_partial_false_recovers_a_pass_already_in_progress():
     )
     assert kept.start < midpoint
     assert abs((kept.start - t0.start).total_seconds()) < 2.0
+
+
+def test_refinement_takes_keyword_only_arguments():
+    assert Refinement(time_tolerance=1e-6).time_tolerance == 1e-6
+    assert Refinement(time_tolerance=1e-6).max_iter == Refinement().max_iter
+    with pytest.raises(TypeError):
+        Refinement(1e-6)
