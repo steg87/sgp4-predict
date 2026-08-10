@@ -5,7 +5,8 @@
 ![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sgp4-predict-cli)
 
 A command-line tool for SGP4 satellite pass prediction: transits, observations, state vectors,
-apsides, and illumination windows, as text, JSON, or CSV.
+apsides, illumination windows, ground tracks, and area-of-interest overpasses, as text, JSON, or
+CSV.
 
 ```sh
 cargo install sgp4-predict-cli

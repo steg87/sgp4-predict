@@ -1,37 +1,15 @@
 # ruff: noqa: E501, F401, F403, F405
 
-from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Protocol, TypeAlias, runtime_checkable
 
 from sgp4_predict._sgp4_predict import *
 from sgp4_predict._sgp4_predict import (
-    AoiIter,
-    AoiWindow,
-    Apsis,
-    ApsisEvent,
-    ApsisIter,
-    Classification,
-    Elements,
-    FillRule,
+    Ellipse,
     Geodetic,
-    GroundObserver,
-    GroundTrackIter,
-    Illumination,
-    IlluminationIter,
-    IlluminationState,
     LatLon,
-    Observation,
-    ObservationIter,
-    PredictionIter,
-    Refinement,
-    Tle,
-    StateVectorEcef,
-    StateVectorEnu,
-    StateVectorTeme,
-    Transit,
-    TransitIter,
-    Vec3,
+    Polygon,
+    Rectangle,
 )
 
 @runtime_checkable
@@ -53,174 +31,8 @@ class Interval:
 # A LatLon, a Geodetic, or a plain (latitude_deg, longitude_deg) tuple.
 LatLonLike: TypeAlias = LatLon | Geodetic | tuple[float, float]
 
-# Redeclared only because from_dict is not emitted by pyo3-stub-gen (PyAny
-# limitation) — but a redeclaration replaces the generated class, so every member
-# has to be repeated here.
-class Elements:
-    """Orbital elements for a satellite."""
-    def __new__(
-        cls,
-        *,
-        norad_id: int,
-        epoch: datetime,
-        mean_motion: float,
-        eccentricity: float,
-        inclination: float,
-        right_ascension: float,
-        argument_of_perigee: float,
-        mean_anomaly: float,
-        mean_motion_dot: float,
-        mean_motion_ddot: float = 0.0,
-        drag_term: float = 0.0,
-        revolution_number: int = 0,
-        object_name: str | None = None,
-        classification: Classification = ...,
-        international_designator: str | None = None,
-        element_set_number: int = 0,
-        ephemeris_type: int = 0,
-    ) -> Elements: ...
-    @staticmethod
-    def from_json(json: str) -> Elements:
-        """Parse an OMM JSON string into orbital elements (Celestrak / Space-Track format)."""
-        ...
-    @staticmethod
-    def from_dict(data: dict) -> Elements:
-        """Parse an OMM dict into orbital elements (Celestrak / Space-Track format)."""
-        ...
-    @property
-    def object_name(self) -> str | None: ...
-    @property
-    def norad_id(self) -> int: ...
-    @property
-    def classification(self) -> Classification: ...
-    @property
-    def international_designator(self) -> str | None: ...
-    @property
-    def epoch(self) -> datetime: ...
-    @property
-    def mean_motion_dot(self) -> float: ...
-    @property
-    def mean_motion_ddot(self) -> float: ...
-    @property
-    def drag_term(self) -> float: ...
-    @property
-    def element_set_number(self) -> int: ...
-    @property
-    def inclination(self) -> float: ...
-    @property
-    def right_ascension(self) -> float: ...
-    @property
-    def eccentricity(self) -> float: ...
-    @property
-    def argument_of_perigee(self) -> float: ...
-    @property
-    def mean_anomaly(self) -> float: ...
-    @property
-    def mean_motion(self) -> float: ...
-    @property
-    def revolution_number(self) -> int: ...
-    @property
-    def ephemeris_type(self) -> int: ...
-    def __repr__(self) -> str: ...
-
-# The three area shapes take LatLonLike arguments, which pyo3-stub-gen widens to
-# Any; they are redeclared here so the tuple form type-checks.
-
-class Polygon:
-    """A closed polygon on Earth's surface whose edges are great-circle arcs."""
-    def __new__(cls, vertices: Iterable[LatLonLike], fill_rule: FillRule = ...) -> Polygon: ...
-    @property
-    def vertices(self) -> list[LatLon]: ...
-    @property
-    def fill_rule(self) -> FillRule: ...
-    def signed_angular_offset_deg(self, point: LatLonLike) -> float: ...
-    def __repr__(self) -> str: ...
-
-class Rectangle:
-    """A latitude/longitude box, whose north and south edges follow their parallels exactly."""
-    def __new__(cls, south_west: LatLonLike, north_east: LatLonLike) -> Rectangle: ...
-    @staticmethod
-    def latitude_band(south_deg: float, north_deg: float) -> Rectangle: ...
-    @property
-    def latitudes_deg(self) -> tuple[float, float]: ...
-    @property
-    def longitudes_deg(self) -> tuple[float, float]: ...
-    def signed_angular_offset_deg(self, point: LatLonLike) -> float: ...
-    def __repr__(self) -> str: ...
-
-class Ellipse:
-    """An ellipse on Earth's surface, given as a centre, angular semi-axes and a bearing."""
-    def __new__(cls, centre: LatLonLike, semi_axis_a_deg: float, semi_axis_b_deg: float, bearing_deg: float = 0.0) -> Ellipse: ...
-    @staticmethod
-    def circle(centre: LatLonLike, radius_deg: float) -> Ellipse: ...
-    @property
-    def centre(self) -> LatLon: ...
-    @property
-    def semi_axis_a_deg(self) -> float: ...
-    @property
-    def semi_axis_b_deg(self) -> float: ...
-    @property
-    def bearing_deg(self) -> float: ...
-    @property
-    def foci(self) -> tuple[LatLon, LatLon]: ...
-    def signed_angular_offset_deg(self, point: LatLonLike) -> float: ...
-    def __repr__(self) -> str: ...
-
 # A region on the ground, accepted by Predictor.aoi_iter and detect_aoi.
 Area: TypeAlias = Polygon | Rectangle | Ellipse
-
-class Predictor:
-    @property
-    def epoch(self) -> datetime: ...
-    def __new__(cls, elements: Elements) -> Predictor: ...
-    @staticmethod
-    def from_tle(tle: Tle) -> Predictor: ...
-    def with_refinement(self, refinement: Refinement) -> Predictor: ...
-    def propagate(self, t: datetime) -> StateVectorTeme: ...
-    def observe_at(self, t: datetime, observer: GroundObserver) -> Observation: ...
-    def sub_point(self, t: datetime) -> Geodetic: ...
-    def prediction_iter(self, interval: IntervalRange, step: timedelta) -> PredictionIter: ...
-    def observation_iter(self, observer: GroundObserver, interval: IntervalRange, step: timedelta) -> ObservationIter: ...
-    def ground_track_iter(self, interval: IntervalRange, step: timedelta) -> GroundTrackIter: ...
-    def transits_iter(
-        self,
-        observer: GroundObserver,
-        interval: IntervalRange,
-        min_elevation_deg: float,
-        *,
-        min_step: timedelta | None = None,
-        max_step: timedelta | None = None,
-        walk_step: timedelta | None = None,
-        max_transit_duration: timedelta | None = None,
-        skip_leading_partial: bool | None = None,
-        clamp_to_interval: bool | None = None,
-    ) -> TransitIter: ...
-    def apsis_iter(self, interval: IntervalRange, *, step: timedelta | None = None) -> ApsisIter: ...
-    def illumination_iter(
-        self,
-        interval: IntervalRange,
-        *,
-        step: timedelta | None = None,
-        walk_step: timedelta | None = None,
-        max_window_duration: timedelta | None = None,
-    ) -> IlluminationIter: ...
-    def aoi_iter(
-        self,
-        area: Area,
-        interval: IntervalRange,
-        *,
-        min_step: timedelta | None = None,
-        max_step: timedelta | None = None,
-        walk_step: timedelta | None = None,
-        max_window_duration: timedelta | None = None,
-        skip_leading_partial: bool | None = None,
-        clamp_to_interval: bool | None = None,
-    ) -> AoiIter: ...
-    def detect_transit(self, t: datetime, observer: GroundObserver, min_elevation_deg: float, *, walk_step: timedelta | None = None, max_transit_duration: timedelta | None = None) -> Transit | None: ...
-    def detect_aoi(self, t: datetime, area: Area, *, walk_step: timedelta | None = None, max_window_duration: timedelta | None = None) -> AoiWindow | None: ...
-    def max_elevation(self, observer: GroundObserver, interval: IntervalRange, *, scan_step: timedelta | None = None) -> tuple[datetime, Observation]: ...
-    def illumination_state(self, t: datetime) -> IlluminationState: ...
-    def tle_age_seconds(self, now: datetime) -> float: ...
 
 __all__ = [
     "AoiIter",

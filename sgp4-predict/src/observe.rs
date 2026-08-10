@@ -9,7 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::fmt;
 
 use crate::{
-    Error, Predictor, Result,
+    Predictor, Result,
     angle::{Degrees, Radians},
     frames::EcefState,
     predict::PredictionIter,
@@ -83,6 +83,8 @@ impl<O: Observer> Clone for ObservationIter<'_, O> {
 }
 
 impl<'a, O: Observer> ObservationIter<'a, O> {
+    /// Sample observations across `interval` every `step`. Prefer
+    /// [`Predictor::observation_iter`](crate::Predictor::observation_iter).
     pub fn new(
         predictor: Predictor,
         observer: &'a O,
@@ -103,7 +105,7 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
 }
 
 impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
-    type Item = std::result::Result<(DateTime<Utc>, Observation), Error>;
+    type Item = Result<(DateTime<Utc>, Observation)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (time, teme_state) = match self.predict_iter.next()? {
@@ -121,9 +123,9 @@ impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
 }
 
 impl Predictor {
-    /// Calculate observation at time t.
+    /// Observe the satellite from `observer` at time `t`.
     ///
-    /// Returns a predicted local observation.
+    /// Returns its azimuth, elevation, range and range rate as seen from there.
     pub fn observe_at<O: Observer>(&self, t: DateTime<Utc>, observer: &O) -> Result<Observation> {
         let observation = self
             .propagate(t)?
@@ -133,9 +135,9 @@ impl Predictor {
         Ok(observation)
     }
 
-    /// Observe the TLE from an observer on Earth.
+    /// Observe the satellite from `observer` across a time interval.
     ///
-    /// Returns an iterator over observations.
+    /// Returns an iterator over time-stamped observations, one every `step`.
     pub fn observation_iter<'a, O: Observer>(
         &self,
         observer: &'a O,

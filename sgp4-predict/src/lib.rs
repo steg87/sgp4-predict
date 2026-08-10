@@ -65,14 +65,63 @@
 //! into one call on the iterator: `.log_errors()` to skip a failed event,
 //! `.tolerate_errors(n)` to stop once failures persist.
 //!
-//! # Cargo features
+//! # Generic event detection
 //!
-//! - `generics` — exposes the generic event/window detection building blocks
-//!   (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) that power
-//!   the concrete iterators, for detecting event kinds this crate does not
-//!   cover. Off by default.
+//! Transits, apsides, illumination and area overpasses are all found the same
+//! way: a scalar event function `f(t)` is sampled across the interval by a
+//! step strategy, a sign change between two samples brackets a crossing, and
+//! the crossing time is refined by a bracketed hybrid solver. The concrete
+//! iterators are thin wrappers over that layer.
+//!
+//! The off-by-default `generics` Cargo feature exposes it, so an event kind
+//! this crate does not cover needs no bespoke iterator:
+//!
+//! - `DetectIter` is the driving loop: it repeatedly asks a `Detector` for the
+//!   next sample time and whether an event completed there. Implement
+//!   `Detector` for fully custom detection.
+//! - `CrossingDetector` (built via `EventIter::builder`) finds the zero
+//!   crossings of a scalar `EventFunction` — point-in-time **events**, such as
+//!   apsides.
+//! - `WindowDetector` (built via `WindowIter::builder`) pairs crossings into
+//!   **windows** — intervals over which `f(t)` keeps one sign, such as transits
+//!   or illumination.
+//! - `StepStrategy` decides how far to advance between samples: `FixedStep`
+//!   scans uniformly, `ThresholdStep` takes large steps far from a threshold
+//!   crossing and small ones near it.
+//!
+//! Each refinement iteration takes a Newton-Raphson step when its sample
+//! carries a derivative (`Sample::rate`) and a secant/bisection step otherwise,
+//! converging once the crossing is pinned down to the solver's time tolerance.
+//!
+//! In the TEME frame the equator is the plane `z = 0`, so ascending-node
+//! crossings are the rising zero crossings of the satellite's z coordinate:
+//!
+#![cfg_attr(feature = "generics", doc = "```no_run")]
+#![cfg_attr(not(feature = "generics"), doc = "```ignore")]
+//! use chrono::{Duration, Utc};
+//! use sgp4_predict::{Direction, EventIter, FixedStep, Predictor, Tle};
+//!
+//! # let tle: Tle = "ISS (ZARYA)\n1 ...\n2 ...".parse().unwrap();
+//! let predictor = Predictor::from_tle(&tle).unwrap();
+//! let start = Utc::now();
+//!
+//! let crossings = EventIter::builder()
+//!     .interval(start..start + Duration::days(1))
+//!     .function(move |t| Ok(predictor.propagate(t)?.position.z))
+//!     .step(FixedStep(Duration::seconds(60)))
+//!     .build()
+//!     .unwrap();
+//!
+//! for crossing in crossings {
+//!     let crossing = crossing.unwrap();
+//!     if crossing.direction == Direction::Rising {
+//!         println!("northward equator crossing at {}", crossing.time);
+//!     }
+//! }
+//! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![warn(missing_docs)]
 
 /// Compiles the README's examples as doctests so they cannot drift.
 #[cfg(doctest)]
@@ -113,7 +162,7 @@ pub use crate::{
     illumination::{Illumination, IlluminationIter, IlluminationIterOpts, IlluminationState},
     observe::{Observation, ObservationIter, Observer},
     predict::{GroundTrackIter, PredictionIter},
-    roots::Refinement,
+    roots::{Error as RootsError, Refinement},
     time::{DateTimeIter, IntervalRange, TimeWindow},
     transits::{MaxElevationOpts, Transit, TransitIter, TransitIterOpts},
     types::{GroundObserver, Tle, TleParseError},
@@ -293,20 +342,29 @@ impl Predictor {
 #[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
+    /// The TLE text was not two or three usable lines.
     #[error("TLE format error: {0}")]
     TleFormat(#[from] TleParseError),
+    /// A TLE line was malformed.
     #[error("TLE parse error: {0}")]
     Tle(#[from] sgp4::TleError),
+    /// SGP4 rejected the orbital elements.
     #[error("SGP4 elements error: {0}")]
     Elements(#[from] sgp4::ElementsError),
+    /// Propagation failed — typically a decayed or otherwise degenerate orbit,
+    /// which fails at every time, not just the one sampled.
     #[error("SGP4 propagation error: {0}")]
     Sgp4(#[from] sgp4::Error),
+    /// A time interval was unusable.
     #[error("Interval error: {0}")]
     Interval(String),
+    /// The root finder failed to pin down an event time.
     #[error("Roots error: {0}")]
     Roots(#[from] roots::Error),
+    /// Event or window detection failed.
     #[error("Detection error: {0}")]
     Detect(#[from] detect::Error),
+    /// An [`Area`] could not be constructed from the given geometry.
     #[error("Area of interest error: {0}")]
     Aoi(#[from] aoi::Error),
     /// Escape hatch for custom `EventFunction` implementations (`generics`

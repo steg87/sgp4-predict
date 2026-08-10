@@ -1,60 +1,9 @@
 //! Generic event and window detection over scalar functions of time.
 //!
-//! This module contains the building blocks that power [`ApsisIter`],
-//! [`TransitIter`] and [`IlluminationIter`], re-exported at the crate root
-//! when the `generics` Cargo feature is enabled so that new kinds of
-//! satellite events can be detected without writing a bespoke iterator.
-//!
-//! # Layers
-//!
-//! - [`DetectIter`] is the generic driving loop: it repeatedly asks a
-//!   [`Detector`] for the next sample time and whether an event completed
-//!   there. Implement [`Detector`] directly for fully custom detection.
-//! - [`CrossingDetector`] (built via [`EventIter::builder`]) is a provided
-//!   detector that finds the zero crossings of a user-supplied scalar
-//!   [`EventFunction`] `f(t)` — point-in-time **events** such as apsides.
-//! - [`WindowDetector`] (built via [`WindowIter::builder`]) pairs crossings
-//!   into **windows** — intervals over which `f(t)` keeps one sign, such as
-//!   transits (elevation above a threshold) or illumination (shadow function).
-//! - [`StepStrategy`] decides how far to advance between samples:
-//!   [`FixedStep`] scans uniformly, [`ThresholdStep`] takes large steps far
-//!   from a threshold crossing and small steps near it.
-//!
-//! Crossings bracketed by two samples are refined with the crate's
-//! bracketed hybrid solver ([`Refinement`](crate::Refinement)): each
-//! iteration takes a Newton-Raphson step when its sample carries a
-//! derivative ([`Sample::rate`]) and a secant/bisection step otherwise,
-//! converging when the crossing is pinned down to the solver's time
-//! tolerance.
-//!
-//! # Example: northward equator crossings
-//!
-//! In the TEME frame the equator is the plane `z = 0`, so ascending-node
-//! crossings are the rising zero crossings of the satellite's z coordinate:
-//!
-#![cfg_attr(feature = "generics", doc = "```no_run")]
-#![cfg_attr(not(feature = "generics"), doc = "```ignore")]
-//! use chrono::{Duration, Utc};
-//! use sgp4_predict::{Direction, EventIter, FixedStep, Predictor, Tle};
-//!
-//! # let tle: Tle = "ISS (ZARYA)\n1 ...\n2 ...".parse().unwrap();
-//! let predictor = Predictor::from_tle(&tle).unwrap();
-//! let start = Utc::now();
-//!
-//! let crossings = EventIter::builder()
-//!     .interval(start..start + Duration::days(1))
-//!     .function(move |t| Ok(predictor.propagate(t)?.position.z))
-//!     .step(FixedStep(Duration::seconds(60)))
-//!     .build()
-//!     .unwrap();
-//!
-//! for crossing in crossings {
-//!     let crossing = crossing.unwrap();
-//!     if crossing.direction == Direction::Rising {
-//!         println!("northward equator crossing at {}", crossing.time);
-//!     }
-//! }
-//! ```
+//! The building blocks that power `ApsisIter`, `TransitIter`, `AoiIter` and
+//! `IlluminationIter`. The module is private; its items are re-exported at the
+//! crate root when the `generics` Cargo feature is enabled, which is where the
+//! user-facing overview of them lives.
 
 // Without the `generics` feature, items that exist only for external use
 // (builder adapters, accessors) are not reachable from outside the crate.
@@ -1095,12 +1044,16 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
 #[derive(Debug, Clone, PartialEq, Eq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
+    /// The window containing `at` ran past the caller's duration cap before a
+    /// closing crossing was found.
     #[error(
         "window too long: the positive window containing {at} exceeds the \
          {} maximum", human(*max_window_duration)
     )]
     WindowTooLong {
+        /// The sample time the window was resolved from.
         at: DateTime<Utc>,
+        /// The cap that was exceeded.
         max_window_duration: Duration,
     },
 }

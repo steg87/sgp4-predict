@@ -154,15 +154,24 @@ impl Refinement {
 #[derive(Debug, Clone, PartialEq, ThisError)]
 #[non_exhaustive]
 pub enum Error {
+    /// The bracket was still wider than `tolerance` after `max_iter`
+    /// iterations. Affects the one event being refined, not the scan.
     #[error("failed to converge after {iterations} iterations")]
     FailedToConverge {
+        /// Iterations performed, which is [`Refinement::max_iter`].
         iterations: usize,
+        /// The bracket width that was being aimed for, in seconds.
         tolerance: f64,
+        /// Midpoint of the bracket reached, as a best effort.
         result: f64,
+        /// Magnitude of the event function at the last sample.
         error: f64,
     },
+    /// The bracket endpoints did not have opposite signs, so no crossing is
+    /// guaranteed to lie between them.
     #[error("root is not bracketed")]
     Unbracketed,
+    /// The event function itself failed during refinement.
     #[error("cost function error: {0}")]
     CostFn(String),
 }

@@ -136,6 +136,7 @@ pub struct LatLon {
 }
 
 impl LatLon {
+    /// Build a point from its geodetic latitude and longitude.
     #[must_use]
     pub const fn new(latitude: Degrees, longitude: Degrees) -> Self {
         Self {

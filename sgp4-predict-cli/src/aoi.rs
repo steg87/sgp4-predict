@@ -15,10 +15,9 @@ use sgp4_predict::{Degrees, Ellipse, Polygon, Rectangle};
 /// A built AOI, ready to hand to `aoi_iter`.
 ///
 /// `Predictor::aoi_iter` is generic over one `Area`, so the three shapes need
-/// a single type to travel in. There is deliberately no `impl Area for
-/// AoiShape`: callers match once and pass the concrete shape to a generic
-/// function, which keeps the dispatch at the call site instead of on every
-/// sample.
+/// a single type to travel in. Callers match once and pass the concrete shape
+/// to a generic function, keeping the dispatch at the call site instead of on
+/// every sample.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AoiShape {
     Rectangle(Rectangle),

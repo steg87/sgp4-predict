@@ -8,6 +8,7 @@ use sgp4_predict::{
 
 use crate::{
     area::{AreaKind, Geodetic, extract_area, extract_area_ref},
+    convert::IntervalArg,
     elements::Elements,
     errors::to_py_err,
     observer::GroundObserver,
@@ -85,6 +86,7 @@ impl PredictionIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, StateVectorTeme]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, StateVectorTeme)>> {
         match self.inner.next() {
             None => Ok(None),
@@ -111,6 +113,7 @@ impl GroundTrackIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, Geodetic]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Geodetic)>> {
         match self.inner.next() {
             None => Ok(None),
@@ -137,6 +140,7 @@ impl ApsisIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "Apsis"))]
     fn __next__(&mut self) -> PyResult<Option<Apsis>> {
         match self.inner.next() {
             None => Ok(None),
@@ -170,6 +174,7 @@ impl IlluminationIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "Illumination"))]
     fn __next__(&mut self) -> PyResult<Option<Illumination>> {
         match self.inner.next() {
             None => Ok(None),
@@ -211,6 +216,7 @@ impl TransitIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "Transit"))]
     fn __next__(&mut self) -> PyResult<Option<Transit>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
@@ -248,6 +254,7 @@ impl AoiIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "AoiWindow"))]
     fn __next__(&mut self) -> PyResult<Option<AoiWindow>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
@@ -285,6 +292,7 @@ impl ObservationIter {
         slf
     }
 
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, Observation]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Observation)>> {
         self.inner.with_iter_mut(|iter| match iter.next() {
             None => Ok(None),
@@ -295,12 +303,6 @@ impl ObservationIter {
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
-
-fn extract_interval(interval: &Bound<'_, PyAny>) -> PyResult<(DateTime<Utc>, DateTime<Utc>)> {
-    let start: DateTime<Utc> = interval.getattr("start")?.extract()?;
-    let end: DateTime<Utc> = interval.getattr("end")?.extract()?;
-    Ok((start, end))
-}
 
 // Every tuning kwarg is optional and falls back to the library's own `Default`,
 // so a call that passes none behaves exactly like the plain iterator. Each
@@ -440,12 +442,8 @@ impl Predictor {
     ///
     /// `interval` must expose `.start` and `.end` datetime properties.
     /// Pass an `Interval`, `Transit`, or `Illumination` object.
-    fn prediction_iter(
-        &self,
-        interval: &Bound<'_, PyAny>,
-        step: Duration,
-    ) -> PyResult<PredictionIter> {
-        let (start, end) = extract_interval(interval)?;
+    fn prediction_iter(&self, interval: IntervalArg, step: Duration) -> PyResult<PredictionIter> {
+        let IntervalArg { start, end } = interval;
         Ok(PredictionIter {
             inner: self.inner.prediction_iter(start..end, step),
         })
@@ -458,10 +456,10 @@ impl Predictor {
     fn observation_iter(
         &self,
         observer: &GroundObserver,
-        interval: &Bound<'_, PyAny>,
+        interval: IntervalArg,
         step: Duration,
     ) -> PyResult<ObservationIter> {
-        let (start, end) = extract_interval(interval)?;
+        let IntervalArg { start, end } = interval;
         let obs_clone = observer.clone();
         let predictor = self.inner.clone();
         Ok(ObservationIter {
@@ -507,7 +505,7 @@ impl Predictor {
     fn transits_iter(
         &self,
         observer: &GroundObserver,
-        interval: &Bound<'_, PyAny>,
+        interval: IntervalArg,
         min_elevation_deg: f64,
         min_step: Option<Duration>,
         max_step: Option<Duration>,
@@ -516,7 +514,7 @@ impl Predictor {
         skip_leading_partial: Option<bool>,
         clamp_to_interval: Option<bool>,
     ) -> PyResult<TransitIter> {
-        let (start, end) = extract_interval(interval)?;
+        let IntervalArg { start, end } = interval;
         let obs_clone = observer.clone();
         let predictor = self.inner.clone();
         let refinement = self.inner.refinement();
@@ -559,10 +557,10 @@ impl Predictor {
     /// Yields `(datetime, Geodetic)` sub-satellite points.
     fn ground_track_iter(
         &self,
-        interval: &Bound<'_, PyAny>,
+        interval: IntervalArg,
         step: Duration,
     ) -> PyResult<GroundTrackIter> {
-        let (start, end) = extract_interval(interval)?;
+        let IntervalArg { start, end } = interval;
         Ok(GroundTrackIter {
             inner: self.inner.ground_track_iter(start..end, step),
         })
@@ -608,8 +606,9 @@ impl Predictor {
     ))]
     fn aoi_iter(
         &self,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.Area", imports = ("sgp4_predict")))]
         area: &Bound<'_, PyAny>,
-        interval: &Bound<'_, PyAny>,
+        interval: IntervalArg,
         min_step: Option<Duration>,
         max_step: Option<Duration>,
         walk_step: Option<Duration>,
@@ -617,7 +616,7 @@ impl Predictor {
         skip_leading_partial: Option<bool>,
         clamp_to_interval: Option<bool>,
     ) -> PyResult<AoiIter> {
-        let (start, end) = extract_interval(interval)?;
+        let IntervalArg { start, end } = interval;
         let opts = aoi_opts(
             min_step,
             max_step,
@@ -651,13 +650,14 @@ impl Predictor {
     fn detect_aoi(
         &self,
         t: DateTime<Utc>,
+        #[gen_stub(override_type(type_repr = "sgp4_predict.Area", imports = ("sgp4_predict")))]
         area: &Bound<'_, PyAny>,
         walk_step: Option<Duration>,
         max_window_duration: Option<Duration>,
     ) -> PyResult<Option<AoiWindow>> {
         let area = extract_area_ref(area)?;
-        // Named rather than the six-`Option` builder: `detect_window` reads only
-        // these two, and positionally they are interchangeable `Duration`s.
+        // Only these two fields reach `detect_window`; the rest stay at their
+        // defaults.
         let d = AoiIterOpts::default();
         let opts = AoiIterOpts {
             walk_step: walk_step.unwrap_or(d.walk_step),
@@ -681,12 +681,8 @@ impl Predictor {
     /// `step` is the fixed step used to scan for radial-velocity sign changes,
     /// defaulting to the library's own value.
     #[pyo3(signature = (interval, *, step = None))]
-    fn apsis_iter(
-        &self,
-        interval: &Bound<'_, PyAny>,
-        step: Option<Duration>,
-    ) -> PyResult<ApsisIter> {
-        let (start, end) = extract_interval(interval)?;
+    fn apsis_iter(&self, interval: IntervalArg, step: Option<Duration>) -> PyResult<ApsisIter> {
+        let IntervalArg { start, end } = interval;
         Ok(ApsisIter {
             inner: self.inner.apsis_iter_with_opts(
                 start..end,
@@ -710,12 +706,12 @@ impl Predictor {
     #[pyo3(signature = (interval, *, step = None, walk_step = None, max_window_duration = None))]
     fn illumination_iter(
         &self,
-        interval: &Bound<'_, PyAny>,
+        interval: IntervalArg,
         step: Option<Duration>,
         walk_step: Option<Duration>,
         max_window_duration: Option<Duration>,
     ) -> PyResult<IlluminationIter> {
-        let (start, end) = extract_interval(interval)?;
+        let IntervalArg { start, end } = interval;
         Ok(IlluminationIter {
             inner: self.inner.illumination_iter_with_opts(
                 start..end,
@@ -779,10 +775,10 @@ impl Predictor {
     fn max_elevation(
         &self,
         observer: &GroundObserver,
-        interval: &Bound<'_, PyAny>,
+        interval: IntervalArg,
         scan_step: Option<Duration>,
     ) -> PyResult<(DateTime<Utc>, Observation)> {
-        let (start, end) = extract_interval(interval)?;
+        let IntervalArg { start, end } = interval;
         self.inner
             .max_elevation_with_opts(start..end, observer, max_elevation_opts(scan_step))
             .map(|(t, obs)| (t, Observation::from_inner(obs)))
