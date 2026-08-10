@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 use sgp4_predict::{Area, Degrees, Radians};
 
-use crate::errors::to_py_err;
+use crate::{convert::LatLonArg, errors::to_py_err};
 
 // ── LatLon ─────────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ use crate::errors::to_py_err;
 #[pyclass(eq, frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LatLon {
-    inner: sgp4_predict::LatLon,
+    pub(crate) inner: sgp4_predict::LatLon,
 }
 
 #[gen_stub_pymethods]
@@ -62,7 +62,7 @@ impl LatLon {
 #[pyclass(eq, frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Geodetic {
-    inner: sgp4_predict::Geodetic,
+    pub(crate) inner: sgp4_predict::Geodetic,
 }
 
 #[gen_stub_pymethods]
@@ -181,7 +181,7 @@ impl Polygon {
     ) -> PyResult<Self> {
         let mut points = Vec::new();
         for vertex in vertices.try_iter()? {
-            points.push(extract_lat_lon(&vertex?)?);
+            points.push(vertex?.extract::<LatLonArg>()?.0);
         }
         let inner = sgp4_predict::Polygon::new(points)
             .map_err(to_py_err)?
@@ -203,12 +203,8 @@ impl Polygon {
 
     /// Signed angular offset of a point from the boundary, in degrees:
     /// positive inside, negative outside, zero on the boundary.
-    fn signed_angular_offset_deg(
-        &self,
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        point: &Bound<'_, PyAny>,
-    ) -> PyResult<f64> {
-        offset_deg(&self.inner, point)
+    fn signed_angular_offset_deg(&self, point: LatLonArg) -> f64 {
+        self.inner.signed_angular_offset(point.0).degrees()
     }
 
     fn __repr__(&self) -> String {
@@ -244,17 +240,8 @@ pub struct Rectangle {
 #[pymethods]
 impl Rectangle {
     #[new]
-    fn new(
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        south_west: &Bound<'_, PyAny>,
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        north_east: &Bound<'_, PyAny>,
-    ) -> PyResult<Self> {
-        let inner = sgp4_predict::Rectangle::new(
-            extract_lat_lon(south_west)?,
-            extract_lat_lon(north_east)?,
-        )
-        .map_err(to_py_err)?;
+    fn new(south_west: LatLonArg, north_east: LatLonArg) -> PyResult<Self> {
+        let inner = sgp4_predict::Rectangle::new(south_west.0, north_east.0).map_err(to_py_err)?;
         Ok(Self { inner })
     }
 
@@ -284,12 +271,8 @@ impl Rectangle {
 
     /// Signed angular offset of a point from the boundary, in degrees:
     /// positive inside, negative outside, zero on the boundary.
-    fn signed_angular_offset_deg(
-        &self,
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        point: &Bound<'_, PyAny>,
-    ) -> PyResult<f64> {
-        offset_deg(&self.inner, point)
+    fn signed_angular_offset_deg(&self, point: LatLonArg) -> f64 {
+        self.inner.signed_angular_offset(point.0).degrees()
     }
 
     fn __repr__(&self) -> String {
@@ -326,14 +309,13 @@ impl Ellipse {
     #[new]
     #[pyo3(signature = (centre, semi_axis_a_deg, semi_axis_b_deg, bearing_deg = 0.0))]
     fn new(
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        centre: &Bound<'_, PyAny>,
+        centre: LatLonArg,
         semi_axis_a_deg: f64,
         semi_axis_b_deg: f64,
         bearing_deg: f64,
     ) -> PyResult<Self> {
         let inner = sgp4_predict::Ellipse::new(
-            extract_lat_lon(centre)?,
+            centre.0,
             Degrees(semi_axis_a_deg),
             Degrees(semi_axis_b_deg),
             Degrees(bearing_deg),
@@ -344,13 +326,9 @@ impl Ellipse {
 
     /// A circular area of angular `radius_deg` — a spherical cap.
     #[staticmethod]
-    fn circle(
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        centre: &Bound<'_, PyAny>,
-        radius_deg: f64,
-    ) -> PyResult<Self> {
-        let inner = sgp4_predict::Ellipse::circle(extract_lat_lon(centre)?, Degrees(radius_deg))
-            .map_err(to_py_err)?;
+    fn circle(centre: LatLonArg, radius_deg: f64) -> PyResult<Self> {
+        let inner =
+            sgp4_predict::Ellipse::circle(centre.0, Degrees(radius_deg)).map_err(to_py_err)?;
         Ok(Self { inner })
     }
 
@@ -387,12 +365,8 @@ impl Ellipse {
 
     /// Signed angular offset of a point from the boundary, in degrees:
     /// positive inside, negative outside, zero on the boundary.
-    fn signed_angular_offset_deg(
-        &self,
-        #[gen_stub(override_type(type_repr = "sgp4_predict.LatLonLike", imports = ("sgp4_predict")))]
-        point: &Bound<'_, PyAny>,
-    ) -> PyResult<f64> {
-        offset_deg(&self.inner, point)
+    fn signed_angular_offset_deg(&self, point: LatLonArg) -> f64 {
+        self.inner.signed_angular_offset(point.0).degrees()
     }
 
     fn __repr__(&self) -> String {
@@ -471,31 +445,4 @@ pub(crate) fn extract_area_ref<'a>(area: &'a Bound<'_, PyAny>) -> PyResult<AreaR
     Err(PyTypeError::new_err(
         "expected a Polygon, Rectangle, or Ellipse",
     ))
-}
-
-/// A `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple.
-pub(crate) fn extract_lat_lon(point: &Bound<'_, PyAny>) -> PyResult<sgp4_predict::LatLon> {
-    // `cast` rather than `extract`: a miss here is the common case for the tuple
-    // form, and only `cast` misses without building an exception.
-    if let Ok(p) = point.cast::<LatLon>() {
-        return Ok(p.get().inner);
-    }
-    if let Ok(p) = point.cast::<Geodetic>() {
-        return Ok(p.get().inner.into());
-    }
-    let (latitude_deg, longitude_deg) = point.extract::<(f64, f64)>().map_err(|_| {
-        PyTypeError::new_err(
-            "expected a LatLon, a Geodetic, or a (latitude_deg, longitude_deg) tuple",
-        )
-    })?;
-    Ok(sgp4_predict::LatLon::new(
-        Degrees(latitude_deg),
-        Degrees(longitude_deg),
-    ))
-}
-
-fn offset_deg(area: &impl Area, point: &Bound<'_, PyAny>) -> PyResult<f64> {
-    Ok(area
-        .signed_angular_offset(extract_lat_lon(point)?)
-        .degrees())
 }
