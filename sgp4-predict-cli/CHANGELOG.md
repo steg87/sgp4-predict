@@ -14,15 +14,18 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 ### Added
 
 - `ground-track`, sampling the geodetic point directly beneath the satellite at `--step`.
-- `aoi-windows`, finding the windows in which the ground track lies inside an area of interest,
+- `aoi-windows`, finding the windows in which an area of interest is within the payload's reach,
   reporting the sub-satellite point at each boundary crossing. The AOI is named by `--aoi <id>`.
+  `--max-off-nadir <deg>` is the half-angle of the satellite's field of regard, defaulting to 0 —
+  the ground track itself crossing the area — and `--coverage full` requires every part of the area
+  to be in reach at once rather than any part of it.
 - An `aois:` map in the config file, alongside `groundstations:`. Each AOI is tagged with its
-  `shape` — `box`, `ellipse`, `circle`, or `polygon` — and given as named fields; everything is in
+  `shape` — `box`, `circle`, or `polygon` — and given as named fields; everything is in
   degrees. A `box` is its four bounds (`south`, `north`, `west`, `east`), running eastward from
-  `west` so that an `east` at a smaller longitude wraps the antimeridian. An `ellipse` is its centre,
-  `semi_axis_a` along `bearing` and `semi_axis_b` across it, either of which may be the longer.
+  `west` so that an `east` at a smaller longitude wraps the antimeridian. A `circle` is its centre
+  and `radius`.
 - `aoi add|remove|list` (aliases `rm`, `ls`) to manage those AOIs. `aoi add` prompts field by field
-  like `gs add`, accepting each shape name's initial (`b`/`e`/`c`/`p`), and reads polygon vertices
+  like `gs add`, accepting each shape name's initial (`b`/`c`/`p`), and reads polygon vertices
   one per line until a blank line. The id and `--shape` may be given as arguments; coordinates never
   are. Geometry the library cannot build is refused before anything is written.
 - `gs add` accepts the station id as an argument, and `-f` / `--force` to replace an existing

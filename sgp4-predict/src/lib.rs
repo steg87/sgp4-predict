@@ -152,8 +152,8 @@ pub use sgp4::{Classification, Elements};
 pub use crate::{
     angle::{Degrees, Radians},
     aoi::{
-        AoiIter, AoiIterOpts, AoiWindow, Area, Ellipse, Error as AoiError, FillRule, Polygon,
-        Rectangle,
+        AoiIter, AoiIterOpts, AoiWindow, Area, Circle, Coverage, Error as AoiError, FillRule,
+        Polygon, Rectangle,
     },
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
     detect::Error as DetectError,

@@ -15,7 +15,7 @@ use super::{confirm, echo, prompt, prompt_f64, prompt_retry};
 use crate::{
     aoi::AoiShape,
     cli::{AoiAddArgs, AoiCommand, AoiListArgs, AoiRemoveArgs, Shape},
-    config::{self, AoiDef, BoxDef, CircleDef, Config, EllipseDef, PolygonDef, Vertex},
+    config::{self, AoiDef, BoxDef, CircleDef, Config, PolygonDef, Vertex},
     output,
 };
 
@@ -91,12 +91,11 @@ fn prompt_shape(lines: &mut Lines) -> anyhow::Result<Shape> {
     prompt_retry(lines, &shape_label(), |input| {
         match input.to_ascii_lowercase().as_str() {
             "b" | "box" => Ok(Shape::Box),
-            "e" | "ellipse" => Ok(Shape::Ellipse),
             "c" | "circle" => Ok(Shape::Circle),
             "p" | "poly" | "polygon" => Ok(Shape::Polygon),
-            other => anyhow::bail!(
-                "unknown shape '{other}'; expected box, ellipse, circle or polygon (or b/e/c/p)"
-            ),
+            other => {
+                anyhow::bail!("unknown shape '{other}'; expected box, circle or polygon (or b/c/p)")
+            }
         }
     })
 }
@@ -106,7 +105,6 @@ fn prompt_shape(lines: &mut Lines) -> anyhow::Result<Shape> {
 fn prompt_definition(lines: &mut Lines, shape: Shape) -> anyhow::Result<AoiDef> {
     Ok(match shape {
         Shape::Box => prompt_box(lines)?,
-        Shape::Ellipse => prompt_ellipse(lines)?,
         Shape::Circle => AoiDef::Circle(CircleDef {
             latitude: prompt_latitude(lines, "Centre latitude (degrees)")?,
             longitude: prompt_f64(lines, "Centre longitude (degrees)", None)?,
@@ -121,9 +119,8 @@ fn prompt_definition(lines: &mut Lines, shape: Shape) -> anyhow::Result<AoiDef> 
 /// The shape prompt's label, also used when echoing a `--shape` flag.
 fn shape_label() -> String {
     format!(
-        "Shape ({}, {}, {}, {})",
+        "Shape ({}, {}, {})",
         initial("box"),
-        initial("ellipse"),
         initial("circle"),
         initial("polygon"),
     )
@@ -188,41 +185,6 @@ fn prompt_box(lines: &mut Lines) -> anyhow::Result<AoiDef> {
         north,
         west,
         east,
-    }))
-}
-
-/// Ask for an ellipse, **bearing first**.
-///
-/// The semi-axes are not latitude and longitude extents, and neither has to be
-/// the longer. Asking for the bearing first means the two can be described as
-/// along and across it, rather than leaving the reader to work out which is
-/// which.
-fn prompt_ellipse(lines: &mut Lines) -> anyhow::Result<AoiDef> {
-    let latitude = prompt_latitude(lines, "Centre latitude (degrees)")?;
-    let longitude = prompt_f64(lines, "Centre longitude (degrees)", None)?;
-    let bearing = prompt_f64(
-        lines,
-        "Bearing of semi-axis A, degrees clockwise from north (0 = north-south)",
-        Some(0.0),
-    )?;
-
-    let semi_axis_a = prompt_bounded(
-        lines,
-        "Semi-axis A, half the extent ALONG that bearing (degrees)",
-        90.0,
-    )?;
-    let semi_axis_b = prompt_bounded(
-        lines,
-        "Semi-axis B, half the extent ACROSS it (degrees)",
-        90.0,
-    )?;
-
-    Ok(AoiDef::Ellipse(EllipseDef {
-        latitude,
-        longitude,
-        semi_axis_a,
-        semi_axis_b,
-        bearing,
     }))
 }
 
@@ -346,16 +308,13 @@ fn summarise(shape: &AoiShape) -> String {
                 deg(west)
             )
         }
-        AoiShape::Ellipse(e) => {
-            let centre = e.centre();
-            let (a, b) = e.semi_axes();
+        AoiShape::Circle(c) => {
+            let centre = c.centre();
             format!(
-                "centred {},{}, {} by {} at bearing {}",
+                "centred {},{}, radius {}",
                 deg(centre.latitude),
                 deg(centre.longitude),
-                deg(a),
-                deg(b),
-                deg(e.bearing())
+                deg(c.radius())
             )
         }
         AoiShape::Polygon(p) => format!("{} vertices", p.vertices().len()),

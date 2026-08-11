@@ -2,8 +2,8 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
-    AoiIterOpts, Area, Degrees, DetectError, Ellipse, Error, FillRule, LatLon, Polygon, Predictor,
-    Rectangle, Refinement,
+    AoiIterOpts, Area, Circle, Coverage, Degrees, DetectError, Error, FillRule, LatLon, Polygon,
+    Predictor, Rectangle, Refinement,
 };
 
 /// A ~6° × 7° box over Scotland — small enough that overpasses are short and
@@ -67,11 +67,21 @@ fn dense_scan(
     interval: std::ops::Range<DateTime<Utc>>,
     step: Duration,
 ) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+    dense_scan_with(interval, step, |t| inside(p, area, t))
+}
+
+/// The same brute-force scan over an arbitrary predicate, for the cases where
+/// "inside" means more than the offset's sign.
+fn dense_scan_with(
+    interval: std::ops::Range<DateTime<Utc>>,
+    step: Duration,
+    inside: impl Fn(DateTime<Utc>) -> bool,
+) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
     let mut windows = Vec::new();
     let mut open: Option<DateTime<Utc>> = None;
     let mut t = interval.start;
     while t < interval.end {
-        match (inside(p, area, t), open) {
+        match (inside(t), open) {
             (true, None) => open = Some(t),
             (false, Some(start)) => {
                 windows.push((start, t));
@@ -561,41 +571,10 @@ fn test_rectangle_honours_its_latitude_bounds_where_a_polygon_does_not() {
     );
 }
 
-/// An eccentric ellipse is the case where `signed_angular_offset` reports well
-/// under the true distance to the boundary, so this is the check that the
-/// under-estimate still never lets the scan step over a crossing.
-#[test]
-fn test_ellipse_matches_dense_scan() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
-    let area = Ellipse::new(
-        LatLon {
-            latitude: Degrees(52.0),
-            longitude: Degrees(10.0),
-        },
-        Degrees(14.0),
-        Degrees(4.0),
-        Degrees(60.0),
-    )
-    .expect("valid ellipse");
-
-    let adaptive = p
-        .aoi_iter(&area, day())
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    let dense = dense_scan(&p, &area, day(), Duration::seconds(1));
-
-    assert!(!adaptive.is_empty());
-    assert_eq!(adaptive.len(), dense.len(), "adaptive and dense disagree");
-    for (a, (start, end)) in adaptive.iter().zip(&dense) {
-        assert!((a.start - *start).num_milliseconds().abs() <= 1_000);
-        assert!((a.end - *end).num_milliseconds().abs() <= 1_000);
-    }
-}
-
 #[test]
 fn test_circle_matches_dense_scan() {
     let p = Predictor::from_tle(common::create_tle()).unwrap();
-    let area = Ellipse::circle(
+    let area = Circle::new(
         LatLon {
             latitude: Degrees(52.0),
             longitude: Degrees(10.0),
@@ -616,29 +595,6 @@ fn test_circle_matches_dense_scan() {
         assert!((a.start - *start).num_milliseconds().abs() <= 1_000);
         assert!((a.end - *end).num_milliseconds().abs() <= 1_000);
     }
-}
-
-/// Rotating the major axis changes which overpasses are caught, so the bearing
-/// reaches the detection path and is not merely stored.
-#[test]
-fn test_ellipse_bearing_changes_the_windows() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
-    let centre = LatLon {
-        latitude: Degrees(52.0),
-        longitude: Degrees(10.0),
-    };
-    let windows = |bearing: f64| {
-        let area = Ellipse::new(centre, Degrees(20.0), Degrees(3.0), Degrees(bearing))
-            .expect("valid ellipse");
-        p.aoi_iter(&area, day())
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
-            .iter()
-            .map(|w| (w.end - w.start).num_seconds())
-            .sum::<i64>()
-    };
-
-    assert_ne!(windows(0.0), windows(90.0));
 }
 
 #[test]
@@ -662,5 +618,154 @@ fn test_ground_track_iter_matches_sub_point() {
             "altitude {} m is not a plausible Sentinel-2C orbit",
             point.altitude
         );
+    }
+}
+
+fn off_nadir(degrees: f64, coverage: Coverage) -> AoiIterOpts {
+    AoiIterOpts {
+        max_off_nadir: Degrees(degrees).into(),
+        coverage,
+        ..AoiIterOpts::default()
+    }
+}
+
+fn windows(
+    p: &Predictor,
+    area: &impl Area,
+    opts: AoiIterOpts,
+) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+    p.aoi_iter_with_opts(area, day(), opts, Refinement::default())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .into_iter()
+        .map(|w| (w.start, w.end))
+        .collect()
+}
+
+/// The default is nadir-only, which is what makes the field of regard additive
+/// rather than a change in behaviour.
+#[test]
+fn test_zero_off_nadir_matches_the_default() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = europe();
+
+    assert_eq!(
+        windows(&p, &area, AoiIterOpts::default()),
+        windows(&p, &area, off_nadir(0.0, Coverage::Any)),
+    );
+}
+
+/// A wider field of regard reaches the area sooner and holds it longer, so
+/// each nadir-only window must sit inside a wider one.
+#[test]
+fn test_wider_field_of_regard_contains_the_nadir_windows() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = europe();
+
+    let nadir = windows(&p, &area, AoiIterOpts::default());
+    let wide = windows(&p, &area, off_nadir(30.0, Coverage::Any));
+
+    assert!(!nadir.is_empty());
+    for (start, end) in &nadir {
+        assert!(
+            wide.iter().any(|(s, e)| s <= start && e >= end),
+            "nadir window {start}..{end} is not contained in any 30° window"
+        );
+    }
+    let span = |ws: &[(DateTime<Utc>, DateTime<Utc>)]| {
+        ws.iter().map(|(s, e)| (*e - *s).num_seconds()).sum::<i64>()
+    };
+    assert!(span(&wide) > span(&nadir), "a 30° cone must see more");
+}
+
+/// The reach is the whole point: an area the ground track never enters is
+/// still accessible from a wide enough field of regard.
+#[test]
+fn test_area_the_ground_track_misses_is_still_reachable() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    // Placed off the ground track, inside a 30° field of regard but outside a
+    // 5° one.
+    let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(1.0)).expect("valid circle");
+
+    let narrow = windows(&p, &area, off_nadir(5.0, Coverage::Any));
+    let wide = windows(&p, &area, off_nadir(45.0, Coverage::Any));
+
+    assert!(
+        wide.len() > narrow.len(),
+        "a wider cone must find more windows"
+    );
+}
+
+/// Requiring the whole area is strictly harder than requiring part of it.
+#[test]
+fn test_full_coverage_is_contained_in_any_coverage() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(2.0)).expect("valid circle");
+
+    let any = windows(&p, &area, off_nadir(45.0, Coverage::Any));
+    let full = windows(&p, &area, off_nadir(45.0, Coverage::Full));
+
+    assert!(!full.is_empty(), "the area should fit inside a 45° cone");
+    for (start, end) in &full {
+        assert!(
+            any.iter().any(|(s, e)| s <= start && e >= end),
+            "full-coverage window {start}..{end} escapes every any-coverage window"
+        );
+    }
+}
+
+/// An area wider than the field of regard can never be covered entirely, even
+/// while parts of it are always in reach.
+#[test]
+fn test_area_wider_than_the_cone_is_never_fully_covered() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(30.0)).expect("valid circle");
+
+    assert!(!windows(&p, &area, off_nadir(10.0, Coverage::Any)).is_empty());
+    assert!(
+        windows(&p, &area, off_nadir(10.0, Coverage::Full)).is_empty(),
+        "a 60°-wide area cannot fit inside a 10° field of regard"
+    );
+}
+
+/// The adaptive scan's no-skip guarantee has to survive the shifted threshold,
+/// so cross-check it against a brute-force scan as the nadir-only path is.
+#[test]
+fn test_off_nadir_matches_dense_scan() {
+    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(4.0)).expect("valid circle");
+    let opts = off_nadir(30.0, Coverage::Any);
+
+    let adaptive = windows(&p, &area, opts);
+    let dense = dense_scan_with(day(), Duration::seconds(1), |t| {
+        let point = p.sub_point(t).expect("propagation failed");
+        // Mirrors `AreaInView`, whose internals are private to the crate.
+        let reach = reach_at(&p, t, 30.0);
+        area.signed_angular_offset(point.into()).to_f64() + reach >= 0.0
+    });
+
+    assert!(!adaptive.is_empty());
+    assert_eq!(adaptive.len(), dense.len(), "adaptive and dense disagree");
+    for ((a_start, a_end), (start, end)) in adaptive.iter().zip(&dense) {
+        assert!((*a_start - *start).num_milliseconds().abs() <= 1_000);
+        assert!((*a_end - *end).num_milliseconds().abs() <= 1_000);
+    }
+}
+
+/// The central angle a payload at `off_nadir_deg` reaches, recomputed from the
+/// propagated state so the test shares no code with the implementation.
+fn reach_at(p: &Predictor, t: DateTime<Utc>, off_nadir_deg: f64) -> f64 {
+    let point = p.sub_point(t).expect("propagation failed");
+    let state = p.propagate(t).expect("propagation failed").to_ecef(t);
+    let pos = state.position;
+    let r = (pos.x * pos.x + pos.y * pos.y + pos.z * pos.z).sqrt();
+    let re = r - point.altitude;
+    let eta = Degrees(off_nadir_deg).radians();
+    let horizon = (re / r).acos();
+    let s = (r / re) * eta.sin();
+    if s >= 1.0 {
+        horizon
+    } else {
+        (s.asin() - eta).min(horizon)
     }
 }

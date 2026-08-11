@@ -11,7 +11,7 @@ mod tle;
 mod types;
 mod vectors;
 
-use area::{Ellipse, FillRule, Geodetic, LatLon, Polygon, Rectangle};
+use area::{Circle, Coverage, FillRule, Geodetic, LatLon, Polygon, Rectangle};
 use elements::{Classification, Elements};
 use observer::GroundObserver;
 use predictor::{
@@ -49,7 +49,8 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FillRule>()?;
     m.add_class::<Polygon>()?;
     m.add_class::<Rectangle>()?;
-    m.add_class::<Ellipse>()?;
+    m.add_class::<Circle>()?;
+    m.add_class::<Coverage>()?;
     m.add_class::<AoiWindow>()?;
     m.add_class::<Predictor>()?;
     m.add_class::<PredictionIter>()?;

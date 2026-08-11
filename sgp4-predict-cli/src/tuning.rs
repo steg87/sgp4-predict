@@ -11,7 +11,8 @@ use crate::cli::{
     AoiTuningArgs, ApsisTuningArgs, IlluminationTuningArgs, RefinementArgs, TransitTuningArgs,
 };
 use sgp4_predict::{
-    AoiIterOpts, ApsisIterOpts, IlluminationIterOpts, MaxElevationOpts, Refinement, TransitIterOpts,
+    AoiIterOpts, ApsisIterOpts, Degrees, IlluminationIterOpts, MaxElevationOpts, Refinement,
+    TransitIterOpts,
 };
 
 /// One `# key: value` line of the `--output-args` header.
@@ -84,6 +85,8 @@ impl TransitTuningArgs {
 impl AoiTuningArgs {
     pub fn build(&self) -> anyhow::Result<AoiIterOpts> {
         Ok(AoiIterOpts {
+            max_off_nadir: Degrees(self.max_off_nadir).into(),
+            coverage: self.coverage.into(),
             min_step: chrono(self.min_step, "min-step")?,
             max_step: chrono(self.max_step, "max-step")?,
             walk_step: chrono(self.walk_step, "walk-step")?,
@@ -95,6 +98,8 @@ impl AoiTuningArgs {
 
     pub fn header_pairs(&self) -> Vec<HeaderPair> {
         vec![
+            ("max-off-nadir", self.max_off_nadir.to_string()),
+            ("coverage", format!("{:?}", self.coverage).to_lowercase()),
             ("min-step", duration_str(self.min_step)),
             ("max-step", duration_str(self.max_step)),
             ("walk-step", duration_str(self.walk_step)),
@@ -186,6 +191,8 @@ mod tests {
     fn test_aoi_defaults_match_the_library() {
         let args: AoiWindowsArgs = parse(&["--aoi", "x"]);
         let (opts, want) = (args.tuning.build().unwrap(), AoiIterOpts::default());
+        assert_eq!(opts.max_off_nadir, want.max_off_nadir);
+        assert_eq!(opts.coverage, want.coverage);
         assert_eq!(opts.min_step, want.min_step);
         assert_eq!(opts.max_step, want.max_step);
         assert_eq!(opts.walk_step, want.walk_step);
@@ -234,8 +241,14 @@ mod tests {
             "6h",
             "--clamp-to-interval",
             "true",
+            "--max-off-nadir",
+            "30",
+            "--coverage",
+            "full",
         ]);
         let opts = args.tuning.build().unwrap();
+        assert_eq!(opts.max_off_nadir, Degrees(30.0).into());
+        assert_eq!(opts.coverage, sgp4_predict::Coverage::Full);
         assert_eq!(opts.min_step, chrono::Duration::milliseconds(250));
         assert_eq!(opts.max_window_duration, chrono::Duration::hours(6));
         assert!(opts.clamp_to_interval);

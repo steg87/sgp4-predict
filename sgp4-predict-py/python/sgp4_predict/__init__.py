@@ -9,7 +9,8 @@ from sgp4_predict._sgp4_predict import (
     ApsisIter,
     Classification,
     Elements,
-    Ellipse,
+    Circle,
+    Coverage,
     FillRule,
     Geodetic,
     GroundObserver,
@@ -35,7 +36,7 @@ from sgp4_predict._sgp4_predict import (
 )
 
 #: A region on the ground, accepted by `Predictor.aoi_iter` and `detect_aoi`.
-Area = Union[Polygon, Rectangle, Ellipse]
+Area = Union[Polygon, Rectangle, Circle]
 
 #: Anywhere a point is taken, a `(latitude_deg, longitude_deg)` tuple works too.
 LatLonLike = Union[LatLon, Geodetic, tuple[float, float]]
@@ -78,7 +79,8 @@ __all__ = [
     "Area",
     "Classification",
     "Elements",
-    "Ellipse",
+    "Circle",
+    "Coverage",
     "FillRule",
     "Geodetic",
     "GroundObserver",

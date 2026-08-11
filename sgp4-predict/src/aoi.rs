@@ -1,17 +1,21 @@
-//! Area-of-interest detection: when is the satellite's ground track inside a
-//! region on Earth's surface?
+//! Area-of-interest detection: when can the satellite reach a region on
+//! Earth's surface?
 //!
-//! [`AoiIter`] yields the [`AoiWindow`]s during which the satellite's ground
-//! point lies inside an [`Area`]. It is a thin wrapper over the generic
+//! [`AoiIter`] yields the [`AoiWindow`]s during which an [`Area`] lies within
+//! the payload's reach. It is a thin wrapper over the generic
 //! [`WindowIter`](crate::WindowIter), like [`TransitIter`](crate::TransitIter):
 //! the event function is a signed angular offset from the area's boundary, and
 //! the windows are where it is positive.
 //!
+//! Reach is set by [`AoiIterOpts::max_off_nadir`], the half-angle of the
+//! satellite's field of regard. It defaults to zero, which detects the ground
+//! track itself crossing into the area. [`AoiIterOpts::coverage`] chooses
+//! whether any part of the area or all of it must be within reach.
+//!
 //! [`Polygon`] is the general shape — an arbitrary ring of latitude/longitude
 //! vertices, which may be concave or self-intersecting. [`Rectangle`] is a
-//! plain latitude/longitude box, and [`Ellipse`] covers circular footprints
-//! and oriented elliptical ones. Implement [`Area`] on your own type for
-//! shapes this crate does not provide.
+//! plain latitude/longitude box, and [`Circle`] a spherical cap. Implement
+//! [`Area`] on your own type for shapes this crate does not provide.
 //!
 //! An [`AoiWindow`] implements [`IntervalRange`], so it can be passed directly
 //! to [`Predictor::prediction_iter`] or [`Predictor::observation_iter`] to
@@ -72,9 +76,9 @@ const ON_BOUNDARY: f64 = 1e-15;
 /// ~6.6 km of track. Only a zero or negative step has to be excluded.
 const MIN_AOI_STEP: Duration = Duration::milliseconds(1);
 
-/// A region on Earth's surface that a ground track can pass over.
+/// A region on Earth's surface a satellite can be tasked against.
 ///
-/// Implemented here by [`Polygon`], [`Rectangle`] and [`Ellipse`]. Implement
+/// Implemented here by [`Polygon`], [`Rectangle`] and [`Circle`]. Implement
 /// it on your own type to detect windows over a shape this crate does not
 /// provide.
 pub trait Area {
@@ -86,12 +90,45 @@ pub trait Area {
     /// bound to guarantee it cannot step over a crossing. It is deliberately
     /// **not** required to equal that distance, nor to be continuous — only
     /// the sign and the bound matter.
+    ///
+    /// A non-zero [`AoiIterOpts::max_off_nadir`] compares the magnitude
+    /// against the field of regard rather than against zero, so how tight the
+    /// bound is sets how precise the window edges are. All three built-in
+    /// areas report the exact distance.
     fn signed_angular_offset(&self, point: LatLon) -> Radians;
+
+    /// Angular distance from `point` to the *farthest* point of this area, in
+    /// radians.
+    ///
+    /// The mirror of [`signed_angular_offset`](Area::signed_angular_offset)'s
+    /// contract: this must never fall *below* the true distance, and must not
+    /// change faster than `point` moves. Only [`Coverage::Full`] reads it, and
+    /// an over-estimate costs coverage windows rather than the step guarantee.
+    ///
+    /// The supplied implementation needs no override for an area whose
+    /// `signed_angular_offset` is exact and continuous, which all three
+    /// built-ins are. It works because the farthest point of the area from
+    /// `point` is the nearest one to `point`'s antipode: `π − d(antipode)`.
+    /// An area that under-reports its offset inherits an over-estimate here,
+    /// which is the safe direction.
+    fn max_angular_distance(&self, point: LatLon) -> Radians {
+        let antipode = LatLon::new(
+            Degrees(-point.latitude.to_f64()),
+            Degrees(point.longitude.to_f64() + 180.0),
+        );
+        // A positive offset puts the antipode inside the area, so the area
+        // reaches all the way round and the farthest point is a full π away.
+        Radians(PI + self.signed_angular_offset(antipode).to_f64().min(0.0))
+    }
 }
 
 impl<A: Area + ?Sized> Area for &A {
     fn signed_angular_offset(&self, point: LatLon) -> Radians {
         (**self).signed_angular_offset(point)
+    }
+
+    fn max_angular_distance(&self, point: LatLon) -> Radians {
+        (**self).max_angular_distance(point)
     }
 }
 
@@ -271,15 +308,12 @@ impl Area for Polygon {
     fn signed_angular_offset(&self, point: LatLon) -> Radians {
         let p = unit_from_lat_lon(point);
 
-        // Outside the bounding cap. This branch is a correctness gate as much
-        // as a fast path: `winding` is only valid once the antipode is known
-        // to be outside the region, which the cap guarantees. The result is a
-        // lower bound on the true distance, which is all `Area` promises, and
-        // it is strictly negative so it can never be mistaken for "inside".
-        let from_axis = angle_between(self.cap_axis, p);
-        if from_axis > self.cap_radius + COINCIDENT {
-            return Radians(-(from_axis - self.cap_radius));
-        }
+        // The bounding cap settles the sign on its own: `winding` is valid
+        // only once the antipode is known to be outside the region, which is
+        // exactly what containment in the cap guarantees. The magnitude still
+        // comes from the edge loop below, so it is the true distance either
+        // way.
+        let outside_cap = angle_between(self.cap_axis, p) > self.cap_radius + COINCIDENT;
 
         let mut d = f64::INFINITY;
         for ((&a, &b), &n) in self
@@ -299,6 +333,10 @@ impl Area for Polygon {
             if dot(cross(a, foot), n) >= 0.0 && dot(cross(foot, b), n) >= 0.0 {
                 d = d.min(pn.abs().clamp(0.0, 1.0).asin());
             }
+        }
+
+        if outside_cap {
+            return Radians(-d);
         }
 
         // On the boundary. Returning early also keeps `winding` away from the
@@ -529,191 +567,81 @@ impl Area for Rectangle {
     }
 }
 
-/// An ellipse on Earth's surface.
+/// A circular area on Earth's surface — a spherical cap.
 ///
-/// The set of points whose great-circle distances to two foci sum to at most
-/// twice the semi-major axis — the spherical reading of the planar definition.
-/// A [`circle`](Ellipse::circle) is the case where the two foci coincide.
-///
-/// The bearing aims `semi_axis_a`, and `semi_axis_b` is a quarter turn from it.
-/// Either may be the longer — whichever it is becomes the major axis — so a
-/// wider-than-long area is just a larger `semi_axis_b`, with no bearing to work
-/// out.
-///
-/// Semi-axes are **angular**, like every other measurement here. A degree of
-/// arc is about 111.2 km on the ground, so a 300 km semi-axis is roughly
-/// `Degrees(2.7)`.
+/// The radius is **angular**, like every other measurement here. A degree of
+/// arc is about 111.2 km on the ground, so a 250 km radius is roughly
+/// `Degrees(2.25)`.
 ///
 /// # Examples
 ///
 /// ```
-/// use sgp4_predict::{Degrees, Ellipse, LatLon};
-///
-/// // Roughly 300 km by 120 km, major axis pointing north-east.
-/// let north_sea = Ellipse::new(
-///     LatLon { latitude: Degrees(56.0), longitude: Degrees(2.0) },
-///     Degrees(2.7),
-///     Degrees(1.1),
-///     Degrees(45.0),
-/// )?;
-///
-/// // The same area, described the other way round.
-/// let same = Ellipse::new(
-///     LatLon { latitude: Degrees(56.0), longitude: Degrees(2.0) },
-///     Degrees(1.1),
-///     Degrees(2.7),
-///     Degrees(135.0),
-/// )?;
+/// use sgp4_predict::{Circle, Degrees, LatLon};
 ///
 /// // A circular area 500 km across.
-/// let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
+/// let cape_town = Circle::new(
+///     LatLon { latitude: Degrees(-33.9), longitude: Degrees(18.4) },
+///     Degrees(2.25),
+/// )?;
+///
+/// // `(latitude, longitude)` tuples convert too.
+/// let north_sea = Circle::new((Degrees(56.0), Degrees(2.0)), Degrees(2.7))?;
 /// # Ok::<(), sgp4_predict::Error>(())
 /// ```
 ///
-/// `==` compares the fields, not the region: the two ellipses above cover the
-/// same ground but compare unequal, as do two circles with different bearings,
-/// even though the bearing means nothing when the semi-axes are equal.
+/// For an elongated or oriented region, use a [`Polygon`].
 #[derive(Debug, Clone, PartialEq)]
-pub struct Ellipse {
+pub struct Circle {
     centre: [f64; 3],
-    /// Both equal to `centre` when the ellipse is a circle.
-    foci: [[f64; 3]; 2],
-    semi_axis_a: f64,
-    semi_axis_b: f64,
-    /// Normalized into `[0, 2π)`.
-    bearing: f64,
+    /// Angular radius, in `(0, π/2)`.
+    radius: f64,
 }
 
-impl Ellipse {
-    /// Build an ellipse from its centre, semi-axes, and the bearing of
-    /// `semi_axis_a` — degrees clockwise from north, so `0` aims it at the pole
-    /// and `90` aims it east. `semi_axis_b` is a quarter turn from that, and
-    /// either axis may be the longer.
-    ///
-    /// At a pole, where north is undefined, the bearing is measured from the
-    /// direction of the prime meridian instead.
+impl Circle {
+    /// Build a circular area from its centre and angular radius.
     ///
     /// # Errors
     ///
     /// - [`Error::Latitude`] if the centre's latitude is outside `[-90, 90]`.
-    /// - [`Error::NotFinite`] if the centre's longitude, either semi-axis, or
-    ///   the bearing is NaN or infinite. Longitude and bearing are themselves
-    ///   unbounded — they wrap — so only finiteness is checked.
-    /// - [`Error::EllipseAxes`] unless both semi-axes are in `(0, 90°)`.
-    pub fn new(
-        centre: impl Into<LatLon>,
-        semi_axis_a: Degrees,
-        semi_axis_b: Degrees,
-        bearing: Degrees,
-    ) -> Result<Self> {
+    /// - [`Error::NotFinite`] if the centre's longitude or the radius is NaN
+    ///   or infinite. Longitude itself is unbounded — it wraps — so only
+    ///   finiteness is checked.
+    /// - [`Error::CircleRadius`] unless the radius is in `(0, 90°)`.
+    pub fn new(centre: impl Into<LatLon>, radius: Degrees) -> Result<Self> {
         let centre = centre.into();
         checked_latitude(centre.latitude)?;
-        checked_angle(centre.longitude, "ellipse centre longitude")?;
-        let bearing_rad = checked_angle(bearing, "ellipse bearing")?;
+        checked_angle(centre.longitude, "circle centre longitude")?;
 
-        let (a, b) = (
-            checked_angle(semi_axis_a, "ellipse semi-axis a")?,
-            checked_angle(semi_axis_b, "ellipse semi-axis b")?,
-        );
-        if !(a > 0.0 && b > 0.0 && a.max(b) < FRAC_PI_2 - COINCIDENT) {
-            return Err(Error::EllipseAxes {
-                semi_axis_a_deg: semi_axis_a.to_f64(),
-                semi_axis_b_deg: semi_axis_b.to_f64(),
+        let r = checked_angle(radius, "circle radius")?;
+        if !(r > 0.0 && r < FRAC_PI_2 - COINCIDENT) {
+            return Err(Error::CircleRadius {
+                radius_deg: radius.to_f64(),
             }
             .into());
         }
 
-        // The foci lie on the longer axis, so a longer `b` puts them a quarter
-        // turn off the bearing.
-        let (major, minor, direction) = if b > a {
-            (b, a, bearing_rad + FRAC_PI_2)
-        } else {
-            (a, b, bearing_rad)
-        };
-
-        // Half the focal separation, from the spherical right triangle joining
-        // the centre, one focus and a minor-axis endpoint: `cos a = cos b cos c`.
-        // The endpoint is `a` from each focus, since the two distances there
-        // are equal and sum to `2a`.
-        let c = (major.cos() / minor.cos()).clamp(-1.0, 1.0).acos();
-
-        let centre = unit_from_lat_lon(centre);
-        let (north, east) = local_frame(centre);
-        let (sin_brg, cos_brg) = direction.sin_cos();
-        let major_axis = [
-            north[0] * cos_brg + east[0] * sin_brg,
-            north[1] * cos_brg + east[1] * sin_brg,
-            north[2] * cos_brg + east[2] * sin_brg,
-        ];
-        let (sin_c, cos_c) = c.sin_cos();
-        let focus = |sign: f64| {
-            [
-                centre[0] * cos_c + sign * major_axis[0] * sin_c,
-                centre[1] * cos_c + sign * major_axis[1] * sin_c,
-                centre[2] * cos_c + sign * major_axis[2] * sin_c,
-            ]
-        };
-
         Ok(Self {
-            centre,
-            foci: [focus(1.0), focus(-1.0)],
-            semi_axis_a: a,
-            semi_axis_b: b,
-            bearing: bearing.normalized().radians(),
+            centre: unit_from_lat_lon(centre),
+            radius: r,
         })
     }
 
-    /// Build a circular area of angular `radius` — a spherical cap.
-    ///
-    /// # Errors
-    ///
-    /// As [`Ellipse::new`]: the radius must be positive and under 90°.
-    pub fn circle(centre: impl Into<LatLon>, radius: Degrees) -> Result<Self> {
-        Self::new(centre, radius, radius, Degrees(0.0))
-    }
-
-    /// The ellipse's centre.
+    /// The circle's centre.
     #[must_use]
     pub fn centre(&self) -> LatLon {
         lat_lon_from_unit(self.centre)
     }
 
-    /// The two semi-axes, as angles, in the order they were given.
+    /// The circle's angular radius.
     #[must_use]
-    pub fn semi_axes(&self) -> (Degrees, Degrees) {
-        (
-            Radians(self.semi_axis_a).to_degrees(),
-            Radians(self.semi_axis_b).to_degrees(),
-        )
-    }
-
-    /// Bearing of `semi_axis_a`, degrees clockwise from north.
-    #[must_use]
-    pub fn bearing(&self) -> Degrees {
-        Radians(self.bearing).to_degrees()
-    }
-
-    /// The two foci, which coincide with the centre when the ellipse is a
-    /// circle.
-    #[must_use]
-    pub fn foci(&self) -> (LatLon, LatLon) {
-        (
-            lat_lon_from_unit(self.foci[0]),
-            lat_lon_from_unit(self.foci[1]),
-        )
+    pub fn radius(&self) -> Degrees {
+        Radians(self.radius).to_degrees()
     }
 }
 
-impl Area for Ellipse {
+impl Area for Circle {
     fn signed_angular_offset(&self, point: LatLon) -> Radians {
-        let p = unit_from_lat_lon(point);
-        let sum = angle_between(self.foci[0], p) + angle_between(self.foci[1], p);
-
-        // Each distance to a focus is 1-Lipschitz along the surface, so their
-        // sum is 2-Lipschitz and half the shortfall from `2a` can never exceed
-        // the distance to the boundary — an under-estimate for an eccentric
-        // ellipse, exact for a circle, where the two terms coincide.
-        let d = self.semi_axis_a.max(self.semi_axis_b) - sum / 2.0;
+        let d = self.radius - angle_between(self.centre, unit_from_lat_lon(point));
         if d.abs() < ON_BOUNDARY {
             return Radians(0.0);
         }
@@ -759,43 +687,114 @@ impl time::TimeWindow for AoiWindow {
     }
 }
 
-/// Event function: the ground track's signed angular offset from the area's
-/// boundary. Positive inside, so the windows where it is positive are the
-/// overpasses.
+/// Whether any part of an [`Area`], or all of it, must be within reach for a
+/// window to be open.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Coverage {
+    /// Any part of the area is within reach. The window opens as the nearest
+    /// part of the area enters the field of regard and closes as the last part
+    /// leaves.
+    #[default]
+    Any,
+    /// Every part of the area is within reach at once.
+    ///
+    /// This is not the same as "one image covers the area" — that depends on
+    /// the instantaneous field of view, and an area wider than a single swath
+    /// has to be broken into strips, which is outside this crate's scope.
+    Full,
+}
+
+/// Central angle from the sub-satellite point to the farthest ground point a
+/// payload slewed to `max_off_nadir` can reach, for a satellite at geocentric
+/// radius `r` over local Earth radius `re`.
+///
+/// The standard coverage relation, from the triangle joining Earth's centre,
+/// the satellite and the target. Monotone in `max_off_nadir`, and clamped at
+/// the horizon — which is also the implicit line-of-sight check, since a cone
+/// wider than the horizon reaches no further than it.
+fn max_central_angle(max_off_nadir: f64, r: f64, re: f64) -> f64 {
+    let horizon = (re / r).clamp(-1.0, 1.0).acos();
+    let sin_horizon_angle = (r / re) * max_off_nadir.sin();
+    if sin_horizon_angle >= 1.0 {
+        horizon
+    } else {
+        (sin_horizon_angle.asin() - max_off_nadir).min(horizon)
+    }
+}
+
+/// Event function: the area's signed angular offset from the edge of what the
+/// payload can reach. Positive when in reach, so the windows where it is
+/// positive are the access opportunities.
 ///
 /// No rate is supplied: the offset is not differentiable across the medial
 /// axis or a vertex bisector, which is exactly the geometry that matters here,
 /// and the bracketed solver converges on the time bracket regardless.
-pub(crate) struct GroundTrackInside<'a, A: Area> {
+pub(crate) struct AreaInView<'a, A: Area> {
     predictor: Predictor,
     area: &'a A,
+    /// Clamped to `[0, π/2)` on construction.
+    max_off_nadir: f64,
+    coverage: Coverage,
 }
 
 // `A` is only ever held behind a shared reference, so a derive's `A: Debug` /
 // `A: Clone` bounds would be a false requirement on caller-supplied areas.
-impl<A: Area> fmt::Debug for GroundTrackInside<'_, A> {
+impl<A: Area> fmt::Debug for AreaInView<'_, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GroundTrackInside")
+        f.debug_struct("AreaInView")
             .field("predictor", &self.predictor)
+            .field("max_off_nadir", &self.max_off_nadir)
+            .field("coverage", &self.coverage)
             .finish_non_exhaustive()
     }
 }
 
-impl<A: Area> Clone for GroundTrackInside<'_, A> {
+impl<A: Area> Clone for AreaInView<'_, A> {
     fn clone(&self) -> Self {
         Self {
             predictor: self.predictor.clone(),
             area: self.area,
+            max_off_nadir: self.max_off_nadir,
+            coverage: self.coverage,
         }
     }
 }
 
-impl<'a, A: Area> EventFunction for GroundTrackInside<'a, A> {
+impl<'a, A: Area> AreaInView<'a, A> {
+    fn new(predictor: Predictor, area: &'a A, opts: &AoiIterOpts) -> Self {
+        Self {
+            predictor,
+            area,
+            // A negative angle is no cone at all, and at or past π/2 the sine
+            // stops growing so the relation would run backwards.
+            max_off_nadir: opts
+                .max_off_nadir
+                .to_f64()
+                .clamp(0.0, FRAC_PI_2 - COINCIDENT),
+            coverage: opts.coverage,
+        }
+    }
+}
+
+impl<'a, A: Area> EventFunction for AreaInView<'a, A> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
-        let point = self.predictor.sub_point(t)?;
+        let ecef = self.predictor.propagate(t)?.to_ecef(t);
+        let geodetic = ecef.to_geodetic();
+        let position = ecef.position;
+        let r =
+            (position.x * position.x + position.y * position.y + position.z * position.z).sqrt();
+        // `r - altitude` is the local Earth radius along the geodetic normal
+        // rather than along the radius vector; the two differ by ~3 m at LEO.
+        let reach = max_central_angle(self.max_off_nadir, r, r - geodetic.altitude);
+
+        let point = geodetic.into();
+        let value = match self.coverage {
+            Coverage::Any => self.area.signed_angular_offset(point).to_f64() + reach,
+            Coverage::Full => reach - self.area.max_angular_distance(point).to_f64(),
+        };
         Ok(Sample {
             time: t,
-            value: self.area.signed_angular_offset(point.into()).to_f64(),
+            value,
             rate: None,
         })
     }
@@ -809,6 +808,12 @@ impl<'a, A: Area> EventFunction for GroundTrackInside<'a, A> {
 /// `|value| / angular_rate` seconds. Stepping by that is therefore safe no
 /// matter how narrow the area — unlike a fixed step, which can jump clean over
 /// a short chord.
+///
+/// A non-zero `max_off_nadir` does not weaken this. Both forms the event
+/// function takes remain bounded by the distance to their own zero set: for
+/// [`Coverage::Any`] the reach shifts the boundary outward by the same amount
+/// in both signs, and for [`Coverage::Full`] the bound follows from
+/// [`Area::max_angular_distance`] changing no faster than the point moves.
 ///
 /// The `min` floor is the one exception, and the reason it exists: without it
 /// the step collapses to zero at the boundary and the scan stalls. A chord the
@@ -852,7 +857,9 @@ impl StepStrategy for ProximityStep {
 /// - `× 1/(1−e²_WGS84)` because mapping geodetic latitude onto the sphere
 ///   stretches latitude by at most that; longitude is unstretched.
 /// - `× 1.05` covers SGP4's osculating-versus-mean discrepancy and the small
-///   contribution of radial motion to geodetic latitude.
+///   contribution of radial motion to geodetic latitude. It also absorbs the
+///   drift of `max_central_angle` with altitude, which for LEO runs three
+///   orders of magnitude below the ground point's own rate.
 fn max_sub_point_rate(elements: &Elements) -> f64 {
     /// Earth's sidereal rotation rate (rad/s), WGS-84.
     const OMEGA_EARTH: f64 = 7.292_115_0e-5;
@@ -870,8 +877,22 @@ fn max_sub_point_rate(elements: &Elements) -> f64 {
 ///
 /// Pass a customised value to
 /// [`Predictor::aoi_iter_with_opts`](crate::Predictor::aoi_iter_with_opts).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AoiIterOpts {
+    /// Half-angle of the satellite's **field of regard** — the largest nadir
+    /// angle the payload can be slewed to — measured from the position vector.
+    ///
+    /// Zero, the default, detects the sub-satellite point itself crossing into
+    /// the area. Raising it opens the window as soon as the area comes within
+    /// reach of the payload, which for a 30° field of regard at ISS altitude is
+    /// about 2.2° of arc, or 245 km.
+    ///
+    /// This is a field of *regard*, not of view: it describes everything the
+    /// payload could be pointed at, not the footprint of a single image.
+    /// Clamped to `[0, 90°)`.
+    pub max_off_nadir: Radians,
+    /// Whether any part of the area or all of it must be within reach.
+    pub coverage: Coverage,
     /// Lower bound of the adaptive coarse-scan step. Also the shortest
     /// crossing the scan is guaranteed to see, so lower it for an area the
     /// ground track can cross in under a second. Floored at 1 ms.
@@ -907,6 +928,8 @@ pub struct AoiIterOpts {
 impl Default for AoiIterOpts {
     fn default() -> Self {
         Self {
+            max_off_nadir: Radians(0.0),
+            coverage: Coverage::Any,
             min_step: Duration::seconds(1),
             max_step: Duration::minutes(10),
             walk_step: Duration::seconds(5),
@@ -931,7 +954,7 @@ fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
 /// Created by [`Predictor::aoi_iter`](crate::Predictor::aoi_iter).
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct AoiIter<'a, A: Area> {
-    inner: WindowIter<GroundTrackInside<'a, A>, ProximityStep>,
+    inner: WindowIter<AreaInView<'a, A>, ProximityStep>,
 }
 
 impl<A: Area> fmt::Debug for AoiIter<'_, A> {
@@ -969,7 +992,7 @@ impl<'a, A: Area> AoiIter<'a, A> {
         };
         let mut builder = WindowIter::builder()
             .interval(interval)
-            .event_function(GroundTrackInside { predictor, area })
+            .event_function(AreaInView::new(predictor, area, &opts))
             .step(step)
             .walk_step(opts.walk_step)
             .max_window_duration(opts.max_window_duration)
@@ -1059,20 +1082,18 @@ impl Predictor {
         self.detect_aoi_with_opts(t, area, AoiIterOpts::default())
     }
 
-    /// Like [`Predictor::detect_aoi`], but with a customized walk step and max
-    /// window duration. Only [`AoiIterOpts::walk_step`] and
-    /// [`AoiIterOpts::max_window_duration`] are used — the other fields don't
-    /// apply to this single-point detection.
+    /// Like [`Predictor::detect_aoi`], but with a customized field of regard,
+    /// walk step and max window duration. Only
+    /// [`AoiIterOpts::max_off_nadir`], [`AoiIterOpts::coverage`],
+    /// [`AoiIterOpts::walk_step`] and [`AoiIterOpts::max_window_duration`] are
+    /// used — the other fields don't apply to this single-point detection.
     pub fn detect_aoi_with_opts<A: Area>(
         &self,
         t: DateTime<Utc>,
         area: &A,
         opts: AoiIterOpts,
     ) -> Result<Option<AoiWindow>> {
-        let mut f = GroundTrackInside {
-            predictor: self.clone(),
-            area,
-        };
+        let mut f = AreaInView::new(self.clone(), area, &opts);
         let window = detect::detect_window(
             &mut f,
             t,
@@ -1135,16 +1156,11 @@ pub enum Error {
         /// The northern bound, in degrees.
         north: f64,
     },
-    /// A semi-axis fell outside `(0, 90°)`.
-    #[error(
-        "ellipse semi-axes must both lie in (0, 90°), got semi_axis_a {semi_axis_a_deg}° and \
-         semi_axis_b {semi_axis_b_deg}°"
-    )]
-    EllipseAxes {
-        /// The first semi-axis, in degrees.
-        semi_axis_a_deg: f64,
-        /// The second semi-axis, in degrees.
-        semi_axis_b_deg: f64,
+    /// The radius fell outside `(0, 90°)`.
+    #[error("circle radius must lie in (0, 90°), got {radius_deg}°")]
+    CircleRadius {
+        /// The offending radius, in degrees.
+        radius_deg: f64,
     },
 }
 
@@ -1224,15 +1240,6 @@ fn meridian(lon: f64) -> Meridian {
         normal: [-sin_lon, cos_lon, 0.0],
         equator: [cos_lon, sin_lon, 0.0],
     }
-}
-
-/// North and east unit vectors at `p`. At a pole, where north is undefined,
-/// "north" points along the prime meridian instead.
-fn local_frame(p: [f64; 3]) -> ([f64; 3], [f64; 3]) {
-    let north = normalize(reject([0.0, 0.0, 1.0], p))
-        .or_else(|| normalize(reject([1.0, 0.0, 0.0], p)))
-        .expect("p cannot be parallel to both axes");
-    (north, cross(north, p))
 }
 
 fn checked_latitude(lat: Degrees) -> Result<f64> {
@@ -1610,233 +1617,69 @@ mod rectangle_tests {
 }
 
 #[cfg(test)]
-mod ellipse_tests {
+mod circle_tests {
     use super::*;
     use crate::Error;
 
-    /// Roughly 300 km by 120 km over the North Sea, major axis north-east.
-    fn north_sea() -> Ellipse {
-        Ellipse::new(
-            (Degrees(56.0), Degrees(2.0)),
-            Degrees(2.7),
-            Degrees(1.1),
-            Degrees(45.0),
-        )
-        .expect("valid ellipse")
+    fn cape_town() -> Circle {
+        Circle::new((Degrees(-33.9), Degrees(18.4)), Degrees(2.25)).expect("valid circle")
     }
 
-    /// The point `distance` away from `centre` along `bearing`, degrees
-    /// clockwise from north.
-    fn destination(centre: LatLon, distance: Degrees, bearing: Degrees) -> LatLon {
-        let c = unit_from_lat_lon(centre);
-        let (north, east) = local_frame(c);
-        let (sin_b, cos_b) = bearing.radians().sin_cos();
-        let (sin_d, cos_d) = distance.radians().sin_cos();
-        lat_lon_from_unit(
-            [0, 1, 2].map(|i| c[i] * cos_d + (north[i] * cos_b + east[i] * sin_b) * sin_d),
-        )
-    }
-
-    fn offset(e: &Ellipse, p: LatLon) -> f64 {
-        e.signed_angular_offset(p).to_f64()
-    }
-
-    /// A circle is the one case where the offset is the exact signed distance,
-    /// not merely a lower bound.
+    /// The offset is the exact signed distance to the boundary everywhere, not
+    /// merely the lower bound `Area` asks for.
     #[test]
-    fn test_circle_offset_is_the_exact_signed_distance() {
-        let centre = LatLon::new(Degrees(-33.9), Degrees(18.4));
-        let radius = Degrees(2.25);
-        let circle = Ellipse::circle(centre, radius).expect("valid circle");
-
-        let (f1, f2) = circle.foci();
-        assert!(coincident(unit_from_lat_lon(f1), unit_from_lat_lon(f2)));
+    fn test_offset_is_the_exact_signed_distance() {
+        let circle = cape_town();
+        let centre = circle.centre();
+        assert!((centre.latitude.to_f64() + 33.9).abs() < 1e-12);
+        assert!((centre.longitude.to_f64() - 18.4).abs() < 1e-12);
+        assert!((circle.radius().to_f64() - 2.25).abs() < 1e-12);
 
         let c = unit_from_lat_lon(centre);
         for p in super::geometry_tests::sphere_points(500) {
-            let truth = radius.radians() - angle_between(c, p);
+            let truth = circle.radius().radians() - angle_between(c, p);
+            let reported = circle.signed_angular_offset(lat_lon_from_unit(p)).to_f64();
             assert!(
-                (offset(&circle, lat_lon_from_unit(p)) - truth).abs() < 1e-12,
-                "circle offset should equal {truth} at {:?}",
+                (reported - truth).abs() < 1e-12,
+                "offset should equal {truth} at {:?}, got {reported}",
                 lat_lon_from_unit(p)
             );
         }
     }
 
-    /// The four axis endpoints define the ellipse, so all four must read as
-    /// exactly on the boundary.
     #[test]
-    fn test_axis_endpoints_are_on_the_boundary() {
-        let e = north_sea();
-        let centre = e.centre();
-        let (a, b) = e.semi_axes();
-        let brg = e.bearing().to_f64();
-
-        for (distance, bearing) in [
-            (a, brg),
-            (a, brg + 180.0),
-            (b, brg + 90.0),
-            (b, brg + 270.0),
-        ] {
-            let p = destination(centre, distance, Degrees(bearing));
-            assert!(
-                offset(&e, p).abs() < 1e-9,
-                "{distance:?} at bearing {bearing}° should be on the boundary, got {}",
-                offset(&e, p)
-            );
-        }
-        assert!(offset(&e, centre) > 0.0, "the centre must be inside");
-    }
-
-    /// Bearing orients the major axis: the ellipse reaches further along it
-    /// than across it.
-    #[test]
-    fn test_bearing_orients_the_major_axis() {
-        let e = north_sea();
-        let centre = e.centre();
-        // Between the two semi-axes, so inside along the major axis and
-        // outside across it.
-        let between = Degrees(1.9);
-
-        assert!(offset(&e, destination(centre, between, Degrees(45.0))) > 0.0);
-        assert!(offset(&e, destination(centre, between, Degrees(225.0))) > 0.0);
-        assert!(offset(&e, destination(centre, between, Degrees(135.0))) < 0.0);
-        assert!(offset(&e, destination(centre, between, Degrees(315.0))) < 0.0);
-    }
-
-    #[test]
-    fn test_offset_never_exceeds_true_distance() {
-        let e = north_sea();
-        let centre = e.centre();
-        let (a, b) = e.semi_axes();
-
-        // Boundary sample by bisecting the radius at each bearing: the offset
-        // is monotone in distance from the centre, so the crossing is unique.
-        let mut boundary = Vec::new();
-        for i in 0..2_000 {
-            let bearing = Degrees(360.0 * i as f64 / 2_000.0);
-            let (mut lo, mut hi) = (0.0, a.to_f64() + 1e-9);
-            for _ in 0..60 {
-                let mid = 0.5 * (lo + hi);
-                if offset(&e, destination(centre, Degrees(mid), bearing)) > 0.0 {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
-            }
-            boundary.push(unit_from_lat_lon(destination(
-                centre,
-                Degrees(0.5 * (lo + hi)),
-                bearing,
-            )));
-            assert!(
-                0.5 * (lo + hi) >= b.to_f64() - 1e-9,
-                "no boundary point may lie inside the semi-minor axis"
-            );
-        }
-
-        for p in super::geometry_tests::sphere_points(500) {
-            let ll = lat_lon_from_unit(p);
-            let reported = offset(&e, ll).abs();
-            let truth = boundary
-                .iter()
-                .map(|&q| angle_between(p, q))
-                .fold(f64::INFINITY, f64::min);
-            assert!(
-                reported <= truth + 1e-6,
-                "reported {reported} exceeds true distance {truth} at {ll:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_far_side_of_the_earth_is_far() {
-        let e = north_sea();
-        let antipode = LatLon::new(Degrees(-56.0), Degrees(-178.0));
-        assert!(offset(&e, antipode) < -3.0);
-        for (lat, lon) in [(0.0, 0.0), (56.0, 90.0), (-40.0, 2.0), (89.0, 2.0)] {
-            let v = offset(&e, LatLon::new(Degrees(lat), Degrees(lon)));
-            assert!(v < 0.0, "({lat}, {lon}) should be outside, got {v}");
-        }
-    }
-
-    /// North is undefined at a pole, so the bearing falls back to the prime
-    /// meridian. The geometry must still be well formed.
-    #[test]
-    fn test_pole_centred_ellipse() {
-        let e = Ellipse::new(
-            (Degrees(90.0), Degrees(0.0)),
-            Degrees(10.0),
-            Degrees(4.0),
-            Degrees(0.0),
-        )
-        .expect("valid ellipse");
-
-        assert!(offset(&e, LatLon::new(Degrees(90.0), Degrees(0.0))) > 0.0);
-        // The major axis runs down the prime meridian and its antimeridian.
-        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(0.0))) > 0.0);
-        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(180.0))) > 0.0);
-        // The minor axis, a quarter turn away, falls short.
-        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(90.0))) < 0.0);
-        assert!(offset(&e, LatLon::new(Degrees(81.0), Degrees(-90.0))) < 0.0);
-    }
-
-    #[test]
-    fn test_invalid_axes_rejected() {
+    fn test_invalid_radius_rejected() {
         let centre = (Degrees(56.0), Degrees(2.0));
-        for (a, b) in [
-            (1.0, 0.0),  // degenerate
-            (1.0, -1.0), // negative
-            (0.0, 1.0),
-            (90.0, 1.0), // a hemisphere across
-            (120.0, 1.0),
-            (1.0, 95.0), // the bound applies to either axis
-        ] {
-            let err =
-                Ellipse::new(centre, Degrees(a), Degrees(b), Degrees(0.0)).expect_err("rejected");
+        for bad in [0.0, -1.0, 90.0, 120.0] {
+            let err = Circle::new(centre, Degrees(bad)).expect_err("rejected");
             assert!(
-                matches!(err, Error::Aoi(super::Error::EllipseAxes { .. })),
-                "{a}/{b} gave {err}"
+                matches!(err, Error::Aoi(super::Error::CircleRadius { .. })),
+                "radius {bad} gave {err}"
             );
         }
         assert!(matches!(
-            Ellipse::circle((Degrees(91.0), Degrees(0.0)), Degrees(1.0)).expect_err("bad latitude"),
+            Circle::new((Degrees(91.0), Degrees(0.0)), Degrees(1.0)).expect_err("bad latitude"),
             Error::Aoi(super::Error::Latitude(_))
         ));
     }
 
     /// The latitude range test rejects a non-finite latitude on its own; the
-    /// longitude, the bearing and the axes have no range that does. Unchecked,
-    /// a NaN is built into the foci and every offset is NaN, which
-    /// `ProximityStep` floors to `min_step` — the whole interval scanned at a
-    /// millisecond, with no error ever surfacing.
+    /// longitude and the radius have no range that does. Unchecked, a NaN is
+    /// built into the centre and every offset is NaN, which `ProximityStep`
+    /// floors to `min_step` — the whole interval scanned at a millisecond,
+    /// with no error ever surfacing.
     #[test]
     fn test_non_finite_arguments_rejected() {
-        let centre = (Degrees(56.0), Degrees(2.0));
         for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             for (label, err) in [
                 (
                     "centre longitude",
-                    Ellipse::new(
-                        (Degrees(56.0), Degrees(bad)),
-                        Degrees(2.7),
-                        Degrees(1.1),
-                        Degrees(45.0),
-                    ),
+                    Circle::new((Degrees(56.0), Degrees(bad)), Degrees(2.25)),
                 ),
                 (
-                    "bearing",
-                    Ellipse::new(centre, Degrees(2.7), Degrees(1.1), Degrees(bad)),
+                    "radius",
+                    Circle::new((Degrees(56.0), Degrees(2.0)), Degrees(bad)),
                 ),
-                (
-                    "semi-axis a",
-                    Ellipse::new(centre, Degrees(bad), Degrees(1.1), Degrees(45.0)),
-                ),
-                (
-                    "semi-axis b",
-                    Ellipse::new(centre, Degrees(2.7), Degrees(bad), Degrees(45.0)),
-                ),
-                ("radius", Ellipse::circle(centre, Degrees(bad))),
             ] {
                 assert!(
                     matches!(err, Err(Error::Aoi(super::Error::NotFinite { .. }))),
@@ -1845,76 +1688,123 @@ mod ellipse_tests {
             }
             assert!(
                 matches!(
-                    Ellipse::circle((Degrees(bad), Degrees(2.0)), Degrees(1.0)),
+                    Circle::new((Degrees(bad), Degrees(2.0)), Degrees(1.0)),
                     Err(Error::Aoi(super::Error::Latitude(_)))
                 ),
                 "centre latitude {bad} was not rejected"
             );
         }
     }
+}
 
-    #[test]
-    fn test_accessors_round_trip() {
-        let e = north_sea();
-        let centre = e.centre();
-        assert!((centre.latitude.to_f64() - 56.0).abs() < 1e-12);
-        assert!((centre.longitude.to_f64() - 2.0).abs() < 1e-12);
-        let (a, b) = e.semi_axes();
-        assert!((a.to_f64() - 2.7).abs() < 1e-12);
-        assert!((b.to_f64() - 1.1).abs() < 1e-12);
-        assert!((e.bearing().to_f64() - 45.0).abs() < 1e-12);
+#[cfg(test)]
+mod reach_tests {
+    use super::*;
 
-        // The pair is stored as given, so a longer `b` reads back unswapped,
-        // with the bearing it was given rather than the turned one the foci
-        // were built from.
-        let wide = Ellipse::new(
-            (Degrees(56.0), Degrees(2.0)),
-            Degrees(1.1),
-            Degrees(2.7),
-            Degrees(135.0),
-        )
-        .expect("valid ellipse");
-        let (a, b) = wide.semi_axes();
-        assert!((a.to_f64() - 1.1).abs() < 1e-12);
-        assert!((b.to_f64() - 2.7).abs() < 1e-12);
-        assert!((wide.bearing().to_f64() - 135.0).abs() < 1e-12);
+    /// WGS-84 equatorial radius and an ISS-like altitude, in metres.
+    const RE: f64 = 6_378_137.0;
+    const R: f64 = RE + 420_000.0;
 
-        // A bearing outside [0, 360) reads back normalized.
-        let wrapped = Ellipse::new(
-            (Degrees(0.0), Degrees(0.0)),
-            Degrees(2.0),
-            Degrees(1.0),
-            Degrees(-90.0),
-        )
-        .expect("valid ellipse");
-        assert!((wrapped.bearing().to_f64() - 270.0).abs() < 1e-12);
+    fn reach(off_nadir_deg: f64) -> f64 {
+        Radians(max_central_angle(Degrees(off_nadir_deg).radians(), R, RE)).degrees()
     }
 
-    /// Swapping the semi-axes and turning the bearing a quarter turn describes
-    /// the same region, which is what lets either axis be the longer.
+    /// A zero field of regard reaches only the sub-satellite point itself.
     #[test]
-    fn test_swapped_axes_cover_the_same_region() {
-        let centre = (Degrees(56.0), Degrees(2.0));
-        let wide = Ellipse::new(centre, Degrees(1.1), Degrees(2.7), Degrees(135.0))
-            .expect("valid ellipse");
-        let long = north_sea();
+    fn test_zero_off_nadir_reaches_nowhere() {
+        assert_eq!(reach(0.0), 0.0);
+    }
 
-        // The foci are a pair, not a sequence: turning the bearing the other
-        // way is equally valid and lists them the other way round.
-        let (f1, f2) = wide.foci();
-        let (g1, g2) = long.foci();
-        let [f1, f2, g1, g2] = [f1, f2, g1, g2].map(unit_from_lat_lon);
+    /// Hand-checked against `asin((r/re) sin η) − η`.
+    #[test]
+    fn test_matches_the_coverage_relation() {
         assert!(
-            (coincident(f1, g1) && coincident(f2, g2))
-                || (coincident(f1, g2) && coincident(f2, g1))
+            (reach(30.0) - 2.203_297).abs() < 1e-6,
+            "got {}",
+            reach(30.0)
         );
+        assert!(
+            (reach(45.0) - 3.909_269).abs() < 1e-6,
+            "got {}",
+            reach(45.0)
+        );
+    }
 
-        for p in super::geometry_tests::sphere_points(500) {
-            let p = lat_lon_from_unit(p);
+    /// At grazing incidence the line of sight leaves the Earth tangentially,
+    /// and `asin` has no solution past it. The reach stops at the horizon
+    /// instead of going undefined.
+    #[test]
+    fn test_clamped_at_the_horizon() {
+        let horizon = Radians((RE / R).acos()).degrees();
+        // Grazing is at asin(re/r) ≈ 69.75° for this altitude.
+        assert!(reach(69.0) < horizon);
+        for off_nadir in [69.8, 70.0, 80.0, 89.9] {
             assert!(
-                (offset(&wide, p) - offset(&long, p)).abs() < 1e-12,
-                "offsets differ at {p:?}"
+                (reach(off_nadir) - horizon).abs() < 1e-9,
+                "{off_nadir}° reached {}, horizon is {horizon}",
+                reach(off_nadir)
             );
+        }
+    }
+
+    #[test]
+    fn test_monotone_in_off_nadir() {
+        let mut previous = 0.0;
+        for i in 1..=69 {
+            let r = reach(f64::from(i));
+            assert!(r > previous, "reach fell at {i}°: {r} <= {previous}");
+            previous = r;
+        }
+    }
+
+    /// The supplied `max_angular_distance` reads the offset at the antipode,
+    /// so check it against a brute-force maximum over each area's boundary.
+    #[test]
+    fn test_max_angular_distance_matches_brute_force() {
+        let polygon = Polygon::new([
+            (Degrees(40.0), Degrees(-10.0)),
+            (Degrees(40.0), Degrees(30.0)),
+            (Degrees(65.0), Degrees(30.0)),
+            (Degrees(65.0), Degrees(-10.0)),
+        ])
+        .expect("valid polygon");
+        // Wide enough that the farthest point of the north edge is mid-parallel
+        // rather than a corner.
+        let rectangle = Rectangle::new(
+            (Degrees(40.0), Degrees(-60.0)),
+            (Degrees(65.0), Degrees(60.0)),
+        )
+        .expect("valid rectangle");
+        let circle =
+            Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(10.0)).expect("valid circle");
+
+        let interior_of = |area: &dyn Area| {
+            // The area as a point cloud, from the offset's sign alone, so the
+            // reference needs nothing from `max_angular_distance` itself.
+            geometry_tests::sphere_points(60_000)
+                .into_iter()
+                .filter(|&p| area.signed_angular_offset(lat_lon_from_unit(p)).to_f64() >= 0.0)
+                .collect::<Vec<_>>()
+        };
+
+        for (label, area) in [
+            ("polygon", &polygon as &dyn Area),
+            ("rectangle", &rectangle as &dyn Area),
+            ("circle", &circle as &dyn Area),
+        ] {
+            let interior = interior_of(area);
+            assert!(!interior.is_empty(), "{label} sampled empty");
+            for p in geometry_tests::sphere_points(200) {
+                let reported = area.max_angular_distance(lat_lon_from_unit(p)).to_f64();
+                let truth = interior
+                    .iter()
+                    .map(|&q| angle_between(p, q))
+                    .fold(0.0, f64::max);
+                assert!(
+                    reported >= truth - 1e-9,
+                    "{label} reported {reported} below the true farthest {truth}"
+                );
+            }
         }
     }
 }

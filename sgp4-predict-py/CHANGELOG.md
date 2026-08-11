@@ -20,7 +20,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - `Refinement(time_tolerance=…, max_iter=…)` — keyword-only, each defaulting to the library's value;
   the class previously took no arguments, so both fields had to be assigned after construction.
 - Area-of-interest detection: `Predictor.aoi_iter` and `detect_aoi` yield the `AoiWindow`s during
-  which the sub-satellite point is inside an area. `Polygon`, `Rectangle` and `Ellipse` describe the
+  which an area is within the payload's reach — see `max_off_nadir_deg` and `coverage`.
+  `Polygon`, `Rectangle` and `Circle` describe the
   region; each also exposes `signed_angular_offset_deg`. Points are `LatLon` objects, `Geodetic`
   objects whose altitude is ignored, or plain `(latitude_deg, longitude_deg)` tuples, and
   `AoiWindow` satisfies `IntervalRange`.
@@ -42,7 +43,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 - Iterating any iterator yields its item type rather than `T | None`. `__next__` was declared
   `Optional`, so `for transit in predictor.transits_iter(...)` bound `Transit | None` and every
   subsequent attribute access was reported as an error.
-- Docstrings reach the editor. `Predictor`, `Elements`, `Polygon`, `Rectangle` and `Ellipse` were
+- Docstrings reach the editor. `Predictor`, `Elements`, `Polygon`, `Rectangle` and `Circle` were
   redeclared in the hand-written stub to narrow argument types, which replaced the generated
   declarations and dropped every method docstring with them. The argument types are now narrowed at
   the source instead, so the documentation and the types arrive together.

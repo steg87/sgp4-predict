@@ -30,7 +30,7 @@ pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<(
     // geometry call stays static.
     match &shape {
         AoiShape::Rectangle(aoi) => windows(ctx, aoi, opts, refinement),
-        AoiShape::Ellipse(aoi) => windows(ctx, aoi, opts, refinement),
+        AoiShape::Circle(aoi) => windows(ctx, aoi, opts, refinement),
         AoiShape::Polygon(aoi) => windows(ctx, aoi, opts, refinement),
     }
 }

@@ -10,7 +10,7 @@ use crate::{
     cli::AoiArgs,
     config::{self, AoiDef},
 };
-use sgp4_predict::{Degrees, Ellipse, Polygon, Rectangle};
+use sgp4_predict::{Circle, Degrees, Polygon, Rectangle};
 
 /// A built AOI, ready to hand to `aoi_iter`.
 ///
@@ -21,7 +21,7 @@ use sgp4_predict::{Degrees, Ellipse, Polygon, Rectangle};
 #[derive(Debug, Clone, PartialEq)]
 pub enum AoiShape {
     Rectangle(Rectangle),
-    Ellipse(Ellipse),
+    Circle(Circle),
     Polygon(Polygon),
 }
 
@@ -36,13 +36,7 @@ impl AoiDef {
                 (Degrees(b.south), Degrees(b.west)),
                 (Degrees(b.north), Degrees(b.east)),
             )?),
-            AoiDef::Ellipse(e) => AoiShape::Ellipse(Ellipse::new(
-                (Degrees(e.latitude), Degrees(e.longitude)),
-                Degrees(e.semi_axis_a),
-                Degrees(e.semi_axis_b),
-                Degrees(e.bearing),
-            )?),
-            AoiDef::Circle(c) => AoiShape::Ellipse(Ellipse::circle(
+            AoiDef::Circle(c) => AoiShape::Circle(Circle::new(
                 (Degrees(c.latitude), Degrees(c.longitude)),
                 Degrees(c.radius),
             )?),
@@ -58,7 +52,6 @@ impl AoiDef {
     pub fn kind(&self) -> &'static str {
         match self {
             AoiDef::Box(_) => "box",
-            AoiDef::Ellipse(_) => "ellipse",
             AoiDef::Circle(_) => "circle",
             AoiDef::Polygon(_) => "polygon",
         }
@@ -73,10 +66,6 @@ impl AoiDef {
             AoiDef::Box(b) => format!(
                 "south={} north={} west={} east={}",
                 b.south, b.north, b.west, b.east
-            ),
-            AoiDef::Ellipse(e) => format!(
-                "latitude={} longitude={} semi_axis_a={} semi_axis_b={} bearing={}",
-                e.latitude, e.longitude, e.semi_axis_a, e.semi_axis_b, e.bearing
             ),
             AoiDef::Circle(c) => format!(
                 "latitude={} longitude={} radius={}",
@@ -141,12 +130,10 @@ aois:
     west: -8.0
     east: -1.0
   north-sea:
-    shape: ellipse
+    shape: circle
     latitude: 56.0
     longitude: 2.0
-    semi_axis_a: 2.7
-    semi_axis_b: 1.1
-    bearing: 45.0
+    radius: 2.7
   cape-town:
     shape: circle
     latitude: -33.9
@@ -167,7 +154,7 @@ aois:
         let point = (Degrees(lat), Degrees(lon)).into();
         match shape {
             AoiShape::Rectangle(a) => a.signed_angular_offset(point),
-            AoiShape::Ellipse(a) => a.signed_angular_offset(point),
+            AoiShape::Circle(a) => a.signed_angular_offset(point),
             AoiShape::Polygon(a) => a.signed_angular_offset(point),
         }
         .to_f64()
@@ -227,30 +214,6 @@ aois:
         }
     }
 
-    #[test]
-    fn test_bearing_defaults_to_zero() {
-        let config: config::Config = serde_yaml::from_str(
-            r"
-aois:
-  plain:
-    shape: ellipse
-    latitude: 0.0
-    longitude: 0.0
-    semi_axis_a: 10.0
-    semi_axis_b: 2.0
-",
-        )
-        .unwrap();
-        let AoiDef::Ellipse(e) = config.find_aoi("plain").unwrap() else {
-            panic!("expected an ellipse");
-        };
-        assert_eq!(e.bearing, 0.0);
-        // Bearing 0 points the major axis at the pole.
-        let shape = config.find_aoi("plain").unwrap().build().unwrap();
-        assert!(offset(&shape, 8.0, 0.0) > 0.0);
-        assert!(offset(&shape, 0.0, 8.0) < 0.0);
-    }
-
     /// The listing uses the config file's own field names, so a `describe`
     /// line and the YAML it came from name the same things.
     #[test]
@@ -259,10 +222,7 @@ aois:
         let describe = |id: &str| config.find_aoi(id).unwrap().describe();
 
         assert_eq!(describe("scotland"), "south=54 north=60 west=-8 east=-1");
-        assert_eq!(
-            describe("north-sea"),
-            "latitude=56 longitude=2 semi_axis_a=2.7 semi_axis_b=1.1 bearing=45"
-        );
+        assert_eq!(describe("north-sea"), "latitude=56 longitude=2 radius=2.7");
         assert_eq!(
             describe("cape-town"),
             "latitude=-33.9 longitude=18.4 radius=2.25"
@@ -325,17 +285,16 @@ aois:
             r"
 aois:
   broken:
-    shape: ellipse
+    shape: circle
     latitude: 0.0
     longitude: 0.0
-    semi_axis_a: 95.0
-    semi_axis_b: 5.0
+    radius: 95.0
 ",
         )
         .unwrap();
         let err = args(Some("broken")).validate(&config).unwrap_err();
         assert!(err.to_string().contains("aoi 'broken'"), "{err}");
-        assert!(format!("{err:#}").contains("semi_axis_a 95"), "{err:#}");
+        assert!(format!("{err:#}").contains("95"), "{err:#}");
         // find_aoi still works, so `aoi remove` can delete it.
         assert!(config.find_aoi("broken").is_ok());
     }

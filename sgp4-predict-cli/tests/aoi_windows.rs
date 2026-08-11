@@ -23,13 +23,6 @@ aois:
     north: 65.0
     west: -10.0
     east: 30.0
-  europe-ellipse:
-    shape: ellipse
-    latitude: 52.0
-    longitude: 10.0
-    semi_axis_a: 14.0
-    semi_axis_b: 4.0
-    bearing: 60.0
   europe-circle:
     shape: circle
     latitude: 52.0
@@ -80,7 +73,7 @@ fn err(out: &Output) -> String {
 #[test]
 fn test_aoi_cli_over_every_shape() {
     let config = config("aoi_shapes");
-    for id in ["europe", "europe-ellipse", "europe-circle", "europe-poly"] {
+    for id in ["europe", "europe-circle", "europe-poly"] {
         let stdout = ok(&run(&config, &["--aoi", id, "--duration", "1d"]));
         assert!(stdout.contains("entry"), "{id}: {stdout}");
         assert!(
@@ -199,18 +192,17 @@ fn test_unbuildable_aoi_names_itself() {
         r"
 aois:
   broken:
-    shape: ellipse
+    shape: circle
     latitude: 0.0
     longitude: 0.0
-    semi_axis_a: 95.0
-    semi_axis_b: 5.0
+    radius: 95.0
 ",
     )
     .unwrap();
 
     let message = err(&run(&path, &["--aoi", "broken", "--duration", "1d"]));
     assert!(message.contains("aoi 'broken'"), "{message}");
-    assert!(message.contains("semi_axis_a 95"), "{message}");
+    assert!(message.contains("95"), "{message}");
 }
 
 /// The AOI is resolved before the TLE, so a bad id fails without waiting on
@@ -234,4 +226,43 @@ fn test_unknown_aoi_fails_before_reading_the_tle() {
     let message = String::from_utf8_lossy(&out.stderr);
     assert!(message.contains("unknown aoi"), "{message}");
     assert!(!message.contains("does-not-exist"), "{message}");
+}
+
+/// The field of regard reaches the detection rather than merely parsing: a
+/// wider cone must open the windows earlier and hold them longer.
+#[test]
+fn test_max_off_nadir_widens_the_windows() {
+    let config = config("aoi_off_nadir");
+    // Window count rather than total duration: the duration column is a
+    // humantime string, and the count moves the same way.
+    let count = |args: &[&str]| ok(&run(&config, args)).lines().skip(1).count();
+
+    let base: &[&str] = &[
+        "--aoi",
+        "europe-circle",
+        "--duration",
+        "1d",
+        "--format",
+        "csv",
+    ];
+    fn with<'a>(base: &[&'a str], extra: &[&'a str]) -> Vec<&'a str> {
+        [base, extra].concat()
+    }
+
+    let nadir = count(base);
+    let wide = count(&with(base, &["--max-off-nadir", "30"]));
+    let full = count(&with(
+        base,
+        &["--max-off-nadir", "30", "--coverage", "full"],
+    ));
+
+    assert!(nadir > 0, "nadir-only found nothing");
+    assert!(
+        wide >= nadir,
+        "30° cone ({wide}) should see at least nadir ({nadir})"
+    );
+    assert!(
+        full < wide,
+        "full coverage ({full}) should be under any ({wide})"
+    );
 }

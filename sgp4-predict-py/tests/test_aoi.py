@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sgp4_predict import (
     AoiWindow,
-    Ellipse,
+    Circle,
+    Coverage,
     FillRule,
     Geodetic,
     Interval,
@@ -178,36 +179,22 @@ def test_rectangle_rejects_empty_box():
         Rectangle((60.0, -8.0), (54.0, -1.0))
 
 
-def test_ellipse_accessors_round_trip():
-    e = Ellipse((56.0, 2.0), 2.7, 1.1, 45.0)
-    assert abs(e.centre.latitude_deg - 56.0) < 1e-12
-    assert abs(e.centre.longitude_deg - 2.0) < 1e-12
-    assert abs(e.semi_axis_a_deg - 2.7) < 1e-12
-    assert abs(e.semi_axis_b_deg - 1.1) < 1e-12
-    assert abs(e.bearing_deg - 45.0) < 1e-12
-    first, second = e.foci
-    assert first != second
+def test_circle_accessors_round_trip():
+    c = Circle((56.0, 2.0), 2.0)
+    assert abs(c.centre.latitude_deg - 56.0) < 1e-12
+    assert abs(c.centre.longitude_deg - 2.0) < 1e-12
+    assert abs(c.radius_deg - 2.0) < 1e-12
+    # The offset is the exact signed distance to the boundary.
+    assert abs(c.signed_angular_offset_deg((58.0, 2.0))) < 1e-9
+    assert c.signed_angular_offset_deg((56.0, 2.0)) > 0.0
 
 
-def test_ellipse_circle_has_coincident_foci():
-    circle = Ellipse.circle((56.0, 2.0), 2.0)
-    first, second = circle.foci
-    assert abs(first.latitude_deg - second.latitude_deg) < 1e-9
-    assert abs(first.longitude_deg - second.longitude_deg) < 1e-9
-    # For a circle the offset is the exact signed distance.
-    assert abs(circle.signed_angular_offset_deg((58.0, 2.0)) - 0.0) < 1e-9
-
-
-def test_ellipse_bearing_orients_the_major_axis():
-    # Major axis east-west: reaches further in longitude than in latitude.
-    e = Ellipse((0.0, 0.0), 10.0, 2.0, 90.0)
-    assert e.signed_angular_offset_deg((0.0, 8.0)) > 0.0
-    assert e.signed_angular_offset_deg((8.0, 0.0)) < 0.0
-
-    # The same area with the axes the other way round, no bearing needed.
-    wide = Ellipse((0.0, 0.0), 2.0, 10.0, 0.0)
-    assert wide.signed_angular_offset_deg((0.0, 8.0)) > 0.0
-    assert wide.signed_angular_offset_deg((8.0, 0.0)) < 0.0
+def test_max_angular_distance_reaches_the_far_side():
+    c = Circle((0.0, 0.0), 10.0)
+    # From the centre, every boundary point is one radius away.
+    assert abs(c.max_angular_distance_deg((0.0, 0.0)) - 10.0) < 1e-9
+    # From outside, the far edge is the near edge plus the diameter.
+    assert abs(c.max_angular_distance_deg((0.0, 20.0)) - 30.0) < 1e-9
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
@@ -230,15 +217,9 @@ def test_areas_reject_non_finite_arguments(bad):
     with pytest.raises(ValueError):
         Rectangle.latitude_band(-10.0, bad)
     with pytest.raises(ValueError):
-        Ellipse((56.0, bad), 2.7, 1.1, 45.0)
+        Circle((56.0, bad), 2.0)
     with pytest.raises(ValueError):
-        Ellipse((56.0, 2.0), bad, 1.1, 45.0)
-    with pytest.raises(ValueError):
-        Ellipse((56.0, 2.0), 2.7, bad, 45.0)
-    with pytest.raises(ValueError):
-        Ellipse((56.0, 2.0), 2.7, 1.1, bad)
-    with pytest.raises(ValueError):
-        Ellipse.circle((56.0, 2.0), bad)
+        Circle((56.0, 2.0), bad)
 
 
 def test_signed_angular_offset_accepts_every_point_form():
@@ -266,10 +247,9 @@ def test_area_rejects_a_non_area():
     [
         Polygon(EUROPE_CORNERS),
         Rectangle((40.0, -10.0), (65.0, 30.0)),
-        Ellipse((52.0, 10.0), 14.0, 4.0, 60.0),
-        Ellipse.circle((52.0, 10.0), 10.0),
+        Circle((52.0, 10.0), 10.0),
     ],
-    ids=["polygon", "rectangle", "ellipse", "circle"],
+    ids=["polygon", "rectangle", "circle"],
 )
 def test_aoi_iter_yields_windows_over_every_shape(area):
     p = make_predictor()
@@ -418,5 +398,50 @@ def test_aoi_iter_accepts_a_sub_second_min_step():
 def test_aoi_iter_over_an_area_never_overflown_is_empty():
     p = make_predictor()
     # A small circle in the mid-Pacific, well off a single day's ground track.
-    area = Ellipse.circle((-40.0, -140.0), 0.5)
+    area = Circle((-40.0, -140.0), 0.5)
     assert list(p.aoi_iter(area, Interval(START, START + timedelta(hours=2)))) == []
+
+
+# ── Field of regard ────────────────────────────────────────────────────────────
+
+
+def _spans(windows):
+    return sum((w.end - w.start).total_seconds() for w in windows)
+
+
+def test_zero_off_nadir_matches_the_default():
+    p = make_predictor()
+    area = Polygon(EUROPE_CORNERS)
+    default = list(p.aoi_iter(area, INTERVAL))
+    explicit = list(p.aoi_iter(area, INTERVAL, max_off_nadir_deg=0.0))
+    assert [(w.start, w.end) for w in default] == [(w.start, w.end) for w in explicit]
+
+
+def test_wider_field_of_regard_sees_more():
+    p = make_predictor()
+    area = Polygon(EUROPE_CORNERS)
+    nadir = list(p.aoi_iter(area, INTERVAL))
+    wide = list(p.aoi_iter(area, INTERVAL, max_off_nadir_deg=30.0))
+    assert _spans(wide) > _spans(nadir)
+
+
+def test_full_coverage_is_stricter_than_any():
+    p = make_predictor()
+    area = Circle((52.0, 10.0), 2.0)
+    any_windows = list(p.aoi_iter(area, INTERVAL, max_off_nadir_deg=45.0))
+    full = list(
+        p.aoi_iter(area, INTERVAL, max_off_nadir_deg=45.0, coverage=Coverage.Full)
+    )
+    assert full
+    assert _spans(full) < _spans(any_windows)
+
+
+def test_detect_aoi_honours_the_field_of_regard():
+    p = make_predictor()
+    area = Circle((52.0, 10.0), 1.0)
+    # A time the wide cone reaches the area but the nadir-only scan does not.
+    wide = list(p.aoi_iter(area, INTERVAL, max_off_nadir_deg=45.0))
+    assert wide
+    mid = wide[0].start + (wide[0].end - wide[0].start) / 2
+    assert p.detect_aoi(mid, area, max_off_nadir_deg=45.0) is not None
+    assert p.detect_aoi(mid, area) is None

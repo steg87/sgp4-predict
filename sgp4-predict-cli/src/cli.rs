@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
+use sgp4_predict::Coverage;
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Debug, Clone, Parser)]
@@ -152,8 +153,6 @@ pub struct AoiAddArgs {
 pub enum Shape {
     /// Latitude/longitude box, given by its south/north/west/east bounds
     Box,
-    /// Ellipse, given by its centre, semi-axes and bearing
-    Ellipse,
     /// Circle, given by its centre and radius
     Circle,
     /// Ring of three or more vertices
@@ -219,6 +218,24 @@ pub struct CommonArgs {
     /// Prepend the resolved input arguments as # comment lines to the output
     #[arg(long)]
     pub output_args: bool,
+}
+
+/// How much of an AOI must be within reach for a window to open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum)]
+pub enum CoverageArg {
+    /// Any part of the area is within reach
+    Any,
+    /// Every part of the area is within reach at once
+    Full,
+}
+
+impl From<CoverageArg> for Coverage {
+    fn from(c: CoverageArg) -> Self {
+        match c {
+            CoverageArg::Any => Self::Any,
+            CoverageArg::Full => Self::Full,
+        }
+    }
 }
 
 /// Tabular output format.
@@ -426,6 +443,16 @@ pub struct AoiWindowsArgs {
 #[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Detection tuning")]
 pub struct AoiTuningArgs {
+    /// Half-angle of the satellite's field of regard, in degrees — the largest
+    /// nadir angle the payload can be slewed to. Zero detects the ground track
+    /// itself crossing the area
+    #[arg(long, value_name = "DEG", default_value_t = 0.0)]
+    pub max_off_nadir: f64,
+
+    /// Whether any part of the area or all of it must be within reach
+    #[arg(long, value_enum, default_value_t = CoverageArg::Any)]
+    pub coverage: CoverageArg,
+
     /// Lower bound of the adaptive coarse-scan step, and so the shortest
     /// crossing the scan is guaranteed to see. Floored at 1ms
     #[arg(long, value_parser = parse_step, default_value = "1s")]

@@ -13,16 +13,20 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 ### Added
 
 - Area-of-interest detection: `Predictor::aoi_iter` and `detect_aoi` yield the `AoiWindow`s during
-  which the sub-satellite point is inside an `Area`. `Polygon` describes an arbitrary ring of
+  which an `Area` is within the payload's reach. `AoiIterOpts::max_off_nadir` is the half-angle of
+  the satellite's field of regard — the largest nadir angle the payload can be slewed to — and
+  defaults to zero, which detects the ground track itself crossing into the area.
+  `AoiIterOpts::coverage` chooses whether any part of the area (`Coverage::Any`, the default) or all
+  of it (`Coverage::Full`) must be in reach. `Polygon` describes an arbitrary ring of
   latitude/longitude vertices — concave and self-intersecting rings are supported, with
   `FillRule::NonZero` (default) or `FillRule::EvenOdd` deciding the interior of the latter. The ring
-  closes implicitly and vertex order does not matter. Implement `Area` for other shapes.
+  closes implicitly and vertex order does not matter. Implement `Area` for other shapes; it has two
+  methods, `signed_angular_offset` and `max_angular_distance`, the latter with a supplied
+  implementation covering any area whose offset is exact.
 - `Rectangle`, a latitude/longitude box whose north and south edges follow their parallels exactly,
   with no great-circle bulge and no hemisphere restriction. Wraps across the antimeridian, and
   `Rectangle::latitude_band` covers bands and polar caps.
-- `Ellipse`, an elliptical area given as a centre, two angular semi-axes, and the bearing of the
-  first clockwise from north. Either semi-axis may be the longer, so a wider-than-long area does not
-  have to be turned. `Ellipse::circle` is the circular case.
+- `Circle`, a spherical cap given as a centre and an angular radius.
 - `Geodetic` and `LatLon` types, `EcefState::to_geodetic`, and `Predictor::sub_point` — the geodetic
   point directly beneath the satellite.
 - `Predictor::ground_track_iter`, sampling sub-satellite points at a fixed cadence.
@@ -60,7 +64,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   working.
 - Every iterator and builder type is `#[must_use]`. Dropping the result of a `*_iter` call, or of a
   builder chain that never reaches `.build()`, now warns instead of silently doing nothing. Pure
-  getters and conversions (`Degrees::to_f64`, `Ellipse::foci`, `Predictor::epoch`, ...) are
+  getters and conversions (`Degrees::to_f64`, `Circle::radius`, `Predictor::epoch`, ...) are
   `#[must_use]` too.
 - `Transit::clamp` and `AoiWindow::clamp` became `TimeWindow::clamp_to`; callers now need
   `use sgp4_predict::TimeWindow` (it is in the prelude). Behaviour is unchanged. The name avoids

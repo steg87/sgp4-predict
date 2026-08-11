@@ -7,7 +7,7 @@ use sgp4_predict::{
 };
 
 use crate::{
-    area::{AreaKind, Geodetic, extract_area, extract_area_ref},
+    area::{AreaKind, Coverage, Geodetic, extract_area, extract_area_ref},
     convert::IntervalArg,
     elements::Elements,
     errors::to_py_err,
@@ -309,7 +309,10 @@ impl ObservationIter {
 // builder below writes a full struct literal, so a knob added to the library
 // fails to compile until it is either exposed or explicitly defaulted.
 
+#[allow(clippy::too_many_arguments)]
 fn aoi_opts(
+    max_off_nadir_deg: Option<f64>,
+    coverage: Option<Coverage>,
     min_step: Option<Duration>,
     max_step: Option<Duration>,
     walk_step: Option<Duration>,
@@ -319,6 +322,8 @@ fn aoi_opts(
 ) -> AoiIterOpts {
     let d = AoiIterOpts::default();
     AoiIterOpts {
+        max_off_nadir: max_off_nadir_deg.map_or(d.max_off_nadir, |deg| Degrees(deg).into()),
+        coverage: coverage.map_or(d.coverage, Into::into),
         min_step: min_step.unwrap_or(d.min_step),
         max_step: max_step.unwrap_or(d.max_step),
         walk_step: walk_step.unwrap_or(d.walk_step),
@@ -566,13 +571,21 @@ impl Predictor {
         })
     }
 
-    /// Iterate over the windows in which the ground track lies inside `area`.
+    /// Iterate over the windows in which `area` is within the payload's reach.
     ///
-    /// `area` is a `Polygon`, `Rectangle`, or `Ellipse`.
+    /// `area` is a `Polygon`, `Rectangle`, or `Circle`.
     /// `interval` must expose `.start` and `.end` datetime properties.
     ///
-    /// The keyword-only arguments tune the coarse scan; each defaults to the
-    /// library's own value.
+    /// The keyword-only arguments tune the reach and the coarse scan; each defaults
+    /// to the library's own value.
+    ///
+    /// `max_off_nadir_deg` is the half-angle of the satellite's field of regard —
+    /// the largest nadir angle the payload can be slewed to. It defaults to zero,
+    /// which detects the sub-satellite point itself crossing into the area. This is
+    /// a field of *regard*, not of view: it describes everything the payload could
+    /// be pointed at, not the footprint of a single image. `coverage` chooses
+    /// whether any part of the area (`Coverage.Any`, the default) or all of it
+    /// (`Coverage.Full`) must be within reach.
     ///
     /// `min_step` is the lower bound of the adaptive coarse-scan step, and also the
     /// shortest crossing the scan is guaranteed to see; lower it below the default
@@ -597,6 +610,8 @@ impl Predictor {
         area,
         interval,
         *,
+        max_off_nadir_deg = None,
+        coverage = None,
         min_step = None,
         max_step = None,
         walk_step = None,
@@ -609,6 +624,8 @@ impl Predictor {
         #[gen_stub(override_type(type_repr = "sgp4_predict.Area", imports = ("sgp4_predict")))]
         area: &Bound<'_, PyAny>,
         interval: IntervalArg,
+        max_off_nadir_deg: Option<f64>,
+        coverage: Option<Coverage>,
         min_step: Option<Duration>,
         max_step: Option<Duration>,
         walk_step: Option<Duration>,
@@ -618,6 +635,8 @@ impl Predictor {
     ) -> PyResult<AoiIter> {
         let IntervalArg { start, end } = interval;
         let opts = aoi_opts(
+            max_off_nadir_deg,
+            coverage,
             min_step,
             max_step,
             walk_step,
@@ -638,28 +657,40 @@ impl Predictor {
         })
     }
 
-    /// Detect whether the ground track is inside `area` at time `t`.
+    /// Detect whether `area` is within the payload's reach at time `t`.
     ///
-    /// Returns `None` if it is outside. Otherwise searches backward and forward to
+    /// Returns `None` if it is not. Otherwise searches backward and forward to
     /// bracket the entry and exit crossings.
     ///
     /// Raises `RuntimeError` if the window turns out to be longer than
     /// `max_window_duration`, which defaults to one hour. See `aoi_iter`; the
     /// other knobs there do not apply to this single-point detection.
-    #[pyo3(signature = (t, area, *, walk_step = None, max_window_duration = None))]
+    #[pyo3(signature = (
+        t,
+        area,
+        *,
+        max_off_nadir_deg = None,
+        coverage = None,
+        walk_step = None,
+        max_window_duration = None,
+    ))]
     fn detect_aoi(
         &self,
         t: DateTime<Utc>,
         #[gen_stub(override_type(type_repr = "sgp4_predict.Area", imports = ("sgp4_predict")))]
         area: &Bound<'_, PyAny>,
+        max_off_nadir_deg: Option<f64>,
+        coverage: Option<Coverage>,
         walk_step: Option<Duration>,
         max_window_duration: Option<Duration>,
     ) -> PyResult<Option<AoiWindow>> {
         let area = extract_area_ref(area)?;
-        // Only these two fields reach `detect_window`; the rest stay at their
+        // Only these four fields reach `detect_window`; the rest stay at their
         // defaults.
         let d = AoiIterOpts::default();
         let opts = AoiIterOpts {
+            max_off_nadir: max_off_nadir_deg.map_or(d.max_off_nadir, |deg| Degrees(deg).into()),
+            coverage: coverage.map_or(d.coverage, Into::into),
             walk_step: walk_step.unwrap_or(d.walk_step),
             max_window_duration: max_window_duration.unwrap_or(d.max_window_duration),
             ..d
@@ -818,7 +849,7 @@ mod tests {
     #[test]
     fn test_unset_kwargs_resolve_to_the_library_defaults() {
         assert_eq!(
-            aoi_opts(None, None, None, None, None, None),
+            aoi_opts(None, None, None, None, None, None, None, None),
             AoiIterOpts::default()
         );
         assert_eq!(
@@ -843,6 +874,8 @@ mod tests {
     fn test_each_kwarg_lands_in_its_own_field() {
         let secs = |n| Duration::seconds(n);
         let opts = aoi_opts(
+            Some(30.0),
+            Some(Coverage::Full),
             Some(secs(1)),
             Some(secs(2)),
             Some(secs(3)),
@@ -853,6 +886,8 @@ mod tests {
         assert_eq!(
             opts,
             AoiIterOpts {
+                max_off_nadir: Degrees(30.0).into(),
+                coverage: sgp4_predict::Coverage::Full,
                 min_step: secs(1),
                 max_step: secs(2),
                 walk_step: secs(3),
