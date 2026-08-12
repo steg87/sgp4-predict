@@ -159,8 +159,10 @@ impl From<FillRule> for sgp4_predict::FillRule {
 pub enum Coverage {
     /// Any part of the area is within reach.
     Any,
-    /// Every part of the area is within reach at once. Not the same as "one image
-    /// covers the area", which depends on the instantaneous field of view.
+    /// Every part of the area is within reach at once. Needs `max_off_nadir_deg`
+    /// wider than the area — at the default of zero the reach is a single point,
+    /// so no window opens. Not the same as "one image covers the area", which
+    /// depends on the instantaneous field of view.
     Full,
 }
 

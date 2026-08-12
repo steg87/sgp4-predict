@@ -3,7 +3,11 @@ use sgp4_predict::{AoiIterOpts, Refinement};
 use std::path::Path;
 
 use super::{Context, pairs, prepare};
-use crate::{aoi::AoiShape, cli::AoiWindowsArgs, output};
+use crate::{
+    aoi::AoiShape,
+    cli::{AoiWindowsArgs, CoverageArg},
+    output,
+};
 
 pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<()> {
     // Resolve the AOI first: an unknown --aoi must fail before the user is
@@ -12,6 +16,15 @@ pub fn run(args: AoiWindowsArgs, config_path: Option<&Path>) -> anyhow::Result<(
     let opts = args.tuning.build()?;
     let refinement = args.refinement.build();
     let mut ctx = prepare(&args.common)?;
+
+    // Full coverage against a point-wide reach can never be satisfied, so the
+    // run would print an empty table rather than fail.
+    if args.tuning.coverage == CoverageArg::Full && args.tuning.max_off_nadir == 0.0 {
+        tracing::warn!(
+            "--coverage full with --max-off-nadir 0 can never open a window; \
+             set --max-off-nadir wider than the area"
+        );
+    }
 
     let aoi_id = args.aoi.id.as_deref().expect("resolve requires --aoi");
     let definition = def.describe();

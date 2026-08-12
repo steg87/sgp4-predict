@@ -698,6 +698,11 @@ pub enum Coverage {
     Any,
     /// Every part of the area is within reach at once.
     ///
+    /// Needs a [`max_off_nadir`](AoiIterOpts::max_off_nadir) wider than the
+    /// area: at the default of zero the reach is a point, so no window ever
+    /// opens. An area wider than the field of regard yields nothing for the
+    /// same reason.
+    ///
     /// This is not the same as "one image covers the area" — that depends on
     /// the instantaneous field of view, and an area wider than a single swath
     /// has to be broken into strips, which is outside this crate's scope.
@@ -899,7 +904,10 @@ pub struct AoiIterOpts {
     ///
     /// This is a field of *regard*, not of view: it describes everything the
     /// payload could be pointed at, not the footprint of a single image.
-    /// Clamped to `[0, 90°)`.
+    /// Clamped to `[0, 90°)`; a non-finite value is taken as zero.
+    ///
+    /// [`Coverage::Full`] needs this set wider than the area, since at zero
+    /// the reach is a single point.
     pub max_off_nadir: Radians,
     /// Whether any part of the area or all of it must be within reach.
     pub coverage: Coverage,

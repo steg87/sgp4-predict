@@ -601,9 +601,12 @@ class Predictor:
         the largest nadir angle the payload can be slewed to. It defaults to zero,
         which detects the sub-satellite point itself crossing into the area. This is
         a field of *regard*, not of view: it describes everything the payload could
-        be pointed at, not the footprint of a single image. `coverage` chooses
-        whether any part of the area (`Coverage.Any`, the default) or all of it
-        (`Coverage.Full`) must be within reach.
+        be pointed at, not the footprint of a single image. A non-finite value is
+        taken as zero. `coverage` chooses whether any part of the area
+        (`Coverage.Any`, the default) or all of it (`Coverage.Full`) must be within
+        reach; `Coverage.Full` needs `max_off_nadir_deg` set wider than the area,
+        since at the default of zero the reach is a single point and no window
+        ever opens.
         
         `min_step` is the lower bound of the adaptive coarse-scan step, and also the
         shortest crossing the scan is guaranteed to see; lower it below the default
@@ -941,8 +944,10 @@ class Coverage(enum.Enum):
     """
     Full = ...
     r"""
-    Every part of the area is within reach at once. Not the same as "one image
-    covers the area", which depends on the instantaneous field of view.
+    Every part of the area is within reach at once. Needs `max_off_nadir_deg`
+    wider than the area — at the default of zero the reach is a single point,
+    so no window opens. Not the same as "one image covers the area", which
+    depends on the instantaneous field of view.
     """
 
 @typing.final

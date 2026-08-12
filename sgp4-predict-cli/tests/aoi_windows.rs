@@ -285,3 +285,17 @@ fn test_non_finite_off_nadir_is_rejected() {
         );
     }
 }
+
+/// A zero-width reach cannot contain an area, so this combination yields an
+/// empty table. Warn rather than let it read as "no passes".
+#[test]
+fn test_full_coverage_without_a_field_of_regard_warns() {
+    let config = config("aoi_full_zero");
+    let out = run(
+        &config,
+        &["--aoi", "europe", "--duration", "1d", "--coverage", "full"],
+    );
+    ok(&out);
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(stderr.contains("can never open a window"), "{stderr}");
+}

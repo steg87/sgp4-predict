@@ -108,7 +108,8 @@ from sgp4_predict import Coverage
 for window in predictor.aoi_iter(cape_town, interval, max_off_nadir_deg=30.0):
     print(window.start, window.end)
 
-# Every part of the area reachable at once, rather than any part of it.
+# Every part of the area reachable at once, rather than any part of it. Needs a
+# field of regard wider than the area, or no window ever opens.
 predictor.aoi_iter(cape_town, interval, max_off_nadir_deg=30.0, coverage=Coverage.Full)
 ```
 
