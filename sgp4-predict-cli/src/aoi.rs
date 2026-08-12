@@ -294,7 +294,10 @@ aois:
         .unwrap();
         let err = args(Some("broken")).validate(&config).unwrap_err();
         assert!(err.to_string().contains("aoi 'broken'"), "{err}");
-        assert!(format!("{err:#}").contains("95"), "{err:#}");
+        assert!(
+            format!("{err:#}").contains("radius must lie in (0, 90°)"),
+            "{err:#}"
+        );
         // find_aoi still works, so `aoi remove` can delete it.
         assert!(config.find_aoi("broken").is_ok());
     }

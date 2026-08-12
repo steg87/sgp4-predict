@@ -202,7 +202,7 @@ aois:
 
     let message = err(&run(&path, &["--aoi", "broken", "--duration", "1d"]));
     assert!(message.contains("aoi 'broken'"), "{message}");
-    assert!(message.contains("95"), "{message}");
+    assert!(message.contains("radius must lie in (0, 90°)"), "{message}");
 }
 
 /// The AOI is resolved before the TLE, so a bad id fails without waiting on
