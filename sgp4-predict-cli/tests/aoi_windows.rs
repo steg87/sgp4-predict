@@ -228,14 +228,27 @@ fn test_unknown_aoi_fails_before_reading_the_tle() {
     assert!(!message.contains("does-not-exist"), "{message}");
 }
 
-/// The field of regard reaches the detection rather than merely parsing: a
-/// wider cone must open the windows earlier and hold them longer.
+/// The field of regard reaches the detection rather than merely parsing.
+///
+/// Asserts that each nadir-only window is contained in a *strictly* wider one,
+/// not that the window count rose: a count comparison passes when
+/// `--max-off-nadir` is ignored entirely, since a wider cone merges windows as
+/// readily as it adds them.
 #[test]
-fn test_max_off_nadir_widens_the_windows() {
+fn test_max_off_nadir_widens_each_window() {
     let config = config("aoi_off_nadir");
-    // Window count rather than total duration: the duration column is a
-    // humantime string, and the count moves the same way.
-    let count = |args: &[&str]| ok(&run(&config, args)).lines().skip(1).count();
+    let windows = |args: &[&str]| {
+        ok(&run(&config, args))
+            .lines()
+            .skip(1)
+            .map(|row| {
+                let mut f = row.split(',');
+                let entry = f.next().expect("entry").to_string();
+                let exit = f.next().expect("exit").to_string();
+                (entry, exit)
+            })
+            .collect::<Vec<_>>()
+    };
 
     let base: &[&str] = &[
         "--aoi",
@@ -249,21 +262,32 @@ fn test_max_off_nadir_widens_the_windows() {
         [base, extra].concat()
     }
 
-    let nadir = count(base);
-    let wide = count(&with(base, &["--max-off-nadir", "30"]));
-    let full = count(&with(
+    let nadir = windows(base);
+    let wide = windows(&with(base, &["--max-off-nadir", "30"]));
+    assert!(!nadir.is_empty(), "nadir-only found nothing");
+
+    for (entry, exit) in &nadir {
+        // Timestamps are fixed-width ISO 8601, so string order is time order.
+        let containing = wide
+            .iter()
+            .find(|(s, e)| s <= entry && e >= exit)
+            .unwrap_or_else(|| panic!("no 30° window contains {entry}..{exit}; got {wide:?}"));
+        assert!(
+            containing.0 < *entry && containing.1 > *exit,
+            "30° window {containing:?} is no wider than the nadir window {entry}..{exit}"
+        );
+    }
+
+    // Full coverage is strictly harder than any, at the same reach.
+    let full = windows(&with(
         base,
         &["--max-off-nadir", "30", "--coverage", "full"],
     ));
-
-    assert!(nadir > 0, "nadir-only found nothing");
     assert!(
-        wide >= nadir,
-        "30° cone ({wide}) should see at least nadir ({nadir})"
-    );
-    assert!(
-        full < wide,
-        "full coverage ({full}) should be under any ({wide})"
+        full.len() < wide.len(),
+        "full ({}) should be under any ({})",
+        full.len(),
+        wide.len()
     );
 }
 
