@@ -445,3 +445,15 @@ def test_detect_aoi_honours_the_field_of_regard():
     mid = wide[0].start + (wide[0].end - wide[0].start) / 2
     assert p.detect_aoi(mid, area, max_off_nadir_deg=45.0) is not None
     assert p.detect_aoi(mid, area) is None
+
+
+def test_non_finite_off_nadir_does_not_become_line_of_sight_reach():
+    """NaN survives the clamp and would be read as the full horizon, so every
+    line-of-sight pass would be reported as an access window."""
+    p = make_predictor()
+    area = Circle((52.0, 10.0), 1.0)
+    nadir = list(p.aoi_iter(area, INTERVAL))
+    for bad in (float("nan"), float("-inf")):
+        assert [(w.start, w.end) for w in p.aoi_iter(area, INTERVAL, max_off_nadir_deg=bad)] == [
+            (w.start, w.end) for w in nadir
+        ]

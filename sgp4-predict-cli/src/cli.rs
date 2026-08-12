@@ -446,7 +446,7 @@ pub struct AoiTuningArgs {
     /// Half-angle of the satellite's field of regard, in degrees — the largest
     /// nadir angle the payload can be slewed to. Zero detects the ground track
     /// itself crossing the area
-    #[arg(long, value_name = "DEG", default_value_t = 0.0)]
+    #[arg(long, value_name = "DEG", value_parser = parse_off_nadir, default_value_t = 0.0)]
     pub max_off_nadir: f64,
 
     /// Whether any part of the area or all of it must be within reach
@@ -606,6 +606,18 @@ fn parse_max_iter(s: &str) -> Result<usize, String> {
         Ok(0) | Err(_) => Err(format!("max iterations must be at least 1, got {s}")),
         Ok(n) => Ok(n),
     }
+}
+
+/// A field of regard at or past 90° reaches no further than the horizon, and a
+/// non-finite one would survive every clamp downstream.
+fn parse_off_nadir(s: &str) -> Result<f64, String> {
+    let deg: f64 = s.parse().map_err(|_| format!("invalid number: {s}"))?;
+    if !(deg.is_finite() && (0.0..90.0).contains(&deg)) {
+        return Err(format!(
+            "off-nadir angle must be in [0, 90) degrees, got {s}"
+        ));
+    }
+    Ok(deg)
 }
 
 /// Elevation angles outside the horizon-to-zenith range can never be crossed.

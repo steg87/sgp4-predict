@@ -704,6 +704,21 @@ pub enum Coverage {
     Full,
 }
 
+/// The field of regard `max_central_angle` is safe to be handed.
+///
+/// A negative angle is no cone at all, and at or past π/2 the sine stops
+/// growing so the coverage relation runs backwards. NaN maps to zero rather
+/// than propagating: it survives `f64::clamp`, and `f64::min` then swallows it
+/// inside `max_central_angle`, which would silently report the full horizon —
+/// every line-of-sight pass an access window, with no error raised anywhere.
+fn resolve_off_nadir(max_off_nadir: Radians) -> f64 {
+    let angle = max_off_nadir.to_f64();
+    if angle.is_nan() {
+        return 0.0;
+    }
+    angle.clamp(0.0, FRAC_PI_2 - COINCIDENT)
+}
+
 /// Central angle from the sub-satellite point to the farthest ground point a
 /// payload slewed to `max_off_nadir` can reach, for a satellite at geocentric
 /// radius `r` over local Earth radius `re`.
@@ -765,12 +780,7 @@ impl<'a, A: Area> AreaInView<'a, A> {
         Self {
             predictor,
             area,
-            // A negative angle is no cone at all, and at or past π/2 the sine
-            // stops growing so the relation would run backwards.
-            max_off_nadir: opts
-                .max_off_nadir
-                .to_f64()
-                .clamp(0.0, FRAC_PI_2 - COINCIDENT),
+            max_off_nadir: resolve_off_nadir(opts.max_off_nadir),
             coverage: opts.coverage,
         }
     }
@@ -1745,6 +1755,28 @@ mod reach_tests {
                 reach(off_nadir)
             );
         }
+    }
+
+    /// NaN survives `f64::clamp`, and `f64::min` swallows it inside
+    /// `max_central_angle`, so an unguarded NaN reports the full horizon —
+    /// every line-of-sight pass an access window, with no error raised.
+    #[test]
+    fn test_non_finite_off_nadir_never_reaches_the_relation() {
+        assert_eq!(resolve_off_nadir(Radians(f64::NAN)), 0.0);
+        assert_eq!(resolve_off_nadir(Radians(f64::NEG_INFINITY)), 0.0);
+        assert_eq!(
+            resolve_off_nadir(Radians(f64::INFINITY)),
+            FRAC_PI_2 - COINCIDENT
+        );
+        assert_eq!(resolve_off_nadir(Radians(-1.0)), 0.0);
+
+        // The bug the guard exists for: unclamped, this is the full horizon.
+        let horizon = max_central_angle(0.0, R, RE);
+        assert!((max_central_angle(f64::NAN, R, RE) - horizon).abs() > 0.3);
+        assert_eq!(
+            max_central_angle(resolve_off_nadir(Radians(f64::NAN)), R, RE),
+            0.0
+        );
     }
 
     #[test]

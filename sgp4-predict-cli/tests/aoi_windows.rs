@@ -266,3 +266,22 @@ fn test_max_off_nadir_widens_the_windows() {
         "full coverage ({full}) should be under any ({wide})"
     );
 }
+
+/// A non-finite field of regard survives every clamp downstream and would be
+/// read as full line-of-sight reach, so it is refused at the flag.
+#[test]
+fn test_non_finite_off_nadir_is_rejected() {
+    let config = config("aoi_bad_off_nadir");
+    for bad in ["nan", "inf", "-1", "90", "120"] {
+        // `=` because clap reads a bare negative as a flag.
+        let flag = format!("--max-off-nadir={bad}");
+        let message = err(&run(
+            &config,
+            &["--aoi", "europe", "--duration", "1d", &flag],
+        ));
+        assert!(
+            message.contains("off-nadir angle must be in [0, 90) degrees"),
+            "{bad}: {message}"
+        );
+    }
+}
