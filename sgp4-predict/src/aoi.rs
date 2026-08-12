@@ -110,7 +110,15 @@ pub trait Area {
     /// built-ins are. It works because the farthest point of the area from
     /// `point` is the nearest one to `point`'s antipode: `π − d(antipode)`.
     /// An area that under-reports its offset inherits an over-estimate here,
-    /// which is the safe direction.
+    /// which is the safe direction for the magnitude.
+    ///
+    /// Continuity is the part that does not carry over.
+    /// `signed_angular_offset` is explicitly not required to be continuous,
+    /// and the default inherits any jump it has — but the step guarantee for
+    /// [`Coverage::Full`] rests on this changing no faster than `point` moves,
+    /// not merely on the bound. **An `Area` with a discontinuous offset must
+    /// supply its own `max_angular_distance` to be used with
+    /// [`Coverage::Full`].**
     fn max_angular_distance(&self, point: LatLon) -> Radians {
         let antipode = LatLon::new(
             Degrees(-point.latitude.to_f64()),

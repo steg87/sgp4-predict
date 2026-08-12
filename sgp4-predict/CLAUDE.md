@@ -48,7 +48,9 @@ Relatedly, `build` widens `lon_span` to exactly `TAU` whenever it drops the side
 
 ## `max_angular_distance`
 
-The supplied trait implementation is `π − d(antipode)`: the farthest point of an area from `p` is the nearest one to `p`'s antipode. It needs no override for an area whose offset is exact and continuous, which all three built-ins are — so there are no hand-written versions to keep in step. Two things it gets right that a max-over-vertices implementation would not: an area containing the antipode (the `.min(0.0)` clamp caps it at π), and `Rectangle`'s parallel edges, whose farthest point is mid-parallel rather than at a corner.
+The supplied trait implementation is `π − d(antipode)`: the farthest point of an area from `p` is the nearest one to `p`'s antipode. It needs no override for an area whose offset is exact and continuous, which all three built-ins are — so there are no hand-written versions to keep in step.
+
+**The continuity requirement is real and does not come free from `Area`'s contract.** `signed_angular_offset` explicitly waives continuity, so a legal-but-discontinuous custom area inherits a discontinuous `G = π − d(antipode)`. `Coverage::Full`'s bound `|λ − G| ≤ dist(p, {G = λ})` needs `G` 1-Lipschitz, not merely an over-estimate, so `ProximityStep` could step over a `Full` crossing for such an area. No built-in is affected — the waiver exists for bounds like the old polygon cap return, which is gone. The trait doc says a discontinuous area must supply its own. Two things it gets right that a max-over-vertices implementation would not: an area containing the antipode (the `.min(0.0)` clamp caps it at π), and `Rectangle`'s parallel edges, whose farthest point is mid-parallel rather than at a corner.
 
 The default is `π − d(antipode)` rather than `PI` because a `PI` default would let a downstream `Area` compile and then silently never report a `Coverage::Full` window.
 
