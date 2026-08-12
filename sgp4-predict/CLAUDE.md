@@ -40,6 +40,13 @@ Relatedly, `build` widens `lon_span` to exactly `TAU` whenever it drops the side
 
 `λ` itself drifts with altitude at ~7e-7 rad/s for LEO against a sub-point rate of ~1.1e-3 rad/s, three orders down and absorbed by `max_sub_point_rate`'s existing 1.05 `SAFETY` factor.
 
+**Two small frame mismatches are accepted and documented rather than corrected.** Both are an order below TLE error, and both are invisible at `max_off_nadir` zero, where only the offset's sign matters:
+
+- `unit_from_lat_lon` uses geodetic latitude as spherical latitude, so `offset` is an angle on that pseudo-sphere while `λ` is a true geocentric central angle. The north-south stretch is `(1−e²)/(cos²φ + (1−e²)² sin²φ)` — 0.9933 at the equator, 1.0067 at a pole, none east-west. Up to 0.67%, about 0.015° (1.6 km) at a 2.2° reach. Correcting it would mean scaling `λ` by a latitude-dependent factor, which buys less than the nadir convention below costs.
+- `re = r − altitude` is the local radius along the geodetic normal rather than the radius vector; ~2.3 m at LEO.
+
+Neither shows up in the 0.17° round-trip cross-check at 52°N: the stretch factor there is 1.0016, worth 0.0035° at a 2.2° reach.
+
 **Nadir is geocentric**, measured from the position vector rather than the ellipsoid normal. The two differ by up to 0.19° of tilt at mid-latitudes, ~2.3 km of ground reach — the largest term under our control when reconciling against another tool, so it is documented on the field rather than left implicit. `re` is taken as `r − altitude`, along the geodetic normal rather than the radius vector; ~3 m at LEO.
 
 **The accepted ceiling is that the field of regard must be a circular cone about nadir.** An asymmetric one — separate across-track and along-track slew limits — breaks the reduction to "distance from the sub-point" and would need Orekit's sample-the-zone-and-project approach instead. `FootprintOverlapDetector` is the reference implementation of the general problem; it discretises the zone's boundary and interior and is accurate only to its `samplingStep`, whereas the reduction here is exact and `O(edges)`. That trade is the reason for the restriction, not an oversight.

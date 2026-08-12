@@ -1248,8 +1248,15 @@ fn cycled(v: &[[f64; 3]]) -> impl Iterator<Item = &[f64; 3]> {
 ///
 /// This is what fixes the meaning of a polygon edge (see the module docs). The
 /// same map is applied to vertices and to the ground point, so containment is
-/// exact; only the *magnitude* of the offset is distorted relative to true
-/// ellipsoidal distance, and [`Area`] does not promise that magnitude.
+/// exact — the sign of an offset is never affected by the convention.
+///
+/// The *magnitude* is stretched relative to a true geocentric central angle,
+/// by `d(geocentric)/d(geodetic) = (1−e²)/(cos²φ + (1−e²)² sin²φ)` in the
+/// north-south direction: 0.9933 at the equator, 1.0067 at a pole, and
+/// unstretched east-west. That is invisible at `max_off_nadir` zero, where
+/// only the sign matters, and is a real term once the magnitude is compared
+/// against a reach — up to 0.67%, so about 0.015° (1.6 km) at a 2.2° reach.
+/// Comparable to the geocentric-nadir convention and an order below TLE error.
 fn unit_from_lat_lon(p: LatLon) -> [f64; 3] {
     unit_from_radians(p.latitude.radians(), p.longitude.radians())
 }
