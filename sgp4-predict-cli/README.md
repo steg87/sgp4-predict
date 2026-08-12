@@ -143,11 +143,11 @@ aois:
       - { latitude: 60.0, longitude: -1.0 }
 ```
 
-| `shape`   | Fields                                                             |
-| --------- | ------------------------------------------------------------------ |
-| `box`     | `south`, `north`, `west`, `east` — the box's bounds                |
-| `circle`  | `latitude`, `longitude` (centre), `radius`                         |
-| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs  |
+| `shape`   | Fields                                                            |
+| --------- | ----------------------------------------------------------------- |
+| `box`     | `south`, `north`, `west`, `east` — the box's bounds               |
+| `circle`  | `latitude`, `longitude` (centre), `radius`                        |
+| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
 
 **Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
 

@@ -741,11 +741,13 @@ fn resolve_off_nadir(max_off_nadir: Radians) -> f64 {
 /// wider than the horizon reaches no further than it.
 fn max_central_angle(max_off_nadir: f64, r: f64, re: f64) -> f64 {
     let horizon = (re / r).clamp(-1.0, 1.0).acos();
-    let sin_horizon_angle = (r / re) * max_off_nadir.sin();
-    if sin_horizon_angle >= 1.0 {
+    // `cos ε` at the target, by the sine rule on that triangle. At or past 1
+    // the line of sight is tangential and there is no target to reach.
+    let cos_elevation = (r / re) * max_off_nadir.sin();
+    if cos_elevation >= 1.0 {
         horizon
     } else {
-        (sin_horizon_angle.asin() - max_off_nadir).min(horizon)
+        (cos_elevation.asin() - max_off_nadir).min(horizon)
     }
 }
 

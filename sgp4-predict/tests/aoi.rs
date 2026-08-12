@@ -752,8 +752,10 @@ fn test_off_nadir_matches_dense_scan() {
     }
 }
 
-/// The central angle a payload at `off_nadir_deg` reaches, recomputed from the
-/// propagated state so the test shares no code with the implementation.
+/// The central angle a payload at `off_nadir_deg` reaches, recomputed here so
+/// the dense scan does not call the code it is checking. It restates the same
+/// formula, so it cross-checks the *scan*, not the relation itself — that is
+/// `reach_tests::test_matches_the_coverage_relation`'s job.
 fn reach_at(p: &Predictor, t: DateTime<Utc>, off_nadir_deg: f64) -> f64 {
     let point = p.sub_point(t).expect("propagation failed");
     let state = p.propagate(t).expect("propagation failed").to_ecef(t);
