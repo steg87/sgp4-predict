@@ -50,7 +50,7 @@ Relatedly, `build` widens `lon_span` to exactly `TAU` whenever it drops the side
 
 The supplied trait implementation is `π − d(antipode)`: the farthest point of an area from `p` is the nearest one to `p`'s antipode. It needs no override for an area whose offset is exact and continuous, which all three built-ins are — so there are no hand-written versions to keep in step. Two things it gets right that a max-over-vertices implementation would not: an area containing the antipode (the `.min(0.0)` clamp caps it at π), and `Rectangle`'s parallel edges, whose farthest point is mid-parallel rather than at a corner.
 
-It is required rather than defaulted-to-`PI` on the trait: a default would let a downstream `Area` compile and then silently never report a `Coverage::Full` window.
+The default is `π − d(antipode)` rather than `PI` because a `PI` default would let a downstream `Area` compile and then silently never report a `Coverage::Full` window.
 
 ## `Circle`
 
