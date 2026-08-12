@@ -55,7 +55,7 @@ pub enum Command {
     Illumination(IlluminationArgs),
     /// Trace the sub-satellite point over a time interval
     GroundTrack(GroundTrackArgs),
-    /// Find the windows where the ground track is inside an area of interest
+    /// Find the windows where an area of interest is within the payload's reach
     AoiWindows(AoiWindowsArgs),
     /// Manage the ground stations in the config file
     Gs(GsArgs),

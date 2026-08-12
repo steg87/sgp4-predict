@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 
-/// The window during which the satellite's ground track lies inside an area.
+/// The window during which an area is within the payload's reach.
 #[gen_stub_pyclass]
 #[pyclass(eq, hash, frozen, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -14,13 +14,13 @@ pub struct AoiWindow {
 #[gen_stub_pymethods]
 #[pymethods]
 impl AoiWindow {
-    /// When the ground track crosses into the area.
+    /// When the area comes within reach.
     #[getter]
     fn start(&self) -> DateTime<Utc> {
         self.start
     }
 
-    /// When it crosses back out.
+    /// When it passes back out of reach.
     #[getter]
     fn end(&self) -> DateTime<Utc> {
         self.end

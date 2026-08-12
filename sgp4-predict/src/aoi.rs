@@ -649,8 +649,7 @@ impl Area for Circle {
     }
 }
 
-/// The window during which the satellite's ground track lies inside an
-/// [`Area`].
+/// The window during which an [`Area`] is within the payload's reach.
 ///
 /// Implements [`IntervalRange`](crate::IntervalRange), so it can be passed
 /// directly to prediction and observation iterators to cover a specific
@@ -658,9 +657,9 @@ impl Area for Circle {
 /// [`clamp_to`](crate::TimeWindow::clamp_to).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AoiWindow {
-    /// When the ground track crosses into the area.
+    /// When the area comes within reach.
     pub start: DateTime<Utc>,
-    /// When it crosses back out.
+    /// When it passes back out of reach.
     pub end: DateTime<Utc>,
 }
 
@@ -966,8 +965,8 @@ fn step_bounds(opts: &AoiIterOpts) -> (Duration, Duration) {
     (min, opts.max_step.max(min))
 }
 
-/// Iterator over the windows during which the satellite's ground track lies
-/// inside an area.
+/// Iterator over the windows during which an area is within the payload's
+/// reach.
 ///
 /// Created by [`Predictor::aoi_iter`](crate::Predictor::aoi_iter).
 #[must_use = "iterators are lazy and do nothing unless consumed"]
@@ -1039,8 +1038,11 @@ impl<'a, A: Area> Iterator for AoiIter<'a, A> {
 }
 
 impl Predictor {
-    /// Find every window in which the satellite's ground track lies inside
-    /// `area`.
+    /// Find every window in which `area` is within the payload's reach.
+    ///
+    /// Reach is set by [`AoiIterOpts::max_off_nadir`], which defaults to zero
+    /// — the sub-satellite point itself crossing into the area. See
+    /// [`Predictor::aoi_iter_with_opts`].
     ///
     /// # Examples
     ///
@@ -1087,9 +1089,9 @@ impl Predictor {
         AoiIter::new(self.clone(), area, interval, opts, refinement)
     }
 
-    /// Detect whether the ground track is inside `area` at time `t`.
+    /// Detect whether `area` is within the payload's reach at time `t`.
     ///
-    /// Returns `Ok(None)` if it is outside. Otherwise walks backward and
+    /// Returns `Ok(None)` if it is not. Otherwise walks backward and
     /// forward from `t` using [`AoiIterOpts::default`]'s `walk_step` to find
     /// the entry and exit crossings, refining each with the bracketed hybrid
     /// solver ([`Refinement`]).

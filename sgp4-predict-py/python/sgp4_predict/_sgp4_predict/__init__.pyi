@@ -44,7 +44,7 @@ __all__ = [
 @typing.final
 class AoiIter:
     r"""
-    Lazy iterator yielding the windows during which the ground track is inside an area.
+    Lazy iterator yielding the windows during which an area is within the payload's reach.
     """
     def __iter__(self) -> AoiIter: ...
     def __next__(self) -> AoiWindow: ...
@@ -52,17 +52,17 @@ class AoiIter:
 @typing.final
 class AoiWindow:
     r"""
-    The window during which the satellite's ground track lies inside an area.
+    The window during which an area is within the payload's reach.
     """
     @property
     def start(self) -> datetime.datetime:
         r"""
-        When the ground track crosses into the area.
+        When the area comes within reach.
         """
     @property
     def end(self) -> datetime.datetime:
         r"""
-        When it crosses back out.
+        When it passes back out of reach.
         """
     @property
     def duration_seconds(self) -> builtins.float:

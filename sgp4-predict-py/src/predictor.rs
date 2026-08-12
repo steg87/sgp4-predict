@@ -240,7 +240,7 @@ struct AoiIterOwned {
     iter: sgp4_predict::AoiIter<'this, AreaKind>,
 }
 
-/// Lazy iterator yielding the windows during which the ground track is inside an area.
+/// Lazy iterator yielding the windows during which an area is within the payload's reach.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 pub struct AoiIter {
