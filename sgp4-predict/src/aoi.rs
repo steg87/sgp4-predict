@@ -1815,9 +1815,17 @@ mod reach_tests {
     }
 
     /// The supplied `max_angular_distance` reads the offset at the antipode,
-    /// so check it against a brute-force maximum over each area's boundary.
+    /// so check it against a brute-force maximum over each area.
+    ///
+    /// Both bounds are asserted. The lower one alone would pass a `PI` stub;
+    /// the upper one is what pins the formula, at a tolerance set by the point
+    /// cloud's own spacing rather than by the implementation.
     #[test]
     fn test_max_angular_distance_matches_brute_force() {
+        // ~0.0145 rad between neighbouring samples over the whole sphere, so
+        // the cloud's farthest point can sit that far inside the true one.
+        const SAMPLING: f64 = 0.05;
+
         let polygon = Polygon::new([
             (Degrees(40.0), Degrees(-10.0)),
             (Degrees(40.0), Degrees(30.0)),
@@ -1861,7 +1869,24 @@ mod reach_tests {
                     reported >= truth - 1e-9,
                     "{label} reported {reported} below the true farthest {truth}"
                 );
+                assert!(
+                    reported <= truth + SAMPLING,
+                    "{label} reported {reported}, well over the true farthest {truth}"
+                );
             }
+        }
+
+        // A cap has a closed form, so it pins the formula exactly rather than
+        // to the point cloud's resolution.
+        let centre = unit_from_lat_lon(circle.centre());
+        let radius = circle.radius().radians();
+        for p in geometry_tests::sphere_points(500) {
+            let reported = circle.max_angular_distance(lat_lon_from_unit(p)).to_f64();
+            let truth = (angle_between(centre, p) + radius).min(PI);
+            assert!(
+                (reported - truth).abs() < 1e-12,
+                "circle reported {reported}, closed form gives {truth}"
+            );
         }
     }
 }
