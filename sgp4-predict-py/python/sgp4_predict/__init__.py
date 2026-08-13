@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Protocol, Union, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from sgp4_predict._sgp4_predict import (
     AoiIter,
@@ -7,10 +7,10 @@ from sgp4_predict._sgp4_predict import (
     Apsis,
     ApsisEvent,
     ApsisIter,
-    Classification,
-    Elements,
     Circle,
+    Classification,
     Coverage,
+    Elements,
     FillRule,
     Geodetic,
     GroundObserver,
@@ -36,10 +36,10 @@ from sgp4_predict._sgp4_predict import (
 )
 
 #: A region on the ground, accepted by `Predictor.aoi_iter` and `detect_aoi`.
-Area = Union[Polygon, Rectangle, Circle]
+Area = Polygon | Rectangle | Circle
 
 #: Anywhere a point is taken, a `(latitude_deg, longitude_deg)` tuple works too.
-LatLonLike = Union[LatLon, Geodetic, tuple[float, float]]
+LatLonLike = LatLon | Geodetic | tuple[float, float]
 
 
 @runtime_checkable
@@ -77,10 +77,10 @@ __all__ = [
     "ApsisEvent",
     "ApsisIter",
     "Area",
-    "Classification",
-    "Elements",
     "Circle",
+    "Classification",
     "Coverage",
+    "Elements",
     "FillRule",
     "Geodetic",
     "GroundObserver",
