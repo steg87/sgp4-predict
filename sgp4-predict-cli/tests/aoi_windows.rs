@@ -23,13 +23,6 @@ aois:
     north: 65.0
     west: -10.0
     east: 30.0
-  europe-ellipse:
-    shape: ellipse
-    latitude: 52.0
-    longitude: 10.0
-    semi_axis_a: 14.0
-    semi_axis_b: 4.0
-    bearing: 60.0
   europe-circle:
     shape: circle
     latitude: 52.0
@@ -80,7 +73,7 @@ fn err(out: &Output) -> String {
 #[test]
 fn test_aoi_cli_over_every_shape() {
     let config = config("aoi_shapes");
-    for id in ["europe", "europe-ellipse", "europe-circle", "europe-poly"] {
+    for id in ["europe", "europe-circle", "europe-poly"] {
         let stdout = ok(&run(&config, &["--aoi", id, "--duration", "1d"]));
         assert!(stdout.contains("entry"), "{id}: {stdout}");
         assert!(
@@ -199,18 +192,17 @@ fn test_unbuildable_aoi_names_itself() {
         r"
 aois:
   broken:
-    shape: ellipse
+    shape: circle
     latitude: 0.0
     longitude: 0.0
-    semi_axis_a: 95.0
-    semi_axis_b: 5.0
+    radius: 95.0
 ",
     )
     .unwrap();
 
     let message = err(&run(&path, &["--aoi", "broken", "--duration", "1d"]));
     assert!(message.contains("aoi 'broken'"), "{message}");
-    assert!(message.contains("semi_axis_a 95"), "{message}");
+    assert!(message.contains("radius must lie in (0, 90°)"), "{message}");
 }
 
 /// The AOI is resolved before the TLE, so a bad id fails without waiting on
@@ -234,4 +226,100 @@ fn test_unknown_aoi_fails_before_reading_the_tle() {
     let message = String::from_utf8_lossy(&out.stderr);
     assert!(message.contains("unknown aoi"), "{message}");
     assert!(!message.contains("does-not-exist"), "{message}");
+}
+
+/// The field of regard reaches the detection rather than merely parsing.
+///
+/// Asserts that each nadir-only window is contained in a *strictly* wider one,
+/// not that the window count rose: a count comparison passes when
+/// `--max-off-nadir` is ignored entirely, since a wider cone merges windows as
+/// readily as it adds them.
+#[test]
+fn test_max_off_nadir_widens_each_window() {
+    let config = config("aoi_off_nadir");
+    let windows = |args: &[&str]| {
+        ok(&run(&config, args))
+            .lines()
+            .skip(1)
+            .map(|row| {
+                let mut f = row.split(',');
+                let entry = f.next().expect("entry").to_string();
+                let exit = f.next().expect("exit").to_string();
+                (entry, exit)
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let base: &[&str] = &[
+        "--aoi",
+        "europe-circle",
+        "--duration",
+        "1d",
+        "--format",
+        "csv",
+    ];
+    fn with<'a>(base: &[&'a str], extra: &[&'a str]) -> Vec<&'a str> {
+        [base, extra].concat()
+    }
+
+    let nadir = windows(base);
+    let wide = windows(&with(base, &["--max-off-nadir", "30"]));
+    assert!(!nadir.is_empty(), "nadir-only found nothing");
+
+    for (entry, exit) in &nadir {
+        // Timestamps are fixed-width ISO 8601, so string order is time order.
+        let containing = wide
+            .iter()
+            .find(|(s, e)| s <= entry && e >= exit)
+            .unwrap_or_else(|| panic!("no 30° window contains {entry}..{exit}; got {wide:?}"));
+        assert!(
+            containing.0 < *entry && containing.1 > *exit,
+            "30° window {containing:?} is no wider than the nadir window {entry}..{exit}"
+        );
+    }
+
+    // Full coverage is strictly harder than any, at the same reach.
+    let full = windows(&with(
+        base,
+        &["--max-off-nadir", "30", "--coverage", "full"],
+    ));
+    assert!(
+        full.len() < wide.len(),
+        "full ({}) should be under any ({})",
+        full.len(),
+        wide.len()
+    );
+}
+
+/// A non-finite field of regard survives every clamp downstream and would be
+/// read as full line-of-sight reach, so it is refused at the flag.
+#[test]
+fn test_non_finite_off_nadir_is_rejected() {
+    let config = config("aoi_bad_off_nadir");
+    for bad in ["nan", "inf", "-1", "90", "120"] {
+        // `=` because clap reads a bare negative as a flag.
+        let flag = format!("--max-off-nadir={bad}");
+        let message = err(&run(
+            &config,
+            &["--aoi", "europe", "--duration", "1d", &flag],
+        ));
+        assert!(
+            message.contains("off-nadir angle must be in [0, 90) degrees"),
+            "{bad}: {message}"
+        );
+    }
+}
+
+/// A zero-width reach cannot contain an area, so this combination yields an
+/// empty table. Warn rather than let it read as "no passes".
+#[test]
+fn test_full_coverage_without_a_field_of_regard_warns() {
+    let config = config("aoi_full_zero");
+    let out = run(
+        &config,
+        &["--aoi", "europe", "--duration", "1d", "--coverage", "full"],
+    );
+    ok(&out);
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(stderr.contains("can never open a window"), "{stderr}");
 }

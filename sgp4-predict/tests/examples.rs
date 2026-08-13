@@ -292,7 +292,7 @@ fn area_of_interest_overpasses() {
     let p = Predictor::from_tle(&tle).unwrap();
 
     // A latitude/longitude box: its north and south edges follow their parallels exactly. A
-    // `Polygon` of the same four corners would bow poleward; `Ellipse` covers circular footprints.
+    // `Polygon` of the same four corners would bow poleward; `Circle` covers circular areas.
     let area = Rectangle::new(
         (Degrees(50.0), Degrees(-10.0)),
         (Degrees(60.0), Degrees(2.0)),

@@ -126,12 +126,10 @@ aois:
     west: -8.0
     east: -1.0
   north-sea:
-    shape: ellipse
+    shape: circle
     latitude: 56.0
     longitude: 2.0
-    semi_axis_a: 2.7
-    semi_axis_b: 1.1
-    bearing: 45.0
+    radius: 2.7
   cape-town:
     shape: circle
     latitude: -33.9
@@ -145,12 +143,11 @@ aois:
       - { latitude: 60.0, longitude: -1.0 }
 ```
 
-| `shape`   | Fields                                                                                |
-| --------- | ------------------------------------------------------------------------------------- |
-| `box`     | `south`, `north`, `west`, `east` — the box's bounds                                   |
-| `ellipse` | `latitude`, `longitude` (centre), `semi_axis_a`, `semi_axis_b`, `bearing` (default 0) |
-| `circle`  | `latitude`, `longitude` (centre), `radius`                                            |
-| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs                     |
+| `shape`   | Fields                                                            |
+| --------- | ----------------------------------------------------------------- |
+| `box`     | `south`, `north`, `west`, `east` — the box's bounds               |
+| `circle`  | `latitude`, `longitude` (centre), `radius`                        |
+| `polygon` | `vertices`, a list of at least three `latitude`/`longitude` pairs |
 
 **Everything is in degrees**, and every extent is degrees of arc — about 111.2 km per degree.
 
@@ -170,24 +167,7 @@ Polygon edges, by contrast, are great-circle arcs, so they are not lines of cons
 a wide span they bow toward the nearer pole. Use `box` when the region really is a latitude/longitude
 box.
 
-An ellipse's semi-axes are **not** latitude and longitude extents. `bearing` turns `semi_axis_a`
-clockwise from north and `semi_axis_b` is a quarter turn from it; each is in `(0, 90)` and either may
-be the longer, so a wider-than-long area needs no bearing:
-
-```yaml
-tall: # 10 degrees north-south by 2 east-west
-  shape: ellipse
-  latitude: 0.0
-  longitude: 0.0
-  semi_axis_a: 10.0
-  semi_axis_b: 2.0
-wide: # 2 north-south by 10 east-west
-  shape: ellipse
-  latitude: 0.0
-  longitude: 0.0
-  semi_axis_a: 2.0
-  semi_axis_b: 10.0
-```
+A circle's `radius` is in `(0, 90)` degrees of arc.
 
 ### Managing AOIs
 
@@ -199,7 +179,7 @@ the shape can be picked with a single key:
 ```
 $ sgp4-predict aoi add
 AOI id: scotland
-Shape (box, ellipse, circle, polygon): b
+Shape (box, circle, polygon): b
 South latitude (degrees): 54
 North latitude (degrees): 60
 West longitude (degrees): -8
@@ -212,7 +192,7 @@ A polygon has no fixed number of fields, so its vertices are read one per line u
 ```
 $ sgp4-predict aoi add corridor
 AOI id: corridor
-Shape (box, ellipse, circle, polygon): p
+Shape (box, circle, polygon): p
 Vertices, one per line as `lat,lon`. Blank line when done.
 Vertex 1 lat,lon (degrees): 54,-8
 Vertex 2 lat,lon (degrees): 54,-1
@@ -243,7 +223,7 @@ id               shape    definition
 ------------------------------------
 cape-town        circle   latitude=-33.9 longitude=18.4 radius=2.25
 corridor         polygon  (54, -8) (54, -1) (60, -1)
-north-sea        ellipse  latitude=56 longitude=2 semi_axis_a=2.7 semi_axis_b=1.1 bearing=45
+north-sea        circle   latitude=56 longitude=2 radius=2.7
 scotland         box      south=54 north=60 west=-8 east=-1
 ```
 
@@ -336,11 +316,20 @@ datetime                  lat [deg]   lon [deg]  altitude [km]
 
 ### `aoi-windows` — overpasses of an area of interest
 
-The windows in which the ground track lies inside the AOI named by `--aoi <id>`, with the
+The windows in which the AOI named by `--aoi <id>` is within the payload's reach, with the
 sub-satellite point at each boundary crossing. See [Areas of interest](#areas-of-interest).
 
 ```sh
 sgp4-predict aoi-windows --tle-file sentinel.tle --aoi europe --duration 12h
+```
+
+`--max-off-nadir <deg>` is the half-angle of the satellite's field of regard — the largest nadir
+angle the payload can be slewed to. It defaults to 0, which detects the ground track itself crossing
+into the area. `--coverage full` requires every part of the area to be in reach at once, rather than
+any part of it:
+
+```sh
+sgp4-predict aoi-windows --aoi europe --max-off-nadir 30 --coverage full
 ```
 
 ```

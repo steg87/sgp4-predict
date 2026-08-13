@@ -66,7 +66,7 @@ Range checks live in the prompts (`prompt_latitude`, `prompt_bounded`, and the p
 
 `number()` and `prompt_f64` reject non-finite values: `nan`/`inf` parse as `f64` and pass every range check silently, so a non-finite West longitude makes the East prompt unsatisfiable (`(value - west).rem_euclid(360.0)` is NaN and no comparison against it is true).
 
-Consequently `build()` is unreachable for a box or an ellipse — the prompts cover every failure. It still runs, because `--aoi` must reject a hand-edited config, and a **polygon** can still fail there: `AntipodalEdge` and `LargerThanHemisphere` are properties of the assembled ring, not of any one vertex (`tests/aoi.rs::test_invalid_geometry_is_rejected_before_saving`).
+Consequently `build()` is unreachable for a box or a circle — the prompts cover every failure. It still runs, because `--aoi` must reject a hand-edited config, and a **polygon** can still fail there: `AntipodalEdge` and `LargerThanHemisphere` are properties of the assembled ring, not of any one vertex (`tests/aoi.rs::test_invalid_geometry_is_rejected_before_saving`).
 
 An argument that replaces a prompt is `echo()`ed in that prompt's own format, so the transcript is identical whether a value was typed or passed — which is why `tests/aoi.rs` asserts on _what stdin is consumed_ rather than on which prompts appear.
 

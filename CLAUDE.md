@@ -13,7 +13,7 @@ make test                                # full suite (matches CI and the pre-pu
 
 **Always run `make lint` and `make test` after making changes.** CI enforces both. The remaining `make` targets are self-documenting in the `Makefile`.
 
-The workspace has three crates: `sgp4-predict/` (the Rust library), `sgp4-predict-py/` (the Python bindings) and `sgp4-predict-cli/` (the `sgp4-predict` binary). Each carries its own `CLAUDE.md`, loaded when you work under it — **area-of-interest geometry (`aoi.rs`) is documented in `sgp4-predict/CLAUDE.md`, and its constraints are load-bearing; read it before touching `Area`, `Polygon`, `Rectangle` or `Ellipse`.**
+The workspace has three crates: `sgp4-predict/` (the Rust library), `sgp4-predict-py/` (the Python bindings) and `sgp4-predict-cli/` (the `sgp4-predict` binary). Each carries its own `CLAUDE.md`, loaded when you work under it — **area-of-interest geometry (`aoi.rs`) is documented in `sgp4-predict/CLAUDE.md`, and its constraints are load-bearing; read it before touching `Area`, `Polygon`, `Rectangle` or `Circle`.**
 
 ## Architecture
 

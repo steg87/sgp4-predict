@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
+use sgp4_predict::Coverage;
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Debug, Clone, Parser)]
@@ -54,7 +55,7 @@ pub enum Command {
     Illumination(IlluminationArgs),
     /// Trace the sub-satellite point over a time interval
     GroundTrack(GroundTrackArgs),
-    /// Find the windows where the ground track is inside an area of interest
+    /// Find the windows where an area of interest is within the payload's reach
     AoiWindows(AoiWindowsArgs),
     /// Manage the ground stations in the config file
     Gs(GsArgs),
@@ -152,8 +153,6 @@ pub struct AoiAddArgs {
 pub enum Shape {
     /// Latitude/longitude box, given by its south/north/west/east bounds
     Box,
-    /// Ellipse, given by its centre, semi-axes and bearing
-    Ellipse,
     /// Circle, given by its centre and radius
     Circle,
     /// Ring of three or more vertices
@@ -219,6 +218,24 @@ pub struct CommonArgs {
     /// Prepend the resolved input arguments as # comment lines to the output
     #[arg(long)]
     pub output_args: bool,
+}
+
+/// How much of an AOI must be within reach for a window to open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum)]
+pub enum CoverageArg {
+    /// Any part of the area is within reach
+    Any,
+    /// Every part of the area is within reach at once
+    Full,
+}
+
+impl From<CoverageArg> for Coverage {
+    fn from(c: CoverageArg) -> Self {
+        match c {
+            CoverageArg::Any => Self::Any,
+            CoverageArg::Full => Self::Full,
+        }
+    }
 }
 
 /// Tabular output format.
@@ -426,6 +443,16 @@ pub struct AoiWindowsArgs {
 #[derive(Debug, Clone, clap::Args)]
 #[command(next_help_heading = "Detection tuning")]
 pub struct AoiTuningArgs {
+    /// Half-angle of the satellite's field of regard, in degrees — the largest
+    /// nadir angle the payload can be slewed to. Zero detects the ground track
+    /// itself crossing the area
+    #[arg(long, value_name = "DEG", value_parser = parse_off_nadir, default_value_t = 0.0)]
+    pub max_off_nadir: f64,
+
+    /// Whether any part of the area or all of it must be within reach
+    #[arg(long, value_enum, default_value_t = CoverageArg::Any)]
+    pub coverage: CoverageArg,
+
     /// Lower bound of the adaptive coarse-scan step, and so the shortest
     /// crossing the scan is guaranteed to see. Floored at 1ms
     #[arg(long, value_parser = parse_step, default_value = "1s")]
@@ -579,6 +606,18 @@ fn parse_max_iter(s: &str) -> Result<usize, String> {
         Ok(0) | Err(_) => Err(format!("max iterations must be at least 1, got {s}")),
         Ok(n) => Ok(n),
     }
+}
+
+/// A field of regard at or past 90° reaches no further than the horizon, and a
+/// non-finite one would survive every clamp downstream.
+fn parse_off_nadir(s: &str) -> Result<f64, String> {
+    let deg: f64 = s.parse().map_err(|_| format!("invalid number: {s}"))?;
+    if !(deg.is_finite() && (0.0..90.0).contains(&deg)) {
+        return Err(format!(
+            "off-nadir angle must be in [0, 90) degrees, got {s}"
+        ));
+    }
+    Ok(deg)
 }
 
 /// Elevation angles outside the horizon-to-zenith range can never be crossed.

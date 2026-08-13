@@ -142,6 +142,39 @@ impl From<FillRule> for sgp4_predict::FillRule {
     }
 }
 
+// ── Coverage ───────────────────────────────────────────────────────────────────
+
+/// Whether any part of an area, or all of it, must be within reach for a window
+/// to be open.
+#[gen_stub_pyclass_enum]
+#[pyclass(
+    eq,
+    eq_int,
+    hash,
+    frozen,
+    from_py_object,
+    module = "sgp4_predict._sgp4_predict"
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Coverage {
+    /// Any part of the area is within reach.
+    Any,
+    /// Every part of the area is within reach at once. Needs `max_off_nadir_deg`
+    /// wider than the area — at the default of zero the reach is a single point,
+    /// so no window opens. Not the same as "one image covers the area", which
+    /// depends on the instantaneous field of view.
+    Full,
+}
+
+impl From<Coverage> for sgp4_predict::Coverage {
+    fn from(c: Coverage) -> Self {
+        match c {
+            Coverage::Any => Self::Any,
+            Coverage::Full => Self::Full,
+        }
+    }
+}
+
 // ── Polygon ────────────────────────────────────────────────────────────────────
 
 /// A closed polygon on Earth's surface whose edges are great-circle arcs.
@@ -205,6 +238,12 @@ impl Polygon {
     /// positive inside, negative outside, zero on the boundary.
     fn signed_angular_offset_deg(&self, point: LatLonArg) -> f64 {
         self.inner.signed_angular_offset(point.0).degrees()
+    }
+
+    /// Angular distance from a point to the farthest point of the area, in
+    /// degrees. This is what `coverage="full"` is measured against.
+    fn max_angular_distance_deg(&self, point: LatLonArg) -> f64 {
+        self.inner.max_angular_distance(point.0).degrees()
     }
 
     fn __repr__(&self) -> String {
@@ -275,6 +314,12 @@ impl Rectangle {
         self.inner.signed_angular_offset(point.0).degrees()
     }
 
+    /// Angular distance from a point to the farthest point of the area, in
+    /// degrees. This is what `coverage="full"` is measured against.
+    fn max_angular_distance_deg(&self, point: LatLonArg) -> f64 {
+        self.inner.max_angular_distance(point.0).degrees()
+    }
+
     fn __repr__(&self) -> String {
         let (south, north) = self.latitudes_deg();
         let (west, span) = self.longitudes_deg();
@@ -282,85 +327,42 @@ impl Rectangle {
     }
 }
 
-// ── Ellipse ────────────────────────────────────────────────────────────────────
+// ── Circle ─────────────────────────────────────────────────────────────────────
 
-/// An ellipse on Earth's surface: the points whose great-circle distances to two
-/// foci sum to at most twice the semi-major axis.
+/// A circular area on Earth's surface — a spherical cap.
 ///
-/// Semi-axes are angular — a degree of arc is about 111.2 km on the ground — and
-/// the bearing turns `semi_axis_a_deg` clockwise from north, with `semi_axis_b_deg`
-/// a quarter turn from it. Either may be the longer. At a pole, where north is
-/// undefined, the bearing is measured from the prime meridian instead. The centre
-/// may be a `LatLon` object, a `Geodetic` object whose altitude is ignored, or a
-/// `(latitude_deg, longitude_deg)` tuple.
+/// The radius is angular: a degree of arc is about 111.2 km on the ground. The
+/// centre may be a `LatLon` object, a `Geodetic` object whose altitude is ignored,
+/// or a `(latitude_deg, longitude_deg)` tuple.
 ///
-/// Raises `ValueError` if either semi-axis is outside `(0, 90)`, if the centre's
-/// latitude is outside [-90, 90], or if any argument is `nan` or infinite.
+/// Raises `ValueError` if the radius is outside `(0, 90)`, if the centre's latitude
+/// is outside [-90, 90], or if any argument is `nan` or infinite.
 #[gen_stub_pyclass]
 #[pyclass(frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Ellipse {
-    inner: sgp4_predict::Ellipse,
+pub struct Circle {
+    inner: sgp4_predict::Circle,
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
-impl Ellipse {
+impl Circle {
     #[new]
-    #[pyo3(signature = (centre, semi_axis_a_deg, semi_axis_b_deg, bearing_deg = 0.0))]
-    fn new(
-        centre: LatLonArg,
-        semi_axis_a_deg: f64,
-        semi_axis_b_deg: f64,
-        bearing_deg: f64,
-    ) -> PyResult<Self> {
-        let inner = sgp4_predict::Ellipse::new(
-            centre.0,
-            Degrees(semi_axis_a_deg),
-            Degrees(semi_axis_b_deg),
-            Degrees(bearing_deg),
-        )
-        .map_err(to_py_err)?;
+    fn new(centre: LatLonArg, radius_deg: f64) -> PyResult<Self> {
+        let inner = sgp4_predict::Circle::new(centre.0, Degrees(radius_deg)).map_err(to_py_err)?;
         Ok(Self { inner })
     }
 
-    /// A circular area of angular `radius_deg` — a spherical cap.
-    #[staticmethod]
-    fn circle(centre: LatLonArg, radius_deg: f64) -> PyResult<Self> {
-        let inner =
-            sgp4_predict::Ellipse::circle(centre.0, Degrees(radius_deg)).map_err(to_py_err)?;
-        Ok(Self { inner })
-    }
-
-    /// The ellipse's centre.
+    /// The circle's centre.
     #[getter]
     fn centre(&self) -> LatLon {
         LatLon::from_inner(self.inner.centre())
     }
 
-    /// The semi-axis along `bearing_deg`, in degrees of arc.
+    /// The circle's angular radius, in degrees of arc.
     #[getter]
-    fn semi_axis_a_deg(&self) -> f64 {
-        self.inner.semi_axes().0.to_f64()
-    }
-
-    /// The semi-axis across `bearing_deg`, in degrees of arc.
-    #[getter]
-    fn semi_axis_b_deg(&self) -> f64 {
-        self.inner.semi_axes().1.to_f64()
-    }
-
-    /// Bearing of `semi_axis_a_deg`, degrees clockwise from north.
-    #[getter]
-    fn bearing_deg(&self) -> f64 {
-        self.inner.bearing().to_f64()
-    }
-
-    /// The two foci, which coincide with the centre when the ellipse is a circle.
-    #[getter]
-    fn foci(&self) -> (LatLon, LatLon) {
-        let (a, b) = self.inner.foci();
-        (LatLon::from_inner(a), LatLon::from_inner(b))
+    fn radius_deg(&self) -> f64 {
+        self.inner.radius().to_f64()
     }
 
     /// Signed angular offset of a point from the boundary, in degrees:
@@ -369,15 +371,19 @@ impl Ellipse {
         self.inner.signed_angular_offset(point.0).degrees()
     }
 
+    /// Angular distance from a point to the farthest point of the area, in
+    /// degrees. This is what `coverage="full"` is measured against.
+    fn max_angular_distance_deg(&self, point: LatLonArg) -> f64 {
+        self.inner.max_angular_distance(point.0).degrees()
+    }
+
     fn __repr__(&self) -> String {
         let centre = self.centre();
         format!(
-            "Ellipse(centre=({}, {}), semi_axis_a_deg={}, semi_axis_b_deg={}, bearing_deg={})",
+            "Circle(centre=({}, {}), radius_deg={})",
             centre.latitude_deg(),
             centre.longitude_deg(),
-            self.semi_axis_a_deg(),
-            self.semi_axis_b_deg(),
-            self.bearing_deg()
+            self.radius_deg()
         )
     }
 }
@@ -390,7 +396,7 @@ impl Ellipse {
 pub(crate) enum AreaKind {
     Polygon(sgp4_predict::Polygon),
     Rectangle(sgp4_predict::Rectangle),
-    Ellipse(sgp4_predict::Ellipse),
+    Circle(sgp4_predict::Circle),
 }
 
 /// The borrowed counterpart, for the one-shot paths that don't outlive the
@@ -399,7 +405,7 @@ pub(crate) enum AreaKind {
 pub(crate) enum AreaRef<'a> {
     Polygon(&'a sgp4_predict::Polygon),
     Rectangle(&'a sgp4_predict::Rectangle),
-    Ellipse(&'a sgp4_predict::Ellipse),
+    Circle(&'a sgp4_predict::Circle),
 }
 
 impl Area for AreaKind {
@@ -407,7 +413,7 @@ impl Area for AreaKind {
         match self {
             Self::Polygon(a) => a.signed_angular_offset(point),
             Self::Rectangle(a) => a.signed_angular_offset(point),
-            Self::Ellipse(a) => a.signed_angular_offset(point),
+            Self::Circle(a) => a.signed_angular_offset(point),
         }
     }
 }
@@ -417,7 +423,7 @@ impl Area for AreaRef<'_> {
         match self {
             Self::Polygon(a) => a.signed_angular_offset(point),
             Self::Rectangle(a) => a.signed_angular_offset(point),
-            Self::Ellipse(a) => a.signed_angular_offset(point),
+            Self::Circle(a) => a.signed_angular_offset(point),
         }
     }
 }
@@ -426,7 +432,7 @@ pub(crate) fn extract_area(area: &Bound<'_, PyAny>) -> PyResult<AreaKind> {
     Ok(match extract_area_ref(area)? {
         AreaRef::Polygon(a) => AreaKind::Polygon(a.clone()),
         AreaRef::Rectangle(a) => AreaKind::Rectangle(a.clone()),
-        AreaRef::Ellipse(a) => AreaKind::Ellipse(a.clone()),
+        AreaRef::Circle(a) => AreaKind::Circle(a.clone()),
     })
 }
 
@@ -439,10 +445,10 @@ pub(crate) fn extract_area_ref<'a>(area: &'a Bound<'_, PyAny>) -> PyResult<AreaR
     if let Ok(a) = area.cast::<Rectangle>() {
         return Ok(AreaRef::Rectangle(&a.get().inner));
     }
-    if let Ok(a) = area.cast::<Ellipse>() {
-        return Ok(AreaRef::Ellipse(&a.get().inner));
+    if let Ok(a) = area.cast::<Circle>() {
+        return Ok(AreaRef::Circle(&a.get().inner));
     }
     Err(PyTypeError::new_err(
-        "expected a Polygon, Rectangle, or Ellipse",
+        "expected a Polygon, Rectangle, or Circle",
     ))
 }

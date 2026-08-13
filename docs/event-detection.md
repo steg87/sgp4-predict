@@ -68,4 +68,5 @@ deciding optical visibility; radiometric or solar-power work needs a conical sha
 **Areas of interest** have two: the `min_step` floor bounds the shortest crossing the scan can see —
 about 6.6 km of track at the 1 s default, and honoured down to 1 ms — and the boundary walk uses a
 fixed `walk_step`, so a **concave** notch the ground track leaves and re-enters within that step is
-absorbed into the surrounding window. Both are `AoiIterOpts` fields.
+absorbed into the surrounding window. Both are `AoiIterOpts` fields. `max_off_nadir` models the
+field of regard as a circular cone about nadir, so an asymmetric slew limit is not represented.

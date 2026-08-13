@@ -13,9 +13,10 @@ __all__ = [
     "Apsis",
     "ApsisEvent",
     "ApsisIter",
+    "Circle",
     "Classification",
+    "Coverage",
     "Elements",
-    "Ellipse",
     "FillRule",
     "Geodetic",
     "GroundObserver",
@@ -43,7 +44,7 @@ __all__ = [
 @typing.final
 class AoiIter:
     r"""
-    Lazy iterator yielding the windows during which the ground track is inside an area.
+    Lazy iterator yielding the windows during which an area is within the payload's reach.
     """
     def __iter__(self) -> AoiIter: ...
     def __next__(self) -> AoiWindow: ...
@@ -51,17 +52,17 @@ class AoiIter:
 @typing.final
 class AoiWindow:
     r"""
-    The window during which the satellite's ground track lies inside an area.
+    The window during which an area is within the payload's reach.
     """
     @property
     def start(self) -> datetime.datetime:
         r"""
-        When the ground track crosses into the area.
+        When the area comes within reach.
         """
     @property
     def end(self) -> datetime.datetime:
         r"""
-        When it crosses back out.
+        When it passes back out of reach.
         """
     @property
     def duration_seconds(self) -> builtins.float:
@@ -102,6 +103,41 @@ class ApsisIter:
     """
     def __iter__(self) -> ApsisIter: ...
     def __next__(self) -> Apsis: ...
+
+@typing.final
+class Circle:
+    r"""
+    A circular area on Earth's surface — a spherical cap.
+    
+    The radius is angular: a degree of arc is about 111.2 km on the ground. The
+    centre may be a `LatLon` object, a `Geodetic` object whose altitude is ignored,
+    or a `(latitude_deg, longitude_deg)` tuple.
+    
+    Raises `ValueError` if the radius is outside `(0, 90)`, if the centre's latitude
+    is outside [-90, 90], or if any argument is `nan` or infinite.
+    """
+    @property
+    def centre(self) -> LatLon:
+        r"""
+        The circle's centre.
+        """
+    @property
+    def radius_deg(self) -> builtins.float:
+        r"""
+        The circle's angular radius, in degrees of arc.
+        """
+    def __new__(cls, centre: sgp4_predict.LatLonLike, radius_deg: builtins.float) -> Circle: ...
+    def signed_angular_offset_deg(self, point: sgp4_predict.LatLonLike) -> builtins.float:
+        r"""
+        Signed angular offset of a point from the boundary, in degrees:
+        positive inside, negative outside, zero on the boundary.
+        """
+    def max_angular_distance_deg(self, point: sgp4_predict.LatLonLike) -> builtins.float:
+        r"""
+        Angular distance from a point to the farthest point of the area, in
+        degrees. This is what `coverage="full"` is measured against.
+        """
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Elements:
@@ -261,60 +297,6 @@ class Elements:
         to a string first.
         
         Raises `ValueError` if the dict is missing required fields or has invalid values.
-        """
-    def __repr__(self) -> builtins.str: ...
-
-@typing.final
-class Ellipse:
-    r"""
-    An ellipse on Earth's surface: the points whose great-circle distances to two
-    foci sum to at most twice the semi-major axis.
-    
-    Semi-axes are angular — a degree of arc is about 111.2 km on the ground — and
-    the bearing turns `semi_axis_a_deg` clockwise from north, with `semi_axis_b_deg`
-    a quarter turn from it. Either may be the longer. At a pole, where north is
-    undefined, the bearing is measured from the prime meridian instead. The centre
-    may be a `LatLon` object, a `Geodetic` object whose altitude is ignored, or a
-    `(latitude_deg, longitude_deg)` tuple.
-    
-    Raises `ValueError` if either semi-axis is outside `(0, 90)`, if the centre's
-    latitude is outside [-90, 90], or if any argument is `nan` or infinite.
-    """
-    @property
-    def centre(self) -> LatLon:
-        r"""
-        The ellipse's centre.
-        """
-    @property
-    def semi_axis_a_deg(self) -> builtins.float:
-        r"""
-        The semi-axis along `bearing_deg`, in degrees of arc.
-        """
-    @property
-    def semi_axis_b_deg(self) -> builtins.float:
-        r"""
-        The semi-axis across `bearing_deg`, in degrees of arc.
-        """
-    @property
-    def bearing_deg(self) -> builtins.float:
-        r"""
-        Bearing of `semi_axis_a_deg`, degrees clockwise from north.
-        """
-    @property
-    def foci(self) -> tuple[LatLon, LatLon]:
-        r"""
-        The two foci, which coincide with the centre when the ellipse is a circle.
-        """
-    def __new__(cls, centre: sgp4_predict.LatLonLike, semi_axis_a_deg: builtins.float, semi_axis_b_deg: builtins.float, bearing_deg: builtins.float = 0.0) -> Ellipse: ...
-    @staticmethod
-    def circle(centre: sgp4_predict.LatLonLike, radius_deg: builtins.float) -> Ellipse:
-        r"""
-        A circular area of angular `radius_deg` — a spherical cap.
-        """
-    def signed_angular_offset_deg(self, point: sgp4_predict.LatLonLike) -> builtins.float:
-        r"""
-        Signed angular offset of a point from the boundary, in degrees:
-        positive inside, negative outside, zero on the boundary.
         """
     def __repr__(self) -> builtins.str: ...
 
@@ -501,6 +483,11 @@ class Polygon:
         Signed angular offset of a point from the boundary, in degrees:
         positive inside, negative outside, zero on the boundary.
         """
+    def max_angular_distance_deg(self, point: sgp4_predict.LatLonLike) -> builtins.float:
+        r"""
+        Angular distance from a point to the farthest point of the area, in
+        degrees. This is what `coverage="full"` is measured against.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -600,15 +587,26 @@ class Predictor:
         `interval` must expose `.start` and `.end` datetime properties.
         Yields `(datetime, Geodetic)` sub-satellite points.
         """
-    def aoi_iter(self, area: sgp4_predict.Area, interval: sgp4_predict.IntervalRange, *, min_step: typing.Optional[datetime.timedelta] = None, max_step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None, skip_leading_partial: typing.Optional[builtins.bool] = None, clamp_to_interval: typing.Optional[builtins.bool] = None) -> AoiIter:
+    def aoi_iter(self, area: sgp4_predict.Area, interval: sgp4_predict.IntervalRange, *, max_off_nadir_deg: typing.Optional[builtins.float] = None, coverage: typing.Optional[Coverage] = None, min_step: typing.Optional[datetime.timedelta] = None, max_step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None, skip_leading_partial: typing.Optional[builtins.bool] = None, clamp_to_interval: typing.Optional[builtins.bool] = None) -> AoiIter:
         r"""
-        Iterate over the windows in which the ground track lies inside `area`.
+        Iterate over the windows in which `area` is within the payload's reach.
         
-        `area` is a `Polygon`, `Rectangle`, or `Ellipse`.
+        `area` is a `Polygon`, `Rectangle`, or `Circle`.
         `interval` must expose `.start` and `.end` datetime properties.
         
-        The keyword-only arguments tune the coarse scan; each defaults to the
-        library's own value.
+        The keyword-only arguments tune the reach and the coarse scan; each defaults
+        to the library's own value.
+        
+        `max_off_nadir_deg` is the half-angle of the satellite's field of regard —
+        the largest nadir angle the payload can be slewed to. It defaults to zero,
+        which detects the sub-satellite point itself crossing into the area. This is
+        a field of *regard*, not of view: it describes everything the payload could
+        be pointed at, not the footprint of a single image. A non-finite value is
+        taken as zero. `coverage` chooses whether any part of the area
+        (`Coverage.Any`, the default) or all of it (`Coverage.Full`) must be within
+        reach; `Coverage.Full` needs `max_off_nadir_deg` set wider than the area,
+        since at the default of zero the reach is a single point and no window
+        ever opens.
         
         `min_step` is the lower bound of the adaptive coarse-scan step, and also the
         shortest crossing the scan is guaranteed to see; lower it below the default
@@ -629,11 +627,11 @@ class Predictor:
         `clamp_to_interval` clamps a window still in progress at the interval end to
         the interval, instead of walking forward for its true end.
         """
-    def detect_aoi(self, t: datetime.datetime, area: sgp4_predict.Area, *, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None) -> typing.Optional[AoiWindow]:
+    def detect_aoi(self, t: datetime.datetime, area: sgp4_predict.Area, *, max_off_nadir_deg: typing.Optional[builtins.float] = None, coverage: typing.Optional[Coverage] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None) -> typing.Optional[AoiWindow]:
         r"""
-        Detect whether the ground track is inside `area` at time `t`.
+        Detect whether `area` is within the payload's reach at time `t`.
         
-        Returns `None` if it is outside. Otherwise searches backward and forward to
+        Returns `None` if it is not. Otherwise searches backward and forward to
         bracket the entry and exit crossings.
         
         Raises `RuntimeError` if the window turns out to be longer than
@@ -730,6 +728,11 @@ class Rectangle:
         r"""
         Signed angular offset of a point from the boundary, in degrees:
         positive inside, negative outside, zero on the boundary.
+        """
+    def max_angular_distance_deg(self, point: sgp4_predict.LatLonLike) -> builtins.float:
+        r"""
+        Angular distance from a point to the farthest point of the area, in
+        degrees. This is what `coverage="full"` is measured against.
         """
     def __repr__(self) -> builtins.str: ...
 
@@ -927,6 +930,24 @@ class Classification(enum.Enum):
     Secret = ...
     r"""
     Secret (S)
+    """
+
+@typing.final
+class Coverage(enum.Enum):
+    r"""
+    Whether any part of an area, or all of it, must be within reach for a window
+    to be open.
+    """
+    Any = ...
+    r"""
+    Any part of the area is within reach.
+    """
+    Full = ...
+    r"""
+    Every part of the area is within reach at once. Needs `max_off_nadir_deg`
+    wider than the area — at the default of zero the reach is a single point,
+    so no window opens. Not the same as "one image covers the area", which
+    depends on the instantaneous field of view.
     """
 
 @typing.final

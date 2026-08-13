@@ -416,7 +416,7 @@ const AOI_COLUMNS: &[Column] = &[
 ];
 
 /// The window plus the sub-satellite point at each end, which is where the
-/// ground track crossed the boundary.
+/// area came within reach and passed back out of it.
 type AoiRow = (AoiWindow, Geodetic, Geodetic);
 
 pub fn write_aoi<W, I>(w: W, format: Format, iter: I) -> anyhow::Result<()>

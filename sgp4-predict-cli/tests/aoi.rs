@@ -53,11 +53,6 @@ fn test_add_stores_named_fields_for_every_shape() {
     ok(&aoi(
         &config,
         &["add"],
-        "north-sea\nellipse\n56\n2\n45\n2.7\n1.1\n",
-    ));
-    ok(&aoi(
-        &config,
-        &["add"],
         "cape-town\ncircle\n-33.9\n18.4\n2.25\n",
     ));
     ok(&aoi(
@@ -71,9 +66,6 @@ fn test_add_stores_named_fields_for_every_shape() {
         "shape: box",
         "south: 54.0",
         "east: -1.0",
-        "shape: ellipse",
-        "semi_axis_a: 2.7",
-        "bearing: 45.0",
         "shape: circle",
         "radius: 2.25",
         "shape: polygon",
@@ -190,7 +182,7 @@ fn test_shape_flag_skips_the_shape_prompt() {
 #[test]
 fn test_no_coordinate_flags_exist() {
     let config = fresh_config("aoi_no_coord_flags");
-    for flag in ["--box", "--ellipse", "--circle", "--poly"] {
+    for flag in ["--box", "--circle", "--poly"] {
         let message = err(&aoi(&config, &["add", "x", flag, "1,2,3,4"], ""));
         assert!(message.contains("unexpected argument"), "{flag}: {message}");
     }
@@ -218,7 +210,7 @@ fn test_arguments_are_echoed_like_prompts() {
     let transcript = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(transcript.contains("AOI id: scotland"), "{transcript}");
     assert!(
-        transcript.contains("Shape (box, ellipse, circle, polygon): box"),
+        transcript.contains("Shape (box, circle, polygon): box"),
         "{transcript}"
     );
 }
@@ -232,11 +224,6 @@ fn test_add_prompts_for_every_shape() {
     ok(&aoi(
         &config,
         &["add"],
-        "north-sea\nellipse\n56\n2\n45\n2.7\n1.1\n",
-    ));
-    ok(&aoi(
-        &config,
-        &["add"],
         "cape-town\ncircle\n-33.9\n18.4\n2.25\n",
     ));
     ok(&aoi(
@@ -247,9 +234,6 @@ fn test_add_prompts_for_every_shape() {
 
     let listed = ok(&aoi(&config, &["list", "--format", "csv"], ""));
     assert!(listed.contains("scotland,box,south=54 north=60 west=-8 east=-1"));
-    assert!(listed.contains(
-        "north-sea,ellipse,latitude=56 longitude=2 semi_axis_a=2.7 semi_axis_b=1.1 bearing=45"
-    ));
     assert!(listed.contains("cape-town,circle,latitude=-33.9 longitude=18.4 radius=2.25"));
     // The definition contains commas, so CSV quotes it.
     assert!(listed.contains(r#"corridor,polygon,"(54, -8) (54, -1) (60, -1)""#));
@@ -331,41 +315,6 @@ fn test_malformed_input_re_prompts_rather_than_aborting() {
     assert!(
         ok(&aoi(&config, &["list"], "")).contains("south=54 north=60"),
         "the entry survived the typos"
-    );
-}
-
-/// The bearing is asked before the axes, so each can be described relative to
-/// it rather than leaving the reader to guess which is latitude.
-#[test]
-fn test_ellipse_prompts_bearing_before_the_axes() {
-    let config = fresh_config("aoi_prompt_ellipse_order");
-    let out = aoi(&config, &["add"], "north-sea\ne\n56\n2\n45\n2.7\n1.1\n");
-    ok(&out);
-
-    let prompts = String::from_utf8_lossy(&out.stderr).into_owned();
-    let at = |needle: &str| {
-        prompts
-            .find(needle)
-            .unwrap_or_else(|| panic!("missing {needle} in:\n{prompts}"))
-    };
-    assert!(at("Bearing of semi-axis A") < at("Semi-axis A"));
-    assert!(at("Semi-axis A") < at("Semi-axis B"));
-    assert!(prompts.contains("ALONG that bearing"), "{prompts}");
-    assert!(prompts.contains("ACROSS it"), "{prompts}");
-}
-
-/// Neither axis has to be the longer, so a wider-than-long area needs no
-/// bearing arithmetic: it is stored exactly as typed.
-#[test]
-fn test_ellipse_accepts_a_longer_second_axis() {
-    let config = fresh_config("aoi_prompt_ellipse_wide");
-    // 2 north-south by 10 east-west, entered in that order.
-    ok(&aoi(&config, &["add"], "wide\ne\n0\n0\n0\n2\n10\n"));
-
-    let listing = ok(&aoi(&config, &["list"], ""));
-    assert!(
-        listing.contains("semi_axis_a=2 semi_axis_b=10"),
-        "{listing}"
     );
 }
 

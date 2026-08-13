@@ -68,12 +68,12 @@ configuration for event times.
 
 ## Areas of interest
 
-An area is a region on the ground; `aoi_iter` yields the windows in which the sub-satellite point
-lies inside it. Points are `LatLon` objects, `Geodetic` objects whose altitude is ignored — so a
+An area is a region on the ground; `aoi_iter` yields the windows in which it is within the
+payload's reach. Points are `LatLon` objects, `Geodetic` objects whose altitude is ignored — so a
 `sub_point` result can be passed straight in — or plain `(latitude_deg, longitude_deg)` tuples.
 
 ```python
-from sgp4_predict import Ellipse, LatLon, Polygon, Rectangle
+from sgp4_predict import Circle, LatLon, Polygon, Rectangle
 
 # An arbitrary ring. Concave and self-intersecting rings are both fine, the ring
 # closes itself, and vertex order does not matter.
@@ -85,10 +85,9 @@ scotland = Polygon([(54.0, -8.0), (54.0, -1.0), (60.0, -1.0), LatLon(60.0, -8.0)
 pacific = Rectangle((-20.0, 160.0), (20.0, -160.0))
 arctic = Rectangle.latitude_band(66.5, 90.0)
 
-# An ellipse, roughly 300 km by 120 km, major axis pointing north-east. Semi-axes
-# are angular — a degree of arc is about 111.2 km on the ground.
-north_sea = Ellipse((56.0, 2.0), semi_axis_a_deg=2.7, semi_axis_b_deg=1.1, bearing_deg=45.0)
-cape_town = Ellipse.circle((-33.9, 18.4), radius_deg=2.25)
+# A circular area 500 km across. The radius is angular — a degree of arc is about
+# 111.2 km on the ground.
+cape_town = Circle((-33.9, 18.4), radius_deg=2.25)
 
 for overpass in predictor.aoi_iter(scotland, window):
     print(overpass.start, overpass.end)
@@ -96,7 +95,23 @@ for overpass in predictor.aoi_iter(scotland, window):
 
 A malformed area raises `ValueError` — fewer than three distinct vertices, a latitude outside
 `[-90, 90]`, a `nan` or infinite coordinate, a polygon larger than a hemisphere, an empty box, or
-an ellipse semi-axis outside `(0, 90)`.
+a circle radius outside `(0, 90)`.
+
+By default a window opens when the ground track itself crosses into the area. Pass
+`max_off_nadir_deg` — the half-angle of the satellite's field of regard, the largest nadir angle the
+payload can be slewed to — and the window instead covers whenever the area is within reach.
+`coverage` chooses whether any part of the area or all of it must be in reach:
+
+```python
+from sgp4_predict import Coverage
+
+for window in predictor.aoi_iter(cape_town, interval, max_off_nadir_deg=30.0):
+    print(window.start, window.end)
+
+# Every part of the area reachable at once, rather than any part of it. Needs a
+# field of regard wider than the area, or no window ever opens.
+predictor.aoi_iter(cape_town, interval, max_off_nadir_deg=30.0, coverage=Coverage.Full)
+```
 
 A window longer than `max_window_duration` — one hour by default — raises `RuntimeError` rather than
 being yielded, since a window that long usually means the area is bigger than intended. Raise the

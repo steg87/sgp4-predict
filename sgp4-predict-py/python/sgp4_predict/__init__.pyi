@@ -5,7 +5,8 @@ from typing import Protocol, TypeAlias, runtime_checkable
 
 from sgp4_predict._sgp4_predict import *
 from sgp4_predict._sgp4_predict import (
-    Ellipse,
+    Circle,
+    Coverage,
     Geodetic,
     LatLon,
     Polygon,
@@ -32,7 +33,7 @@ class Interval:
 LatLonLike: TypeAlias = LatLon | Geodetic | tuple[float, float]
 
 # A region on the ground, accepted by Predictor.aoi_iter and detect_aoi.
-Area: TypeAlias = Polygon | Rectangle | Ellipse
+Area: TypeAlias = Polygon | Rectangle | Circle
 
 __all__ = [
     "AoiIter",
@@ -43,7 +44,8 @@ __all__ = [
     "Area",
     "Classification",
     "Elements",
-    "Ellipse",
+    "Circle",
+    "Coverage",
     "FillRule",
     "Geodetic",
     "GroundObserver",

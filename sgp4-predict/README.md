@@ -133,30 +133,56 @@ let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
 # }
 ```
 
-`Ellipse` covers circular and elliptical footprints. Semi-axes are angular, and the bearing turns the
-first of them clockwise from north; either may be the longer:
+`Circle` is a spherical cap, given by its centre and an angular radius:
 
 ```rust,no_run
-use sgp4_predict::{Degrees, Ellipse, LatLon};
+use sgp4_predict::{Circle, Degrees, LatLon};
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
-// Roughly 300 km by 120 km, major axis pointing north-east. A degree of arc is
-// about 111.2 km on the ground.
-let north_sea = Ellipse::new(
-    LatLon { latitude: Degrees(56.0), longitude: Degrees(2.0) },
-    Degrees(2.7),
-    Degrees(1.1),
-    Degrees(45.0),
+// A circular area 500 km across. A degree of arc is about 111.2 km on the ground.
+let cape_town = Circle::new(
+    LatLon { latitude: Degrees(-33.9), longitude: Degrees(18.4) },
+    Degrees(2.25),
 )?;
-
-// A circular area 500 km across.
-let cape_town = Ellipse::circle((Degrees(-33.9), Degrees(18.4)), Degrees(2.25))?;
 # Ok(())
 # }
 ```
 
 Implement `Area` on your own type for other shapes; the docs for the trait give the contract its
-`signed_angular_offset` must satisfy.
+methods must satisfy.
+
+By default a window opens when the ground track itself crosses into the area. Set `max_off_nadir` to
+the half-angle of the satellite's field of regard — the largest nadir angle the payload can be
+slewed to — and the window instead covers whenever the area is within reach:
+
+```rust,no_run
+use chrono::{Duration, Utc};
+use sgp4_predict::{AoiIterOpts, Coverage, Degrees, Predictor, Refinement, Rectangle, Tle};
+
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+# let tle: Tle = unimplemented!();
+# let predictor = Predictor::from_tle(tle)?;
+# let area = Rectangle::latitude_band(Degrees(50.0), Degrees(60.0))?;
+let start = Utc::now();
+let opts = AoiIterOpts {
+    max_off_nadir: Degrees(30.0).into(),
+    // Or `Coverage::Full`, requiring all of the area to be in reach at once.
+    coverage: Coverage::Any,
+    ..AoiIterOpts::default()
+};
+
+for window in predictor.aoi_iter_with_opts(
+    &area,
+    start..start + Duration::days(1),
+    opts,
+    Refinement::default(),
+) {
+    let window = window?;
+    println!("in reach from {} to {}", window.start, window.end);
+}
+# Ok(())
+# }
+```
 
 ## Bring your own types
 

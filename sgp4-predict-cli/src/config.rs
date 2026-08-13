@@ -50,7 +50,6 @@ pub struct Config {
 pub enum AoiDef {
     /// A latitude/longitude box, given by its bounds.
     Box(BoxDef),
-    Ellipse(EllipseDef),
     Circle(CircleDef),
     /// A ring of at least three vertices, closing implicitly.
     Polygon(PolygonDef),
@@ -68,23 +67,6 @@ pub struct BoxDef {
     /// Eastern longitude bound in degrees. The box runs **eastward** from
     /// `west`, so an `east` at a smaller longitude wraps the antimeridian.
     pub east: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct EllipseDef {
-    /// Centre latitude in degrees.
-    pub latitude: f64,
-    /// Centre longitude in degrees.
-    pub longitude: f64,
-    /// Semi-axis along `bearing`, in degrees of arc (about 111.2 km per
-    /// degree). Either semi-axis may be the longer.
-    pub semi_axis_a: f64,
-    /// Semi-axis across `bearing`, in degrees of arc.
-    pub semi_axis_b: f64,
-    /// Bearing of `semi_axis_a`, degrees clockwise from north.
-    #[serde(default)]
-    pub bearing: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
