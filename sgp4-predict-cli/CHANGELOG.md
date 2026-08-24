@@ -11,6 +11,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-24
+
 ### Added
 
 - `ground-track`, sampling the geodetic point directly beneath the satellite at `--step`.
