@@ -2,8 +2,8 @@
 name = "sgp4-predict-py"
 version = "0.2.0"
 edition = "2024"
-rust-version = "1.88"   # time/time-core floor, above the edition-2024 minimum
-publish = false          # ships to PyPI as `sgp4-predict`, never to crates.io
+rust-version = "1.90"                                 # time/time-core floor, above the edition-2024 minimum
+publish = false                                       # ships to PyPI as `sgp4-predict`, never to crates.io
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/steg87/sgp4-predict"
 
