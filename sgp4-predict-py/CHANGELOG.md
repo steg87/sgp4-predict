@@ -11,6 +11,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-24
+
 ### Added
 
 - Detection tuning as keyword-only arguments on `transits_iter`, `aoi_iter`, `apsis_iter`,
