@@ -274,6 +274,25 @@ def test_interval_satisfies_interval_range_protocol():
     assert isinstance(iv, IntervalRange)
 
 
+def test_interval_mixin_derived_quantities():
+    """duration/mid_point/intersection work on Interval and on a Rust window."""
+    iv = Interval(START, START + timedelta(hours=2))
+    assert iv.duration == timedelta(hours=2)
+    assert iv.mid_point == START + timedelta(hours=1)
+    assert iv.intersection(Interval(START + timedelta(hours=3), END)) is None
+    overlap = iv.intersection(Interval(START + timedelta(hours=1), END))
+    assert (overlap.start, overlap.end) == (START + timedelta(hours=1), iv.end)
+
+    p = make_predictor()
+    transit = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
+    # duration_seconds truncates to milliseconds in Rust; duration keeps microseconds.
+    assert transit.duration.total_seconds() == pytest.approx(
+        transit.duration_seconds, abs=1e-2
+    )
+    assert transit.mid_point == transit.start + transit.duration / 2
+    assert transit.intersection(INTERVAL) is not None
+
+
 def test_observation_iter_accepts_transit():
     """A Transit can be passed directly as an interval to observation_iter."""
     p = make_predictor()

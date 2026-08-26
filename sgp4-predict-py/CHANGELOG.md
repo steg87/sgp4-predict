@@ -11,6 +11,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `duration`, `mid_point` and `intersection` on `Interval`, `Transit`, `Illumination`
+  and `AoiWindow`. Static type checkers see them on `Interval` only — the other three
+  are generated classes and gain the members at import time.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added

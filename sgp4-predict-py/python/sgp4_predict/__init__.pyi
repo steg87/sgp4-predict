@@ -1,6 +1,6 @@
 # ruff: noqa: E501, F401, F403, F405
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol, TypeAlias, runtime_checkable
 
 from sgp4_predict._sgp4_predict import *
@@ -20,7 +20,19 @@ class IntervalRange(Protocol):
     @property
     def end(self) -> datetime: ...
 
-class Interval:
+class _IntervalMixin:
+    """Derived quantities shared by everything satisfying `IntervalRange`.
+
+    Grafted onto `AoiWindow`, `Illumination` and `Transit` at import time; type
+    checkers do not see them there, because those classes are generated.
+    """
+    @property
+    def duration(self) -> timedelta: ...
+    @property
+    def mid_point(self) -> datetime: ...
+    def intersection(self, other: IntervalRange) -> Interval | None: ...
+
+class Interval(_IntervalMixin):
     """Concrete datetime interval satisfying IntervalRange."""
     def __init__(self, start: datetime, end: datetime) -> None: ...
     @property
