@@ -13,9 +13,14 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Added
 
-- `duration`, `mid_point` and `intersection` on `Interval`, `Transit`, `Illumination`
-  and `AoiWindow`. Static type checkers see them on `Interval` only — the other three
-  are generated classes and gain the members at import time.
+- `duration`, `mid_point` and `intersection` on `Interval`, `Transit`, `Illumination` and
+  `AoiWindow`, matching the library's `IntervalRange`. `duration` is a `timedelta`;
+  `intersection` returns an `Interval`, or `None` when the two do not overlap.
+
+### Changed
+
+- `Interval` moved from Python into the extension module. It is imported from
+  `sgp4_predict` exactly as before, and now carries type stubs.
 
 ## [0.2.0] - 2026-08-24
 

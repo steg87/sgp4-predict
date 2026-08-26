@@ -274,8 +274,8 @@ def test_interval_satisfies_interval_range_protocol():
     assert isinstance(iv, IntervalRange)
 
 
-def test_interval_mixin_derived_quantities():
-    """duration/mid_point/intersection work on Interval and on a Rust window."""
+def test_window_derived_quantities():
+    """duration/mid_point/intersection work on Interval and on a detection window."""
     iv = Interval(START, START + timedelta(hours=2))
     assert iv.duration == timedelta(hours=2)
     assert iv.mid_point == START + timedelta(hours=1)
@@ -289,7 +289,9 @@ def test_interval_mixin_derived_quantities():
     assert transit.duration.total_seconds() == pytest.approx(
         transit.duration_seconds, abs=1e-2
     )
-    assert transit.mid_point == transit.start + transit.duration / 2
+    # Nanosecond timestamps truncate to microseconds crossing into datetime.
+    drift = transit.mid_point - (transit.start + transit.duration / 2)
+    assert abs(drift) <= timedelta(microseconds=1)
     assert transit.intersection(INTERVAL) is not None
 
 

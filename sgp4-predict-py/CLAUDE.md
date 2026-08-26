@@ -34,7 +34,13 @@ The resulting import cycle between the two stub files is fine; type checkers res
 
 `__next__` returns `PyResult<Option<T>>`, but pyo3 turns `Ok(None)` into `StopIteration` rather than yielding it, so each one carries `#[gen_stub(override_return_type(…))]` naming `T`. Without it every `for x in iter:` binds `T | None` and reads as a type error downstream.
 
-Consequently the hand-maintained `sgp4_predict/__init__.pyi` holds **only** what cannot be generated: the `IntervalRange` protocol, the `Interval` class, and the `LatLonLike`/`Area` aliases. Do not redeclare a generated class there — a redeclaration _replaces_ it, silently dropping every docstring the Rust source supplies.
+Consequently the hand-maintained `sgp4_predict/__init__.pyi` holds **only** what cannot be generated: the `IntervalRange` protocol and the `LatLonLike`/`Area` aliases. Do not redeclare a generated class there — a redeclaration _replaces_ it, silently dropping every docstring the Rust source supplies. This is also why the window helpers live in Rust rather than a Python mixin: pyo3 builds heap types, so a mixin's members _can_ be grafted on at import time, but no type checker would see them.
+
+## Window types (`types/window.rs`)
+
+`Interval`, `Transit`, `AoiWindow` and `Illumination` share one `#[pymethods]` block emitted by `window_pymethods!`. pyo3 permits a single `#[pymethods]` impl per class, so the macro takes the per-type members — `Illumination::state`, `Interval::new`, every `__repr__` — as a trailing token stream and splices them into the same block. Doc comments for `start`/`end`/`duration_seconds` are parameters because each type words them differently.
+
+`clamp_to` is deliberately absent. Rust's returns `Self` with the payload preserved; none of the three detection windows has a Python constructor, so the binding could only hand back an `Interval` — a different contract under the same name. `intersection` already covers the overlap case.
 
 ## Tuning knobs
 

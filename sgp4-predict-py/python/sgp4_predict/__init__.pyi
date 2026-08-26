@@ -1,6 +1,6 @@
 # ruff: noqa: E501, F401, F403, F405
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Protocol, TypeAlias, runtime_checkable
 
 from sgp4_predict._sgp4_predict import *
@@ -19,27 +19,6 @@ class IntervalRange(Protocol):
     def start(self) -> datetime: ...
     @property
     def end(self) -> datetime: ...
-
-class _IntervalMixin:
-    """Derived quantities shared by everything satisfying `IntervalRange`.
-
-    Grafted onto `AoiWindow`, `Illumination` and `Transit` at import time; type
-    checkers do not see them there, because those classes are generated.
-    """
-    @property
-    def duration(self) -> timedelta: ...
-    @property
-    def mid_point(self) -> datetime: ...
-    def intersection(self, other: IntervalRange) -> Interval | None: ...
-
-class Interval(_IntervalMixin):
-    """Concrete datetime interval satisfying IntervalRange."""
-    def __init__(self, start: datetime, end: datetime) -> None: ...
-    @property
-    def start(self) -> datetime: ...
-    @property
-    def end(self) -> datetime: ...
-    def __repr__(self) -> str: ...
 
 # A LatLon, a Geodetic, or a plain (latitude_deg, longitude_deg) tuple.
 LatLonLike: TypeAlias = LatLon | Geodetic | tuple[float, float]

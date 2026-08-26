@@ -24,6 +24,7 @@ __all__ = [
     "Illumination",
     "IlluminationIter",
     "IlluminationState",
+    "Interval",
     "LatLon",
     "Observation",
     "ObservationIter",
@@ -69,8 +70,22 @@ class AoiWindow:
         r"""
         Duration of the window in seconds.
         """
+    @property
+    def duration(self) -> datetime.timedelta:
+        r"""
+        Length of the interval.
+        """
+    @property
+    def mid_point(self) -> datetime.datetime:
+        r"""
+        The instant halfway between `start` and `end`.
+        """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
+    def intersection(self, other: sgp4_predict.IntervalRange) -> typing.Optional[Interval]:
+        r"""
+        The overlap with `other`, or None if the two do not overlap.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -372,17 +387,31 @@ class Illumination:
         End of the illumination window (UTC).
         """
     @property
-    def state(self) -> IlluminationState:
-        r"""
-        Illumination state (Sunlit or Eclipse).
-        """
-    @property
     def duration_seconds(self) -> builtins.float:
         r"""
         Duration of the window in seconds.
         """
+    @property
+    def duration(self) -> datetime.timedelta:
+        r"""
+        Length of the interval.
+        """
+    @property
+    def mid_point(self) -> datetime.datetime:
+        r"""
+        The instant halfway between `start` and `end`.
+        """
+    @property
+    def state(self) -> IlluminationState:
+        r"""
+        Illumination state (Sunlit or Eclipse).
+        """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
+    def intersection(self, other: sgp4_predict.IntervalRange) -> typing.Optional[Interval]:
+        r"""
+        The overlap with `other`, or None if the two do not overlap.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -392,6 +421,45 @@ class IlluminationIter:
     """
     def __iter__(self) -> IlluminationIter: ...
     def __next__(self) -> Illumination: ...
+
+@typing.final
+class Interval:
+    r"""
+    A concrete `[start, end)` interval.
+    """
+    @property
+    def start(self) -> datetime.datetime:
+        r"""
+        Inclusive start of the interval.
+        """
+    @property
+    def end(self) -> datetime.datetime:
+        r"""
+        Exclusive end of the interval.
+        """
+    @property
+    def duration_seconds(self) -> builtins.float:
+        r"""
+        Length of the interval in seconds.
+        """
+    @property
+    def duration(self) -> datetime.timedelta:
+        r"""
+        Length of the interval.
+        """
+    @property
+    def mid_point(self) -> datetime.datetime:
+        r"""
+        The instant halfway between `start` and `end`.
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def intersection(self, other: sgp4_predict.IntervalRange) -> typing.Optional[Interval]:
+        r"""
+        The overlap with `other`, or None if the two do not overlap.
+        """
+    def __new__(cls, start: datetime.datetime, end: datetime.datetime) -> Interval: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class LatLon:
@@ -873,8 +941,22 @@ class Transit:
         r"""
         Duration of the transit in seconds.
         """
+    @property
+    def duration(self) -> datetime.timedelta:
+        r"""
+        Length of the interval.
+        """
+    @property
+    def mid_point(self) -> datetime.datetime:
+        r"""
+        The instant halfway between `start` and `end`.
+        """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
+    def intersection(self, other: sgp4_predict.IntervalRange) -> typing.Optional[Interval]:
+        r"""
+        The overlap with `other`, or None if the two do not overlap.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final

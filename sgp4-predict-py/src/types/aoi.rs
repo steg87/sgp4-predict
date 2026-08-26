@@ -11,26 +11,11 @@ pub struct AoiWindow {
     pub end: DateTime<Utc>,
 }
 
-#[gen_stub_pymethods]
-#[pymethods]
-impl AoiWindow {
-    /// When the area comes within reach.
-    #[getter]
-    fn start(&self) -> DateTime<Utc> {
-        self.start
-    }
-
-    /// When it passes back out of reach.
-    #[getter]
-    fn end(&self) -> DateTime<Utc> {
-        self.end
-    }
-
-    /// Duration of the window in seconds.
-    #[getter]
-    fn duration_seconds(&self) -> f64 {
-        (self.end - self.start).num_milliseconds() as f64 / 1000.0
-    }
+crate::types::window::window_pymethods! {
+    AoiWindow,
+    start: "When the area comes within reach.",
+    end: "When it passes back out of reach.",
+    duration_seconds: "Duration of the window in seconds.",
 
     fn __repr__(&self) -> String {
         format!(

@@ -11,26 +11,11 @@ pub struct Transit {
     pub end: DateTime<Utc>,
 }
 
-#[gen_stub_pymethods]
-#[pymethods]
-impl Transit {
-    /// Acquisition of Signal: when the satellite rises above `min_elevation`.
-    #[getter]
-    fn start(&self) -> DateTime<Utc> {
-        self.start
-    }
-
-    /// Loss of Signal: when the satellite drops below `min_elevation`.
-    #[getter]
-    fn end(&self) -> DateTime<Utc> {
-        self.end
-    }
-
-    /// Duration of the transit in seconds.
-    #[getter]
-    fn duration_seconds(&self) -> f64 {
-        (self.end - self.start).num_milliseconds() as f64 / 1000.0
-    }
+crate::types::window::window_pymethods! {
+    Transit,
+    start: "Acquisition of Signal: when the satellite rises above `min_elevation`.",
+    end: "Loss of Signal: when the satellite drops below `min_elevation`.",
+    duration_seconds: "Duration of the transit in seconds.",
 
     fn __repr__(&self) -> String {
         format!(

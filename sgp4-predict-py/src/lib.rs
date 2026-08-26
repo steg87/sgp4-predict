@@ -19,7 +19,9 @@ use predictor::{
     Predictor, Refinement, TransitIter,
 };
 use tle::Tle;
-use types::{AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit};
+use types::{
+    AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Interval, Observation, Transit,
+};
 use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorTeme};
 
 define_stub_info_gatherer!(stub_info);
@@ -40,6 +42,7 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StateVectorTeme>()?;
     m.add_class::<StateVectorEcef>()?;
     m.add_class::<StateVectorEnu>()?;
+    m.add_class::<Interval>()?;
     m.add_class::<Observation>()?;
     m.add_class::<Transit>()?;
     m.add_class::<ApsisEvent>()?;
