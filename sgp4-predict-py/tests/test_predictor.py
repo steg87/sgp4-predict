@@ -285,11 +285,10 @@ def test_window_derived_quantities():
 
     p = make_predictor()
     transit = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
-    # duration_seconds truncates to milliseconds in Rust; duration keeps microseconds.
+    # Rust keeps nanoseconds; duration_seconds truncates to ms, datetime to µs.
     assert transit.duration.total_seconds() == pytest.approx(
         transit.duration_seconds, abs=1e-2
     )
-    # Nanosecond timestamps truncate to microseconds crossing into datetime.
     drift = transit.mid_point - (transit.start + transit.duration / 2)
     assert abs(drift) <= timedelta(microseconds=1)
     assert transit.intersection(INTERVAL) is not None

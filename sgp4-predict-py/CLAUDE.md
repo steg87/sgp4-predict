@@ -38,9 +38,9 @@ Consequently the hand-maintained `sgp4_predict/__init__.pyi` holds **only** what
 
 ## Window types (`types/window.rs`)
 
-`Interval`, `Transit`, `AoiWindow` and `Illumination` share one `#[pymethods]` block emitted by `window_pymethods!`. pyo3 permits a single `#[pymethods]` impl per class, so the macro takes the per-type members — `Illumination::state`, `Interval::new`, every `__repr__` — as a trailing token stream and splices them into the same block. Doc comments for `start`/`end`/`duration_seconds` are parameters because each type words them differently.
+`Interval`, `Transit`, `AoiWindow` and `Illumination` share one `#[pymethods]` block emitted by `window_pymethods!`. pyo3 permits a single such impl per class, hence the trailing token stream for per-type members rather than a second block; the `start`/`end`/`duration_seconds` docstrings are parameters because each type words them differently.
 
-`clamp_to` is deliberately absent. Rust's returns `Self` with the payload preserved; none of the three detection windows has a Python constructor, so the binding could only hand back an `Interval` — a different contract under the same name. `intersection` already covers the overlap case.
+`clamp_to` is deliberately absent: Rust's returns `Self` with the payload preserved, and none of the three detection windows has a Python constructor, so the binding could only hand back an `Interval` — a different contract under the same name.
 
 ## Tuning knobs
 

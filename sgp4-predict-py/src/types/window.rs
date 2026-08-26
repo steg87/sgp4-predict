@@ -2,11 +2,8 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 
-/// Emits the whole `#[pymethods]` block for a `[start, end)` window type.
-///
-/// pyo3 permits one `#[pymethods]` impl per class, so anything a single type
-/// adds — `Illumination::state`, `Interval::new`, every `__repr__` — is passed
-/// in as the trailing token stream and spliced into the same block.
+/// Emits the whole `#[pymethods]` block for a `[start, end)` window type; pyo3
+/// permits only one per class, so per-type members come in as `$extra`.
 macro_rules! window_pymethods {
     (
         $ty:ident,
