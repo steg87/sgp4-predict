@@ -11,6 +11,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-26
+
 ### Added
 
 - `duration`, `mid_point` and `intersection` on `Interval`, `Transit`, `Illumination` and
