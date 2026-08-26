@@ -10,6 +10,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `IntervalRange::mid_point`, the instant halfway between an interval's start and end.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added

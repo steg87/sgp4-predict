@@ -31,6 +31,23 @@ pub trait IntervalRange {
         self.end() - self.start()
     }
 
+    /// Returns the instant halfway between [`start`](Self::start) and
+    /// [`end`](Self::end).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{TimeZone, Utc};
+    /// use sgp4_predict::IntervalRange;
+    ///
+    /// let a = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+    ///     ..Utc.with_ymd_and_hms(2024, 1, 1, 1, 30, 0).unwrap();
+    /// assert_eq!(a.mid_point(), Utc.with_ymd_and_hms(2024, 1, 1, 0, 45, 0).unwrap());
+    /// ```
+    fn mid_point(&self) -> DateTime<Utc> {
+        self.start() + self.duration() / 2
+    }
+
     /// Returns the overlap of this interval with `other` as a half-open range,
     /// or `None` if the two intervals do not overlap.
     ///
