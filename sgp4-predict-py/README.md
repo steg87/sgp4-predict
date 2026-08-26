@@ -33,7 +33,7 @@ start = datetime(2025, 12, 22, tzinfo=timezone.utc)
 window = Interval(start=start, end=start + timedelta(days=1))
 
 for transit in predictor.transits_iter(glasgow, window, min_elevation_deg=5.0):
-    print(f"AoS {transit.start} → LoS {transit.end} ({transit.duration_seconds:.0f}s)")
+    print(f"AoS {transit.start} → LoS {transit.end} ({transit.duration.total_seconds():.0f}s)")
 
     # A Transit is itself an interval, so it can be passed straight back in.
     for t, obs in predictor.observation_iter(glasgow, transit, timedelta(seconds=10)):

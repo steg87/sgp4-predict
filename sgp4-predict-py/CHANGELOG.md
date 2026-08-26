@@ -11,6 +11,22 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `duration`, `mid_point` and `intersection` on `Interval`, `Transit`, `Illumination` and
+  `AoiWindow`, matching the library's `IntervalRange`. `duration` is a `timedelta`;
+  `intersection` returns an `Interval`, or `None` when the two do not overlap.
+
+### Deprecated
+
+- `duration_seconds` on `Transit`, `Illumination` and `AoiWindow`. It raises a
+  `DeprecationWarning` and will be removed in a future release; use `duration`.
+
+### Changed
+
+- `Interval` moved from Python into the extension module. It is imported from
+  `sgp4_predict` exactly as before, and now carries type stubs.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added

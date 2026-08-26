@@ -258,7 +258,7 @@ def test_aoi_iter_yields_windows_over_every_shape(area):
     for w in windows:
         assert isinstance(w, AoiWindow)
         assert START <= w.start < w.end <= END
-        assert w.duration_seconds > 0.0
+        assert w.duration.total_seconds() > 0.0
 
 
 def test_aoi_window_ground_track_is_inside_the_area():
@@ -366,7 +366,7 @@ def test_near_global_area_needs_a_raised_max_window_duration():
     )
     assert len(windows) > 0
     for w in windows:
-        assert w.duration_seconds > 3600.0
+        assert w.duration.total_seconds() > 3600.0
 
 
 def test_detect_aoi_max_window_duration_is_configurable():
@@ -381,7 +381,7 @@ def test_detect_aoi_max_window_duration_is_configurable():
     window = p.detect_aoi(t, SOUTH_OF_60N, max_window_duration=timedelta(hours=2))
     assert window is not None
     assert window.start <= t <= window.end
-    assert window.duration_seconds > 3600.0
+    assert window.duration.total_seconds() > 3600.0
 
 
 def test_aoi_iter_accepts_a_sub_second_min_step():

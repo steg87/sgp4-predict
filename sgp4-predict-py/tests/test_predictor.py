@@ -122,7 +122,7 @@ def test_transits_iter_duration_in_range():
     p = make_predictor()
     transits = list(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0))
     for t in transits:
-        dur = t.duration_seconds
+        dur = t.duration.total_seconds()
         assert 60 <= dur <= 960, f"transit duration {dur:.1f}s out of range"
 
 
@@ -272,6 +272,22 @@ def test_interval_satisfies_interval_range_protocol():
     """Interval should be recognized as an IntervalRange at runtime."""
     iv = Interval(START, END)
     assert isinstance(iv, IntervalRange)
+
+
+def test_window_derived_quantities():
+    """duration/mid_point/intersection work on Interval and on a detection window."""
+    iv = Interval(START, START + timedelta(hours=2))
+    assert iv.duration == timedelta(hours=2)
+    assert iv.mid_point == START + timedelta(hours=1)
+    assert iv.intersection(Interval(START + timedelta(hours=3), END)) is None
+    overlap = iv.intersection(Interval(START + timedelta(hours=1), END))
+    assert (overlap.start, overlap.end) == (START + timedelta(hours=1), iv.end)
+
+    p = make_predictor()
+    transit = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
+    drift = transit.mid_point - (transit.start + transit.duration / 2)
+    assert abs(drift) <= timedelta(microseconds=1)
+    assert transit.intersection(INTERVAL) is not None
 
 
 def test_observation_iter_accepts_transit():

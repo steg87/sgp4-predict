@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum};
 
 /// Whether the satellite is sunlit or in Earth's shadow.
 #[gen_stub_pyclass_enum]
@@ -30,31 +30,16 @@ pub struct Illumination {
     pub state: IlluminationState,
 }
 
-#[gen_stub_pymethods]
-#[pymethods]
-impl Illumination {
-    /// Start of the illumination window (UTC).
-    #[getter]
-    fn start(&self) -> DateTime<Utc> {
-        self.start
-    }
-
-    /// End of the illumination window (UTC).
-    #[getter]
-    fn end(&self) -> DateTime<Utc> {
-        self.end
-    }
+crate::types::window::window_pymethods! {
+    Illumination,
+    start: "Start of the illumination window (UTC).",
+    end: "End of the illumination window (UTC).",
+    duration_seconds: "Duration of the window in seconds.",
 
     /// Illumination state (Sunlit or Eclipse).
     #[getter]
     fn state(&self) -> IlluminationState {
         self.state
-    }
-
-    /// Duration of the window in seconds.
-    #[getter]
-    fn duration_seconds(&self) -> f64 {
-        (self.end - self.start).num_milliseconds() as f64 / 1000.0
     }
 
     fn __repr__(&self) -> String {
