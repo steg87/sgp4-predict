@@ -11,7 +11,7 @@ repository = "https://github.com/steg87/sgp4-predict"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-sgp4-predict = { path = "../sgp4-predict", version = "0.2.0" }
+sgp4-predict = { path = "../sgp4-predict", version = "0.2.1" }
 pyo3 = { version = "0.29", features = ["chrono", "abi3-py310"] }
 chrono = "0.4"
 ouroboros = "0.18"
