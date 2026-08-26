@@ -40,6 +40,8 @@ Consequently the hand-maintained `sgp4_predict/__init__.pyi` holds **only** what
 
 `Interval`, `Transit`, `AoiWindow` and `Illumination` share one `#[pymethods]` block emitted by `window_pymethods!`. pyo3 permits a single such impl per class, hence the trailing token stream for per-type members rather than a second block; the `start`/`end`/`duration_seconds` docstrings are parameters because each type words them differently.
 
+`duration_seconds` is deprecated in favour of `duration`, so the macro emits it from a second arm and `Interval` — which never had it — simply omits the parameter. The `__repr__`s call the free `duration_seconds` function rather than the getter, which would raise the warning.
+
 `clamp_to` is deliberately absent: Rust's returns `Self` with the payload preserved, and none of the three detection windows has a Python constructor, so the binding could only hand back an `Interval` — a different contract under the same name.
 
 ## Tuning knobs

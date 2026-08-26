@@ -22,7 +22,7 @@ crate::types::window::window_pymethods! {
             "AoiWindow(start={}, end={}, duration={:.1}s)",
             self.start,
             self.end,
-            self.duration_seconds(),
+            crate::types::window::duration_seconds(self.start, self.end),
         )
     }
 }

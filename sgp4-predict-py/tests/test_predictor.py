@@ -122,7 +122,7 @@ def test_transits_iter_duration_in_range():
     p = make_predictor()
     transits = list(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0))
     for t in transits:
-        dur = t.duration_seconds
+        dur = t.duration.total_seconds()
         assert 60 <= dur <= 960, f"transit duration {dur:.1f}s out of range"
 
 
@@ -285,10 +285,10 @@ def test_window_derived_quantities():
 
     p = make_predictor()
     transit = next(iter(p.transits_iter(GLASGOW, INTERVAL, min_elevation_deg=5.0)))
-    # Rust keeps nanoseconds; duration_seconds truncates to ms, datetime to µs.
-    assert transit.duration.total_seconds() == pytest.approx(
-        transit.duration_seconds, abs=1e-2
-    )
+    with pytest.deprecated_call():
+        assert transit.duration_seconds == pytest.approx(
+            transit.duration.total_seconds(), abs=1e-2
+        )
     drift = transit.mid_point - (transit.start + transit.duration / 2)
     assert abs(drift) <= timedelta(microseconds=1)
     assert transit.intersection(INTERVAL) is not None

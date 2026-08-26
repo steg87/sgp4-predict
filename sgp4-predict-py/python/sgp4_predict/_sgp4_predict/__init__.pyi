@@ -66,11 +66,6 @@ class AoiWindow:
         When it passes back out of reach.
         """
     @property
-    def duration_seconds(self) -> builtins.float:
-        r"""
-        Duration of the window in seconds.
-        """
-    @property
     def duration(self) -> datetime.timedelta:
         r"""
         Length of the interval.
@@ -79,6 +74,13 @@ class AoiWindow:
     def mid_point(self) -> datetime.datetime:
         r"""
         The instant halfway between `start` and `end`.
+        """
+    @property
+    def duration_seconds(self) -> builtins.float:
+        r"""
+        Duration of the window in seconds.
+        
+        Deprecated: use `duration`, which is a `timedelta`.
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
@@ -387,11 +389,6 @@ class Illumination:
         End of the illumination window (UTC).
         """
     @property
-    def duration_seconds(self) -> builtins.float:
-        r"""
-        Duration of the window in seconds.
-        """
-    @property
     def duration(self) -> datetime.timedelta:
         r"""
         Length of the interval.
@@ -400,6 +397,13 @@ class Illumination:
     def mid_point(self) -> datetime.datetime:
         r"""
         The instant halfway between `start` and `end`.
+        """
+    @property
+    def duration_seconds(self) -> builtins.float:
+        r"""
+        Duration of the window in seconds.
+        
+        Deprecated: use `duration`, which is a `timedelta`.
         """
     @property
     def state(self) -> IlluminationState:
@@ -436,11 +440,6 @@ class Interval:
     def end(self) -> datetime.datetime:
         r"""
         Exclusive end of the interval.
-        """
-    @property
-    def duration_seconds(self) -> builtins.float:
-        r"""
-        Length of the interval in seconds.
         """
     @property
     def duration(self) -> datetime.timedelta:
@@ -937,11 +936,6 @@ class Transit:
         Loss of Signal: when the satellite drops below `min_elevation`.
         """
     @property
-    def duration_seconds(self) -> builtins.float:
-        r"""
-        Duration of the transit in seconds.
-        """
-    @property
     def duration(self) -> datetime.timedelta:
         r"""
         Length of the interval.
@@ -950,6 +944,13 @@ class Transit:
     def mid_point(self) -> datetime.datetime:
         r"""
         The instant halfway between `start` and `end`.
+        """
+    @property
+    def duration_seconds(self) -> builtins.float:
+        r"""
+        Duration of the transit in seconds.
+        
+        Deprecated: use `duration`, which is a `timedelta`.
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...

@@ -2,6 +2,10 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 
+pub(crate) fn duration_seconds(start: DateTime<Utc>, end: DateTime<Utc>) -> f64 {
+    (end - start).num_milliseconds() as f64 / 1000.0
+}
+
 /// Emits the whole `#[pymethods]` block for a `[start, end)` window type; pyo3
 /// permits only one per class, so per-type members come in as `$extra`.
 macro_rules! window_pymethods {
@@ -12,6 +16,33 @@ macro_rules! window_pymethods {
         duration_seconds: $duration_doc:literal,
         $($extra:tt)*
     ) => {
+        $crate::types::window::window_pymethods!(@impl $ty, $start_doc, $end_doc, {
+            #[doc = $duration_doc]
+            #[doc = ""]
+            #[doc = "Deprecated: use `duration`, which is a `timedelta`."]
+            #[getter]
+            fn duration_seconds(&self, py: ::pyo3::Python<'_>) -> ::pyo3::PyResult<f64> {
+                ::pyo3::PyErr::warn(
+                    py,
+                    &py.get_type::<::pyo3::exceptions::PyDeprecationWarning>(),
+                    c"duration_seconds is deprecated; use duration instead",
+                    1,
+                )?;
+                Ok($crate::types::window::duration_seconds(self.start, self.end))
+            }
+        } $($extra)*);
+    };
+
+    (
+        $ty:ident,
+        start: $start_doc:literal,
+        end: $end_doc:literal,
+        $($extra:tt)*
+    ) => {
+        $crate::types::window::window_pymethods!(@impl $ty, $start_doc, $end_doc, {} $($extra)*);
+    };
+
+    (@impl $ty:ident, $start_doc:literal, $end_doc:literal, {$($deprecated:tt)*} $($extra:tt)*) => {
         #[::pyo3_stub_gen::derive::gen_stub_pymethods]
         #[::pyo3::pymethods]
         impl $ty {
@@ -25,12 +56,6 @@ macro_rules! window_pymethods {
             #[getter]
             fn end(&self) -> ::chrono::DateTime<::chrono::Utc> {
                 self.end
-            }
-
-            #[doc = $duration_doc]
-            #[getter]
-            fn duration_seconds(&self) -> f64 {
-                (self.end - self.start).num_milliseconds() as f64 / 1000.0
             }
 
             /// Length of the interval.
@@ -55,6 +80,7 @@ macro_rules! window_pymethods {
                 (start < end).then(|| $crate::types::Interval { start, end })
             }
 
+            $($deprecated)*
             $($extra)*
         }
     };
@@ -74,7 +100,6 @@ window_pymethods! {
     Interval,
     start: "Inclusive start of the interval.",
     end: "Exclusive end of the interval.",
-    duration_seconds: "Length of the interval in seconds.",
 
     #[new]
     fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {

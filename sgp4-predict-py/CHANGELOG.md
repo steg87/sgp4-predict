@@ -17,6 +17,11 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
   `AoiWindow`, matching the library's `IntervalRange`. `duration` is a `timedelta`;
   `intersection` returns an `Interval`, or `None` when the two do not overlap.
 
+### Deprecated
+
+- `duration_seconds` on `Transit`, `Illumination` and `AoiWindow`. It raises a
+  `DeprecationWarning` and will be removed in a future release; use `duration`.
+
 ### Changed
 
 - `Interval` moved from Python into the extension module. It is imported from
