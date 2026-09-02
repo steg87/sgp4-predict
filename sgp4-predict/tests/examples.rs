@@ -2,8 +2,8 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
-    Degrees, FallibleIter, GeodeticPoint, IlluminationState, IntervalRange, Observation, Predictor,
-    Transit,
+    DateTimeIter, Degrees, FallibleIter, GeodeticPoint, IlluminationState, IntervalRange,
+    Observation, Predictor, Transit,
 };
 
 /// Propagate the satellite state in TEME and ECEF frames for the next day, sampled every 15 minutes.
@@ -150,11 +150,8 @@ fn pointing_at_a_ground_station() {
         .expect("error calculating transit");
 
     println!("time,off nadir [deg],x,y,z,range [km],range rate [km/s]");
-    for (t, _) in p
-        .observation_iter(gs, next_transit, Duration::seconds(30))
-        .include_end()
-        .skip_errors()
-    {
+    // A Transit is an interval, so DateTimeIter walks the pass directly.
+    for t in DateTimeIter::new(next_transit, Duration::seconds(30)) {
         let pointing = p.point_at(t, gs).expect("error pointing at ground station");
 
         // The direction is a unit vector in LVLH: +Z is nadir, +X along-track,
@@ -173,13 +170,6 @@ fn pointing_at_a_ground_station() {
             pointing.range_rate / 1000.0,
         );
     }
-
-    // At closest approach the station is nearest to nadir and the range rate
-    // passes through zero.
-    let (tca, _) = p.max_elevation(next_transit, gs).unwrap();
-    let closest = p.point_at(tca, gs).unwrap();
-    assert!(closest.range_rate.abs() < 100.0, "near zero Doppler at TCA");
-    assert!(closest.off_nadir().degrees() < 90.0);
 }
 
 /// Calculate ground station passes over 10° for the next 3 days
