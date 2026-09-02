@@ -89,6 +89,9 @@ impl IntervalRange for Range<DateTime<Utc>> {
 }
 
 impl<T: IntervalRange + ?Sized> IntervalRange for &T {
+    // Only start/end are forwarded: the defaulted methods are pure functions of
+    // them, so they already read T's own bounds. A defaulted method that is not
+    // must be forwarded here too, or `&T` would silently take the default.
     fn start(&self) -> DateTime<Utc> {
         (**self).start()
     }
