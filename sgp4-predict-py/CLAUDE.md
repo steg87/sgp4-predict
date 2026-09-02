@@ -5,10 +5,15 @@
 Run from within `sgp4-predict-py/`:
 
 ```bash
-make dev    # compile the Rust extension in-place (maturin develop)
-make test   # compile + run pytest
-make lint   # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
+make dev         # compile the Rust extension in-place (maturin develop)
+make test        # compile + run pytest
+make lint        # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
+make lint-check  # what CI runs: ruff check + ruff format --check, no fixing
 ```
+
+**`dev` is an optional-dependency _extra_, not a dependency group, so plain `uv sync` omits `ruff`, `pytest` and `maturin` — and uninstalls them if a previous run put them there.** Every target therefore depends on `init`, which passes `--extra dev`. Do not "simplify" that back to a bare `uv sync`: the failure mode is silent, because a stale `ruff` left on `PATH` keeps answering and `make lint` passes locally against a version CI does not use. That is exactly how an unsorted `__all__` reached CI once — the venv held ruff 0.15.21 while `pyproject.toml` pins 0.16.2, and RUF022 only fires on the latter.
+
+`make lint` fixes in place, so it can pass on a dirty tree that CI then rejects. `make lint-check` mirrors CI; run it before pushing.
 
 To regenerate stubs after Rust API changes, run from the **repo root**:
 
