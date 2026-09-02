@@ -56,15 +56,15 @@ The `Refinement` used by the iterators comes from `Predictor.with_refinement`, n
 
 Angles are plain `float` with `_deg`-suffixed field/arg names, converted to/from the library's `Degrees`/`Radians` at the FFI boundary — the Rust type safety deliberately stops here.
 
-In Rust, `Observer` is the _trait_ and `GroundObserver` the concrete type; in Python the class is also named `GroundObserver`.
+`GeodeticPoint` is the one location type on both sides. Anywhere the Rust API takes `impl Into<GeodeticPoint>`, the Python method takes a `GeodeticPoint` and passes its `inner` through.
 
 ## Areas of interest (`area.rs`)
 
-`area.rs` wraps all three shapes and dispatches through a private `AreaKind` enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly `Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, exactly as `TransitIter` borrows its `GroundObserver`.
+`area.rs` wraps all three shapes and dispatches through a private `AreaKind` enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly `Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, and is the only wrapper that needs to — every other library iterator owns its inputs, so the Python wrapper holds one directly.
 
 `AreaRef<'a>` is the borrowed twin of `AreaKind`, for `detect_aoi`, which does not outlive its argument. All three pyclasses are `frozen`, so `Bound::cast::<Polygon>()?.get()` yields a reference and the vertex vector is never cloned; `extract_area` clones out of an `AreaRef` rather than duplicating the dispatch. Note pyo3 spells this `cast`, not `downcast`. `LatLonArg`'s `FromPyObject` uses `cast` for that reason plus one more: the tuple form is the documented common case, and only `cast` misses without constructing a Python exception.
 
-Constructors take `LatLonArg`, so a point may be a `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple. The polygon `vertices` argument stays a `&Bound<'_, PyAny>` with an `override_type`: it is iterated rather than extracted, so a `Vec<LatLonArg>` would narrow the stub to a sequence and reject a generator.
+Constructors take `LatLonArg`, so a point may be a `LatLon`, a `GeodeticPoint`, or a `(latitude_deg, longitude_deg)` tuple. The polygon `vertices` argument stays a `&Bound<'_, PyAny>` with an `override_type`: it is iterated rather than extracted, so a `Vec<LatLonArg>` would narrow the stub to a sequence and reject a generator.
 
 The cap `max_window_duration` sets is only escapable for an area the track actually leaves — a whole-Earth box has no window end, so it raises whatever the cap is.
 

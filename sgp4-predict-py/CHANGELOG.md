@@ -11,6 +11,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `GroundObserver` is removed and `Geodetic` is renamed to `GeodeticPoint`, which
+  now serves as both the observer and the target type. The constructor signature is unchanged, so
+  `GroundObserver(55.86, -4.25, 40.0)` becomes `GeodeticPoint(55.86, -4.25, 40.0)`.
+
 ## [0.2.1] - 2026-08-26
 
 ### Added

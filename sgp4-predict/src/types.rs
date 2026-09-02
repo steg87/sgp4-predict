@@ -1,14 +1,14 @@
-//! Standard implementations of [`TleRecord`] and [`Observer`].
+//! Standard implementation of [`TleRecord`].
 //!
-//! These concrete types let you get started quickly without defining your own
-//! structs. They are also available via [`crate::prelude`].
+//! [`Tle`] lets you get started quickly without defining your own struct. It is
+//! also available via [`crate::prelude`].
 
 use sgp4::{Elements, TleError};
 use std::str::FromStr;
 
 use thiserror::Error as ThisError;
 
-use crate::{TleRecord, angle::Degrees, observe::Observer};
+use crate::TleRecord;
 
 /// Error returned when a [`Tle`] cannot be parsed from a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ThisError)]
@@ -118,62 +118,5 @@ impl FromStr for Tle {
                 lines.len()
             ))),
         }
-    }
-}
-
-/// A fixed point on Earth's surface from which satellite passes are observed.
-///
-/// Implements [`Observer`] so it can be passed to
-/// [`Predictor::observe_at`][crate::Predictor::observe_at],
-/// [`Predictor::observation_iter`][crate::Predictor::observation_iter], and
-/// [`Predictor::transits_iter`][crate::Predictor::transits_iter].
-///
-/// Altitude is in **metres** above the WGS-84 ellipsoid.
-///
-/// # Example
-///
-/// ```
-/// use sgp4_predict::{Degrees, GroundObserver};
-///
-/// // London, ~20 m ASL
-/// let london = GroundObserver::new(Degrees(51.5074), Degrees(-0.1278), 20.0);
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GroundObserver {
-    /// Geodetic latitude (positive north).
-    latitude: Degrees,
-    /// Geodetic longitude (positive east).
-    longitude: Degrees,
-    /// Height above the WGS-84 ellipsoid in metres.
-    altitude: f64,
-}
-
-impl GroundObserver {
-    /// Construct a [`GroundObserver`].
-    ///
-    /// - `latitude` — geodetic latitude (positive north)
-    /// - `longitude` — geodetic longitude (positive east)
-    /// - `altitude` — height above the WGS-84 ellipsoid in metres
-    #[must_use]
-    pub const fn new(latitude: Degrees, longitude: Degrees, altitude: f64) -> Self {
-        Self {
-            latitude,
-            longitude,
-            altitude,
-        }
-    }
-}
-
-impl Observer for GroundObserver {
-    fn latitude(&self) -> Degrees {
-        self.latitude
-    }
-
-    fn longitude(&self) -> Degrees {
-        self.longitude
-    }
-
-    fn altitude(&self) -> f64 {
-        self.altitude
     }
 }

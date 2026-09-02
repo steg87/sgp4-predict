@@ -1,7 +1,8 @@
 //! Generic vector types with compile-time coordinate-frame tracking.
 //!
-//! [`Position`] and [`Velocity`] are type aliases over [`Vec3`], distinguished
-//! by kind markers so they cannot be accidentally mixed. [`StateVector`] pairs
+//! [`Position`], [`Velocity`] and [`UnitVector`] are type aliases over
+//! [`Vec3`], distinguished by kind markers so they cannot be accidentally
+//! mixed. [`StateVector`] pairs
 //! the two and carries a phantom frame type `F` — one of the TEME, ECEF, or
 //! ENU marker structs — so the compiler rejects passing a vector in the wrong
 //! frame.
@@ -88,12 +89,21 @@ pub type Position<F> = Vec3<markers::Position, F>;
 /// Velocity vector in frame `F` (metres per second).
 pub type Velocity<F> = Vec3<markers::Velocity, F>;
 
+/// Dimensionless unit vector in frame `F`.
+///
+/// A separate kind from [`Position`] so a direction and a displacement in
+/// metres cannot be mixed at a function boundary.
+pub type UnitVector<F> = Vec3<markers::Unit, F>;
+
 mod markers {
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Position;
 
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Velocity;
+
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+    pub struct Unit;
 }
 
 #[cfg(test)]

@@ -21,7 +21,7 @@ use crate::{
     tle,
     tuning::HeaderPair,
 };
-use sgp4_predict::{Observer, Predictor, Tle};
+use sgp4_predict::{GeodeticPoint, Predictor, Tle};
 
 /// Flatten owned `--output-args` pairs into the borrowed form the header takes.
 ///
@@ -150,12 +150,13 @@ pub fn open_writer(out: Option<&Path>) -> anyhow::Result<Box<dyn Write>> {
 }
 
 /// Format observer as a "lat,lon,alt" string for --output-args headers.
-pub fn format_observer_str(obs: &impl Observer) -> String {
+pub fn format_observer_str(obs: impl Into<GeodeticPoint>) -> String {
+    let obs = obs.into();
     format!(
         "{},{},{}",
-        obs.latitude().to_f64(),
-        obs.longitude().to_f64(),
-        obs.altitude()
+        obs.latitude.to_f64(),
+        obs.longitude.to_f64(),
+        obs.altitude
     )
 }
 

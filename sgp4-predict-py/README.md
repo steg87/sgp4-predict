@@ -18,7 +18,7 @@ Find the passes over a ground station and sample each one:
 
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import GroundObserver, Interval, Predictor, Tle
+from sgp4_predict import GeodeticPoint, Interval, Predictor, Tle
 
 tle = Tle(
     "SENTINEL-2C",
@@ -27,7 +27,7 @@ tle = Tle(
 )
 predictor = Predictor.from_tle(tle)
 
-glasgow = GroundObserver(latitude_deg=55.86, longitude_deg=-4.25, altitude=40.0)
+glasgow = GeodeticPoint(latitude_deg=55.86, longitude_deg=-4.25, altitude=40.0)
 
 start = datetime(2025, 12, 22, tzinfo=timezone.utc)
 window = Interval(start=start, end=start + timedelta(days=1))
@@ -69,7 +69,7 @@ configuration for event times.
 ## Areas of interest
 
 An area is a region on the ground; `aoi_iter` yields the windows in which it is within the
-payload's reach. Points are `LatLon` objects, `Geodetic` objects whose altitude is ignored — so a
+payload's reach. Points are `LatLon` objects, `GeodeticPoint` objects whose altitude is ignored — so a
 `sub_point` result can be passed straight in — or plain `(latitude_deg, longitude_deg)` tuples.
 
 ```python

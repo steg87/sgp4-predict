@@ -18,7 +18,6 @@
 //! [`Predictor::observation_iter`]: crate::Predictor::observation_iter
 
 use chrono::{DateTime, Duration, Utc};
-use std::fmt;
 
 use crate::{
     Predictor, Result,
@@ -27,7 +26,8 @@ use crate::{
         self, Direction, EventFunction, EventIter, FixedStep, MIN_POSITIVE_STEP, Sample,
         ThresholdStep, WindowIter,
     },
-    observe::{Observation, Observer},
+    frames::GeodeticPoint,
+    observe::Observation,
     roots::Refinement,
     time,
     time::IntervalRange,
@@ -74,35 +74,14 @@ impl time::TimeWindow for Transit {
 /// Event function: the satellite's elevation above `min_elevation`, with its
 /// rate of change as the derivative (enabling Newton-Raphson refinement and
 /// adaptive stepping).
-pub(crate) struct ElevationAboveMin<'a, O: Observer> {
+#[derive(Debug, Clone)]
+pub(crate) struct ElevationAboveMin {
     predictor: Predictor,
-    observer: &'a O,
+    observer: GeodeticPoint,
     min_elevation: f64,
 }
 
-// `O` is only ever held behind a shared reference, so the bounds a derive
-// would emit (`O: Debug`, `O: Clone`) are a false requirement on
-// caller-supplied observers. Same reasoning in `TransitIter` below.
-impl<O: Observer> fmt::Debug for ElevationAboveMin<'_, O> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ElevationAboveMin")
-            .field("predictor", &self.predictor)
-            .field("min_elevation", &self.min_elevation)
-            .finish_non_exhaustive()
-    }
-}
-
-impl<O: Observer> Clone for ElevationAboveMin<'_, O> {
-    fn clone(&self) -> Self {
-        Self {
-            predictor: self.predictor.clone(),
-            observer: self.observer,
-            min_elevation: self.min_elevation,
-        }
-    }
-}
-
-impl<'a, O: Observer> EventFunction for ElevationAboveMin<'a, O> {
+impl EventFunction for ElevationAboveMin {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
         let (el, el_rate) = self
             .predictor
@@ -181,33 +160,18 @@ impl Default for MaxElevationOpts {
 ///
 /// Created by [`Predictor::transits_iter`](crate::Predictor::transits_iter).
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct TransitIter<'a, O: Observer> {
-    inner: WindowIter<ElevationAboveMin<'a, O>, ThresholdStep>,
+#[derive(Debug, Clone)]
+pub struct TransitIter {
+    inner: WindowIter<ElevationAboveMin, ThresholdStep>,
 }
 
-impl<O: Observer> fmt::Debug for TransitIter<'_, O> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TransitIter")
-            .field("inner", &self.inner)
-            .finish()
-    }
-}
-
-impl<O: Observer> Clone for TransitIter<'_, O> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-impl<'a, O: Observer> TransitIter<'a, O> {
+impl TransitIter {
     /// Scan `interval` for passes above `min_elevation` radians. Prefer
     /// [`Predictor::transits_iter`](crate::Predictor::transits_iter), which
     /// takes either angle unit and supplies the defaults.
     pub fn new(
         predictor: Predictor,
-        observer: &'a O,
+        observer: impl Into<GeodeticPoint>,
         interval: impl time::IntervalRange,
         min_elevation: f64,
         opts: TransitIterOpts,
@@ -217,7 +181,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
             .interval(interval)
             .event_function(ElevationAboveMin {
                 predictor,
-                observer,
+                observer: observer.into(),
                 min_elevation,
             })
             .step(ThresholdStep {
@@ -238,7 +202,7 @@ impl<'a, O: Observer> TransitIter<'a, O> {
     }
 }
 
-impl<'a, O: Observer> Iterator for TransitIter<'a, O> {
+impl Iterator for TransitIter {
     type Item = Result<Transit>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -257,12 +221,12 @@ impl Predictor {
     /// [`Degrees`](crate::Degrees) or [`Radians`] value directly.
     ///
     /// Returns an iterator over transits.
-    pub fn transits_iter<'a, O: Observer>(
+    pub fn transits_iter(
         &self,
-        observer: &'a O,
+        observer: impl Into<GeodeticPoint>,
         interval: impl IntervalRange,
         min_elevation: impl Into<Radians>,
-    ) -> TransitIter<'a, O> {
+    ) -> TransitIter {
         self.transits_iter_with_opts(
             observer,
             interval,
@@ -275,14 +239,14 @@ impl Predictor {
     /// Like [`Predictor::transits_iter`], but with a customized root-finder
     /// configuration and coarse-scan/window-walk tuning. See [`Refinement`]
     /// and [`TransitIterOpts`].
-    pub fn transits_iter_with_opts<'a, O: Observer>(
+    pub fn transits_iter_with_opts(
         &self,
-        observer: &'a O,
+        observer: impl Into<GeodeticPoint>,
         interval: impl IntervalRange,
         min_elevation: impl Into<Radians>,
         opts: TransitIterOpts,
         refinement: Refinement,
-    ) -> TransitIter<'a, O> {
+    ) -> TransitIter {
         TransitIter::new(
             self.clone(),
             observer,
@@ -307,10 +271,10 @@ impl Predictor {
     ///
     /// Returns [`Error::Detect`](crate::Error::Detect) if the transit is
     /// longer than [`TransitIterOpts::default`]'s `max_transit_duration`.
-    pub fn detect_transit<O: Observer>(
+    pub fn detect_transit(
         &self,
         t: DateTime<Utc>,
-        observer: &O,
+        observer: impl Into<GeodeticPoint>,
         min_elevation: impl Into<Radians>,
     ) -> Result<Option<Transit>> {
         self.detect_transit_with_opts(t, observer, min_elevation, TransitIterOpts::default())
@@ -320,16 +284,16 @@ impl Predictor {
     /// and max transit duration. Only [`TransitIterOpts::walk_step`] and
     /// [`TransitIterOpts::max_transit_duration`] are used — the other fields
     /// don't apply to this single-point detection.
-    pub fn detect_transit_with_opts<O: Observer>(
+    pub fn detect_transit_with_opts(
         &self,
         t: DateTime<Utc>,
-        observer: &O,
+        observer: impl Into<GeodeticPoint>,
         min_elevation: impl Into<Radians>,
         opts: TransitIterOpts,
     ) -> Result<Option<Transit>> {
         let mut f = ElevationAboveMin {
             predictor: self.clone(),
-            observer,
+            observer: observer.into(),
             min_elevation: min_elevation.into().to_f64(),
         };
         let window = detect::detect_window(
@@ -358,22 +322,23 @@ impl Predictor {
     // unconditionally makes this public doc link to a private item.
     #[cfg_attr(feature = "generics", doc = "")]
     #[cfg_attr(feature = "generics", doc = "Built on [`EventIter`].")]
-    pub fn max_elevation<O: Observer>(
+    pub fn max_elevation(
         &self,
         interval: impl IntervalRange,
-        observer: &O,
+        observer: impl Into<GeodeticPoint>,
     ) -> Result<(DateTime<Utc>, Observation)> {
         self.max_elevation_with_opts(interval, observer, MaxElevationOpts::default())
     }
 
     /// Like [`Predictor::max_elevation`], but with a customized scan step.
     /// See [`MaxElevationOpts`].
-    pub fn max_elevation_with_opts<O: Observer>(
+    pub fn max_elevation_with_opts(
         &self,
         interval: impl IntervalRange,
-        observer: &O,
+        observer: impl Into<GeodeticPoint>,
         opts: MaxElevationOpts,
     ) -> Result<(DateTime<Utc>, Observation)> {
+        let observer = observer.into();
         let start_t = interval.start();
         let end_t = interval.end();
 

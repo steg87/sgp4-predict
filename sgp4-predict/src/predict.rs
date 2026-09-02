@@ -5,7 +5,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{
     Predictor, Result,
-    frames::{Geodetic, TemeState},
+    frames::{GeodeticPoint, TemeState},
     time::{DateTimeIter, IntervalRange},
     vectors::{Position, Velocity},
 };
@@ -94,7 +94,7 @@ impl GroundTrackIter {
 }
 
 impl Iterator for GroundTrackIter {
-    type Item = Result<(DateTime<Utc>, Geodetic)>;
+    type Item = Result<(DateTime<Utc>, GeodeticPoint)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t = self.dt_iter.next()?;

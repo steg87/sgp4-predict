@@ -45,7 +45,7 @@ graph TD
 | `apsides.rs`      | `ApsisIter` over `EventIter` (event function: radial velocity `r·v`)                                                                                              |
 | `illumination.rs` | Cylindrical shadow model; `IlluminationIter` over `WindowIter`                                                                                                    |
 | `aoi.rs`          | `Area`/`Polygon`/`Rectangle`/`Circle` spherical geometry; `AoiIter` over `WindowIter` (event function: the area's signed angular offset from the payload's reach) |
-| `frames.rs`       | Frame marker types `Teme`, `Ecef`, `Enu`; geodetic `LatLon` / `Geodetic` and the ECEF inverse                                                                     |
+| `frames.rs`       | Frame marker types `Teme`, `Ecef`, `Enu`, `Lvlh`; geodetic `LatLon` / `GeodeticPoint` and the ECEF inverse                                                             |
 | `vectors.rs`      | `StateVector<F>`, `Position<F>`, `Velocity<F>`, generic over frame                                                                                                |
 | `angle.rs`        | `Degrees` / `Radians` newtypes                                                                                                                                    |
 | `roots.rs`        | `Refinement` — bracketed hybrid root solver                                                                                                                       |
@@ -58,17 +58,18 @@ flowchart LR
     TLE["TLE / OMM"] --> Predictor
     Predictor -->|propagate| SV["StateVector&lt;Teme&gt;"]
     Predictor -->|observe_at| Obs["Observation"]
+    Predictor -->|point_at| Pt["Pointing"]
     Predictor -->|transits_iter| TI["TransitIter → Transit"]
     Predictor -->|apsis_iter| AI["ApsisIter → Apsis"]
     Predictor -->|illumination_iter| II["IlluminationIter → Illumination"]
     Predictor -->|aoi_iter| QI["AoiIter → AoiWindow"]
     Predictor -->|prediction_iter| PI["PredictionIter → StateVector"]
     Predictor -->|observation_iter| OI["ObservationIter → Observation"]
-    Predictor -->|ground_track_iter| GI["GroundTrackIter → Geodetic"]
+    Predictor -->|ground_track_iter| GI["GroundTrackIter → GeodeticPoint"]
 ```
 
 `Predictor` holds the parsed `sgp4::Elements` and exposes methods at two levels: **point queries**
-(`propagate`, `observe_at`) returning a single value for an instant, and **iterators** that lazily
+(`propagate`, `observe_at`, `point_at`) returning a single value for an instant, and **iterators** that lazily
 scan a time window and yield events or samples.
 
 Three things to know before reading the code:

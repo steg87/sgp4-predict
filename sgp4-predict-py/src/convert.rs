@@ -15,7 +15,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::{PyStubType, TypeInfo};
 use sgp4_predict::Degrees;
 
-use crate::area::{Geodetic, LatLon};
+use crate::area::{GeodeticPoint, LatLon};
 
 /// A type alias defined in the hand-written `sgp4_predict/__init__.pyi`, which
 /// the generated stub imports by module.
@@ -28,7 +28,7 @@ fn alias(name: &str) -> TypeInfo {
     }
 }
 
-/// A point argument: a `LatLon`, a `Geodetic` whose altitude is ignored, or a
+/// A point argument: a `LatLon`, a `GeodeticPoint` whose altitude is ignored, or a
 /// `(latitude_deg, longitude_deg)` tuple.
 pub(crate) struct LatLonArg(pub(crate) sgp4_predict::LatLon);
 
@@ -41,12 +41,12 @@ impl<'py> FromPyObject<'_, 'py> for LatLonArg {
         if let Ok(p) = point.cast::<LatLon>() {
             return Ok(Self(p.get().inner));
         }
-        if let Ok(p) = point.cast::<Geodetic>() {
+        if let Ok(p) = point.cast::<GeodeticPoint>() {
             return Ok(Self(p.get().inner.into()));
         }
         let (latitude_deg, longitude_deg) = point.extract::<(f64, f64)>().map_err(|_| {
             PyTypeError::new_err(
-                "expected a LatLon, a Geodetic, or a (latitude_deg, longitude_deg) tuple",
+                "expected a LatLon, a GeodeticPoint, or a (latitude_deg, longitude_deg) tuple",
             )
         })?;
         Ok(Self(sgp4_predict::LatLon::new(

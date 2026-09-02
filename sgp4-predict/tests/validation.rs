@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde::Deserialize;
 use sgp4_predict::{
-    Degrees, IlluminationState, Observation, Observer, Predictor, TleRecord, Transit,
+    Degrees, GeodeticPoint, IlluminationState, Observation, Predictor, TleRecord, Transit,
 };
 use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
@@ -69,15 +69,13 @@ struct GroundStation {
     altitude_m: f64,
 }
 
-impl Observer for GroundStation {
-    fn latitude(&self) -> Degrees {
-        Degrees(self.latitude_deg)
-    }
-    fn longitude(&self) -> Degrees {
-        Degrees(self.longitude_deg)
-    }
-    fn altitude(&self) -> f64 {
-        self.altitude_m
+impl From<&GroundStation> for GeodeticPoint {
+    fn from(gs: &GroundStation) -> Self {
+        Self {
+            latitude: Degrees(gs.latitude_deg),
+            longitude: Degrees(gs.longitude_deg),
+            altitude: gs.altitude_m,
+        }
     }
 }
 
@@ -316,7 +314,7 @@ struct IlluminationReport {
 
 fn validate_observations(
     p: &Predictor,
-    gs: &impl Observer,
+    gs: &GroundStation,
     sf_obs: &[RefObservation],
     tol: &ObservationTolerances,
     errors: &mut Vec<String>,

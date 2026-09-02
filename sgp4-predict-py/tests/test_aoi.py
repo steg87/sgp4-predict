@@ -11,7 +11,7 @@ from sgp4_predict import (
     Circle,
     Coverage,
     FillRule,
-    Geodetic,
+    GeodeticPoint,
     Interval,
     IntervalRange,
     LatLon,
@@ -55,7 +55,7 @@ def europe_polygon() -> Polygon:
 SOUTH_OF_60N = Rectangle.latitude_band(-90.0, 60.0)
 
 
-# ── LatLon / Geodetic ──────────────────────────────────────────────────────────
+# ── LatLon / GeodeticPoint ──────────────────────────────────────────────────────────
 
 
 def test_lat_lon_round_trip():
@@ -66,7 +66,7 @@ def test_lat_lon_round_trip():
 
 
 def test_geodetic_round_trip():
-    g = Geodetic(55.86, -4.25, 40.0)
+    g = GeodeticPoint(55.86, -4.25, 40.0)
     assert abs(g.latitude_deg - 55.86) < 1e-12
     assert abs(g.longitude_deg - -4.25) < 1e-12
     assert g.altitude == 40.0
@@ -227,9 +227,9 @@ def test_signed_angular_offset_accepts_every_point_form():
     inside = rect.signed_angular_offset_deg((57.0, -4.5))
     assert inside > 0.0
     assert rect.signed_angular_offset_deg(LatLon(57.0, -4.5)) == inside
-    assert rect.signed_angular_offset_deg(Geodetic(57.0, -4.5, 0.0)) == inside
-    # An area is a region on the ground: a Geodetic's altitude is ignored.
-    assert rect.signed_angular_offset_deg(Geodetic(57.0, -4.5, 500e3)) == inside
+    assert rect.signed_angular_offset_deg(GeodeticPoint(57.0, -4.5, 0.0)) == inside
+    # An area is a region on the ground: a GeodeticPoint's altitude is ignored.
+    assert rect.signed_angular_offset_deg(GeodeticPoint(57.0, -4.5, 500e3)) == inside
 
 
 def test_area_rejects_a_non_area():

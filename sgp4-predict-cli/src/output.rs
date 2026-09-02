@@ -7,7 +7,7 @@
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
 use sgp4_predict::{
-    AoiWindow, Apsis, ApsisEvent, Geodetic, Illumination, IlluminationState, Observation,
+    AoiWindow, Apsis, ApsisEvent, GeodeticPoint, Illumination, IlluminationState, Observation,
     Result as PredictResult, Transit,
 };
 use std::io::Write;
@@ -390,7 +390,7 @@ const GROUND_TRACK_COLUMNS: &[Column] = &[
 pub fn write_ground_track<W, I>(w: W, format: Format, iter: I) -> anyhow::Result<()>
 where
     W: Write,
-    I: Iterator<Item = PredictResult<(DateTime<Utc>, Geodetic)>>,
+    I: Iterator<Item = PredictResult<(DateTime<Utc>, GeodeticPoint)>>,
 {
     let mut out = RowWriter::new(w, format, GROUND_TRACK_COLUMNS);
     for item in iter {
@@ -417,7 +417,7 @@ const AOI_COLUMNS: &[Column] = &[
 
 /// The window plus the sub-satellite point at each end, which is where the
 /// area came within reach and passed back out of it.
-type AoiRow = (AoiWindow, Geodetic, Geodetic);
+type AoiRow = (AoiWindow, GeodeticPoint, GeodeticPoint);
 
 pub fn write_aoi<W, I>(w: W, format: Format, iter: I) -> anyhow::Result<()>
 where

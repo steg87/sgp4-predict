@@ -44,11 +44,15 @@ fn log_error(e: Error) {
 /// #     "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990",
 /// #     "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740");
 /// let predictor = Predictor::from_tle(&tle)?;
-/// let glasgow = GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0);
+/// let glasgow = GeodeticPoint {
+///     latitude: Degrees(55.86),
+///     longitude: Degrees(-4.25),
+///     altitude: 40.0,
+/// };
 /// let start = Utc::now();
 ///
 /// for transit in predictor
-///     .transits_iter(&glasgow, start..start + Duration::days(1), Degrees(5.0))
+///     .transits_iter(glasgow, start..start + Duration::days(1), Degrees(5.0))
 ///     .log_errors()
 /// {
 ///     println!("AoS {}  LoS {}", transit.start, transit.end);

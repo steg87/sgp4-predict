@@ -1,7 +1,7 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{Degrees, Error, FallibleIter, GroundObserver, Predictor, Result};
+use sgp4_predict::{Degrees, Error, FallibleIter, GeodeticPoint, Predictor, Result};
 
 fn err() -> Result<i32> {
     Err(Error::Custom("synthetic".into()))
@@ -11,8 +11,12 @@ fn predictor() -> Predictor {
     Predictor::from_tle(common::create_tle()).unwrap()
 }
 
-fn glasgow() -> GroundObserver {
-    GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0)
+fn glasgow() -> GeodeticPoint {
+    GeodeticPoint {
+        latitude: Degrees(55.86),
+        longitude: Degrees(-4.25),
+        altitude: 40.0,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +180,7 @@ fn test_applies_to_observation_iter() {
     let interval = start..start + Duration::minutes(10);
 
     let mut it = predictor
-        .observation_iter(&observer, interval, Duration::minutes(1))
+        .observation_iter(observer, interval, Duration::minutes(1))
         .tolerate_errors(3);
 
     let samples: Vec<_> = it.by_ref().collect();

@@ -5,15 +5,13 @@ mod area;
 mod convert;
 mod elements;
 mod errors;
-mod observer;
 mod predictor;
 mod tle;
 mod types;
 mod vectors;
 
-use area::{Circle, Coverage, FillRule, Geodetic, LatLon, Polygon, Rectangle};
+use area::{Circle, Coverage, FillRule, GeodeticPoint, LatLon, Polygon, Rectangle};
 use elements::{Classification, Elements};
-use observer::GroundObserver;
 use predictor::{
     AoiIter, ApsisIter, GroundTrackIter, IlluminationIter, ObservationIter, PredictionIter,
     Predictor, Refinement, TransitIter,
@@ -35,9 +33,8 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Classification>()?;
     m.add_class::<Elements>()?;
     m.add_class::<Tle>()?;
-    m.add_class::<GroundObserver>()?;
     m.add_class::<LatLon>()?;
-    m.add_class::<Geodetic>()?;
+    m.add_class::<GeodeticPoint>()?;
     m.add_class::<PyVec3>()?;
     m.add_class::<StateVectorTeme>()?;
     m.add_class::<StateVectorEcef>()?;

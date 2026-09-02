@@ -7,7 +7,7 @@ from sgp4_predict._sgp4_predict import *
 from sgp4_predict._sgp4_predict import (
     Circle,
     Coverage,
-    Geodetic,
+    GeodeticPoint,
     LatLon,
     Polygon,
     Rectangle,
@@ -20,8 +20,8 @@ class IntervalRange(Protocol):
     @property
     def end(self) -> datetime: ...
 
-# A LatLon, a Geodetic, or a plain (latitude_deg, longitude_deg) tuple.
-LatLonLike: TypeAlias = LatLon | Geodetic | tuple[float, float]
+# A LatLon, a GeodeticPoint, or a plain (latitude_deg, longitude_deg) tuple.
+LatLonLike: TypeAlias = LatLon | GeodeticPoint | tuple[float, float]
 
 # A region on the ground, accepted by Predictor.aoi_iter and detect_aoi.
 Area: TypeAlias = Polygon | Rectangle | Circle
@@ -38,8 +38,7 @@ __all__ = [
     "Circle",
     "Coverage",
     "FillRule",
-    "Geodetic",
-    "GroundObserver",
+    "GeodeticPoint",
     "GroundTrackIter",
     "Illumination",
     "IlluminationIter",

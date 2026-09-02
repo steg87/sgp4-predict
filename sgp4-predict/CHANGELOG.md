@@ -14,6 +14,31 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 - `IntervalRange` is implemented for `&T`, so an interval type that is not `Copy` can be passed to
   the iterators by reference instead of being cloned.
+- `Predictor::point_at` — where a ground target lies as seen from the satellite. Returns a
+  `Pointing`: a unit vector in the spacecraft's LVLH frame, plus slant range and range rate, which
+  is what an RF link budget or an instrument-pointing calculation needs.
+- `LvlhState` and the `Lvlh` frame marker, with `TemeState::to_lvlh` and `LvlhState::to_pointing`.
+  The axes are `Z` along nadir, `Y` along the negative orbit normal, `X` completing the triad
+  along-track. `Pointing::off_nadir` derives the nadir angle, in the same geocentric convention as
+  `AoiIterOpts::max_off_nadir`.
+- `EcefState::to_teme`, the inverse of `EcefState`'s forward transform, frame-drag term included.
+- `UnitVector<F>`, a dimensionless vector kind distinct from `Position<F>`.
+
+### Changed
+
+- **Breaking:** the `Observer` trait and the `GroundObserver` struct are removed. Every method
+  taking a location now takes `impl Into<GeodeticPoint>`, and `Geodetic` is renamed to
+  `GeodeticPoint` — one type for a point on the Earth instead of three spellings of it.
+
+  Replace `GroundObserver::new(Degrees(lat), Degrees(lon), alt)` with a `GeodeticPoint { latitude,
+  longitude, altitude }` literal, and an `impl Observer for YourType` with
+  `impl From<&YourType> for GeodeticPoint`. Call sites passing `&observer` keep working.
+
+  `ObservationIter` and `TransitIter` lose their lifetime and type parameters as a result:
+  `TransitIter<'a, O>` is now `TransitIter`.
+- The observer's coordinates are resolved once, when an iterator is constructed, rather than at
+  every sample. This matches `Observer`'s documented contract of a fixed point on Earth's surface,
+  but is observable to anyone who implemented it with interior mutability.
 
 ## [0.2.1] - 2026-08-26
 
