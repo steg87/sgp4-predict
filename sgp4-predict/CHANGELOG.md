@@ -10,6 +10,11 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `IntervalRange` is implemented for `&T`, so an interval type that is not `Copy` can be passed to
+  the iterators by reference instead of being cloned.
+
 ## [0.2.1] - 2026-08-26
 
 ### Added
