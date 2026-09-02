@@ -55,23 +55,23 @@ impl LatLon {
     }
 }
 
-// ── Geodetic ───────────────────────────────────────────────────────────────────
+// ── GeodeticPoint ──────────────────────────────────────────────────────────────
 
 /// A geodetic position on or above the WGS-84 ellipsoid.
 #[gen_stub_pyclass]
 #[pyclass(eq, frozen, from_py_object, module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Geodetic {
-    pub(crate) inner: sgp4_predict::Geodetic,
+pub struct GeodeticPoint {
+    pub(crate) inner: sgp4_predict::GeodeticPoint,
 }
 
 #[gen_stub_pymethods]
 #[pymethods]
-impl Geodetic {
+impl GeodeticPoint {
     #[new]
     fn new(latitude_deg: f64, longitude_deg: f64, altitude: f64) -> Self {
         Self {
-            inner: sgp4_predict::Geodetic {
+            inner: sgp4_predict::GeodeticPoint {
                 latitude: Degrees(latitude_deg),
                 longitude: Degrees(longitude_deg),
                 altitude,
@@ -99,7 +99,7 @@ impl Geodetic {
 
     fn __repr__(&self) -> String {
         format!(
-            "Geodetic(latitude_deg={}, longitude_deg={}, altitude={})",
+            "GeodeticPoint(latitude_deg={}, longitude_deg={}, altitude={})",
             self.latitude_deg(),
             self.longitude_deg(),
             self.altitude()
@@ -107,8 +107,8 @@ impl Geodetic {
     }
 }
 
-impl Geodetic {
-    pub(crate) fn from_inner(inner: sgp4_predict::Geodetic) -> Self {
+impl GeodeticPoint {
+    pub(crate) fn from_inner(inner: sgp4_predict::GeodeticPoint) -> Self {
         Self { inner }
     }
 }
@@ -180,7 +180,7 @@ impl From<Coverage> for sgp4_predict::Coverage {
 /// A closed polygon on Earth's surface whose edges are great-circle arcs.
 ///
 /// The ring closes implicitly and vertex order does not matter. Vertices may be
-/// `LatLon` objects, `Geodetic` objects whose altitude is ignored, or
+/// `LatLon` objects, `GeodeticPoint` objects whose altitude is ignored, or
 /// `(latitude_deg, longitude_deg)` tuples.
 ///
 /// Edges are great-circle arcs, so vertices at the same latitude are not joined
@@ -262,7 +262,7 @@ impl Polygon {
 ///
 /// The box runs **eastward** from the south-west corner, so a north-east corner at
 /// a smaller longitude wraps across the antimeridian. Corners may be `LatLon`
-/// objects, `Geodetic` objects whose altitude is ignored, or
+/// objects, `GeodeticPoint` objects whose altitude is ignored, or
 /// `(latitude_deg, longitude_deg)` tuples.
 ///
 /// Raises `ValueError` if a latitude is outside [-90, 90], if a coordinate is `nan`
@@ -332,7 +332,7 @@ impl Rectangle {
 /// A circular area on Earth's surface — a spherical cap.
 ///
 /// The radius is angular: a degree of arc is about 111.2 km on the ground. The
-/// centre may be a `LatLon` object, a `Geodetic` object whose altitude is ignored,
+/// centre may be a `LatLon` object, a `GeodeticPoint` object whose altitude is ignored,
 /// or a `(latitude_deg, longitude_deg)` tuple.
 ///
 /// Raises `ValueError` if the radius is outside `(0, 90)`, if the centre's latitude

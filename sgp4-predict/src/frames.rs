@@ -1,23 +1,30 @@
 //! Coordinate frame types and the conversions between them.
 //!
-//! Three frames are used in the prediction pipeline:
+//! Four frames are used in the prediction pipeline:
 //!
 //! - **TEME** ([`TemeState`]): True Equator Mean Equinox — the native SGP4 output frame.
 //! - **ECEF** ([`EcefState`]): Earth-Centred Earth-Fixed — rotates with Earth.
 //! - **ENU** ([`EnuState`]): East-North-Up — local frame relative to a ground observer.
+//! - **LVLH** ([`LvlhState`]): the satellite's local-vertical/local-horizontal
+//!   triad, for pointing from the spacecraft.
 //!
-//! The normal conversion chain is `TEME → ECEF → ENU → [`Observation`]`.
+//! Observing from the ground runs `TEME → ECEF → ENU` into an [`Observation`];
+//! pointing from the satellite runs the other way, `TEME → LVLH` into a
+//! [`Pointing`].
 //!
 //! [`Observation`]: crate::Observation
+//! [`Pointing`]: crate::Pointing
 
 use chrono::{DateTime, Utc};
 
 use crate::{
-    Observation, Observer,
+    Observation, Pointing,
     angle::{Degrees, Radians},
-    observe::ObserverExt,
-    vectors::{Position, StateVector, Velocity},
+    vectors::{Position, StateVector, UnitVector, Velocity},
 };
+
+/// Earth's sidereal rotation rate (rad/s), WGS-84.
+const OMEGA_EARTH: f64 = 7.292_115_0e-5;
 
 /// Earth's equatorial radius (WGS-84), metres.
 pub(crate) const WGS84_A: f64 = 6_378_137.0;
@@ -39,17 +46,16 @@ impl TemeState {
     ///
     /// Position: `r_ECEF = R(θ) · r_TEME`
     ///
-    /// Velocity requires an extra term because ECEF is a rotating frame.
-    /// Differentiating `r_ECEF = R(θ) · r_TEME` with respect to time gives:
-    ///   `v_ECEF = R(θ) · v_TEME + ω_Earth × r_ECEF`
+    /// Velocity requires an extra term because ECEF is a rotating frame. A
+    /// velocity in a frame rotating at `ω` is the inertial one less `ω × r`:
+    ///   `v_ECEF = R(θ) · v_TEME − ω_Earth × r_ECEF`
     ///
     /// where `ω_Earth = [0, 0, ω_E]`. Expanding the cross product:
-    ///   `ω_Earth × r_ECEF = [ω_E · ry, -ω_E · rx, 0]`
+    ///   `ω_Earth × r_ECEF = [−ω_E · ry, ω_E · rx, 0]`
+    ///
+    /// so the term the code *adds* is `[ω_E · ry, −ω_E · rx, 0]`.
     #[must_use]
     pub fn to_ecef(&self, t: DateTime<Utc>) -> EcefState {
-        // Earth's sidereal rotation rate (rad/s), WGS-84
-        const OMEGA_EARTH: f64 = 7.292_115_0e-5;
-
         let (sin_g, cos_g) = gmst(julian_date(t)).to_f64().sin_cos();
 
         // Rotate position into ECEF: r_ECEF = R(θ) · r_TEME
@@ -57,7 +63,7 @@ impl TemeState {
         let ry = -sin_g * self.position.x + cos_g * self.position.y;
         let rz = self.position.z;
 
-        // Rotate velocity into ECEF, then add the frame-drag term ω_Earth × r_ECEF
+        // Rotate velocity into ECEF, then subtract the frame-drag term ω_Earth × r_ECEF
         let vx_rot = cos_g * self.velocity.x + sin_g * self.velocity.y;
         let vy_rot = -sin_g * self.velocity.x + cos_g * self.velocity.y;
 
@@ -68,6 +74,55 @@ impl TemeState {
                 vy_rot - OMEGA_EARTH * rx,
                 self.velocity.z,
             ),
+        )
+    }
+
+    /// Express `target` relative to this satellite, in the satellite's LVLH
+    /// frame — see [`LvlhState`] for the axis definitions.
+    ///
+    /// The receiver is the *origin* here. This is the mirror of
+    /// [`EcefState::to_enu`], where the receiver is the satellite and the
+    /// argument supplies the origin.
+    ///
+    /// The receiver must be a real orbital state: the triad is undefined, and
+    /// every component comes back `NaN`, if its position is at Earth's centre
+    /// or its velocity is purely radial (`r × v` is zero). Neither is
+    /// reachable from a propagated state, so there is no guard — unlike
+    /// [`LvlhState::to_pointing`], where a zero range is reachable simply by
+    /// aiming at the satellite's own position.
+    #[must_use]
+    pub fn to_lvlh(&self, target: TemeState) -> LvlhState {
+        let (r, v) = (self.position, self.velocity);
+
+        // Z = -r̂
+        let r_mag = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt();
+        let z = [-r.x / r_mag, -r.y / r_mag, -r.z / r_mag];
+
+        // Y = -ĥ, where h = r × v
+        let h = [
+            r.y * v.z - r.z * v.y,
+            r.z * v.x - r.x * v.z,
+            r.x * v.y - r.y * v.x,
+        ];
+        let h_mag = (h[0] * h[0] + h[1] * h[1] + h[2] * h[2]).sqrt();
+        let y = [-h[0] / h_mag, -h[1] / h_mag, -h[2] / h_mag];
+
+        // X = Y × Z completes the right-handed triad.
+        let x = [
+            y[1] * z[2] - y[2] * z[1],
+            y[2] * z[0] - y[0] * z[2],
+            y[0] * z[1] - y[1] * z[0],
+        ];
+
+        let dp = target.position - r;
+        let dv = target.velocity - v;
+        let project = |a: [f64; 3], p: [f64; 3]| a[0] * p[0] + a[1] * p[1] + a[2] * p[2];
+        let dp = [dp.x, dp.y, dp.z];
+        let dv = [dv.x, dv.y, dv.z];
+
+        StateVector::new(
+            Position::new(project(x, dp), project(y, dp), project(z, dp)),
+            Velocity::new(project(x, dv), project(y, dv), project(z, dv)),
         )
     }
 }
@@ -81,13 +136,14 @@ impl EcefState {
     /// Subtracts the observer's ECEF position (derived from geodetic
     /// coordinates via the WGS-84 ellipsoid) and rotates into the local
     /// East-North-Up frame at the observer's location.
-    pub fn to_enu(&self, observer: &impl Observer) -> EnuState {
+    pub fn to_enu(&self, observer: impl Into<GeodeticPoint>) -> EnuState {
+        let observer = observer.into();
         let obs_ecef = observer.to_ecef();
         let dp = self.position - obs_ecef.position;
         let dv = self.velocity - obs_ecef.velocity;
 
-        let (sin_lat, cos_lat) = observer.latitude().to_radians().to_f64().sin_cos();
-        let (sin_lon, cos_lon) = observer.longitude().to_radians().to_f64().sin_cos();
+        let (sin_lat, cos_lat) = observer.latitude.radians().sin_cos();
+        let (sin_lon, cos_lon) = observer.longitude.radians().sin_cos();
 
         StateVector::new(
             Position::new(
@@ -103,6 +159,36 @@ impl EcefState {
         )
     }
 
+    /// Convert ECEF state back to TEME, the inverse of [`TemeState::to_ecef`].
+    ///
+    /// Restores the frame-drag term before the rotation, mirroring the forward
+    /// transform's order:
+    ///   `v_TEME = R(−θ) · (v_ECEF + ω_Earth × r_ECEF)`
+    ///
+    /// A ground point is stationary in ECEF but moving in TEME, so the drag
+    /// term is what gives it its inertial velocity.
+    #[must_use]
+    pub fn to_teme(&self, t: DateTime<Utc>) -> TemeState {
+        let (sin_g, cos_g) = gmst(julian_date(t)).to_f64().sin_cos();
+
+        // Rotate position back: r_TEME = R(-θ) · r_ECEF
+        let rx = cos_g * self.position.x - sin_g * self.position.y;
+        let ry = sin_g * self.position.x + cos_g * self.position.y;
+
+        // Add back ω_Earth × r_ECEF = [-ω_E · ry_ecef, ω_E · rx_ecef, 0], then rotate.
+        let vx = self.velocity.x - OMEGA_EARTH * self.position.y;
+        let vy = self.velocity.y + OMEGA_EARTH * self.position.x;
+
+        StateVector::new(
+            Position::new(rx, ry, self.position.z),
+            Velocity::new(
+                cos_g * vx - sin_g * vy,
+                sin_g * vx + cos_g * vy,
+                self.velocity.z,
+            ),
+        )
+    }
+
     /// Convert the ECEF position to geodetic latitude, longitude and height
     /// above the WGS-84 ellipsoid. Velocity is discarded.
     ///
@@ -111,7 +197,7 @@ impl EcefState {
     ///
     /// [`Predictor::sub_point`]: crate::Predictor::sub_point
     #[must_use]
-    pub fn to_geodetic(&self) -> Geodetic {
+    pub fn to_geodetic(&self) -> GeodeticPoint {
         geodetic_from_ecef(self.position.x, self.position.y, self.position.z)
     }
 }
@@ -146,8 +232,8 @@ impl LatLon {
     }
 }
 
-impl From<Geodetic> for LatLon {
-    fn from(g: Geodetic) -> Self {
+impl From<GeodeticPoint> for LatLon {
+    fn from(g: GeodeticPoint) -> Self {
         Self {
             latitude: g.latitude,
             longitude: g.longitude,
@@ -165,15 +251,33 @@ impl From<(Degrees, Degrees)> for LatLon {
     }
 }
 
-/// A geodetic position on or above the WGS-84 ellipsoid.
+/// A point on or above the WGS-84 ellipsoid, in geodetic coordinates.
 ///
 /// Altitude is in **metres**. Longitude is in `(-180, 180]`.
 ///
-/// This is a position. To observe satellites *from* a point on the ground, use
-/// [`GroundObserver`](crate::GroundObserver) or implement
-/// [`Observer`](crate::Observer) on your own type.
+/// This is the one type the crate uses for a location on the Earth — as the
+/// observer of a pass, and as the target of a
+/// [`Pointing`](crate::Pointing). Every API taking a location takes
+/// `impl Into<GeodeticPoint>`, so a `GeodeticPoint`, a `&GeodeticPoint`, or
+/// your own type with a `From` impl all pass directly:
+///
+/// ```
+/// use sgp4_predict::{Degrees, GeodeticPoint};
+///
+/// struct Station { name: String, lat: f64, lon: f64 }
+///
+/// impl From<&Station> for GeodeticPoint {
+///     fn from(s: &Station) -> Self {
+///         GeodeticPoint {
+///             latitude: Degrees(s.lat),
+///             longitude: Degrees(s.lon),
+///             altitude: 0.0,
+///         }
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Geodetic {
+pub struct GeodeticPoint {
     /// Geodetic latitude (positive north).
     pub latitude: Degrees,
     /// Geodetic longitude (positive east).
@@ -182,12 +286,18 @@ pub struct Geodetic {
     pub altitude: f64,
 }
 
-impl Geodetic {
+impl GeodeticPoint {
     /// Convert to an ECEF position, the inverse of
     /// [`EcefState::to_geodetic`]. Velocity is zero.
     #[must_use]
     pub fn to_ecef(&self) -> EcefState {
         ecef_from_geodetic(self.latitude, self.longitude, self.altitude)
+    }
+}
+
+impl From<&GeodeticPoint> for GeodeticPoint {
+    fn from(g: &GeodeticPoint) -> Self {
+        *g
     }
 }
 
@@ -217,7 +327,7 @@ pub(crate) fn ecef_from_geodetic(
 /// Chosen over Bowring's single iteration because it stays exact at orbital
 /// altitude, which is where Bowring degrades. Degenerate only within about
 /// 43 km of Earth's centre, which is guarded below.
-fn geodetic_from_ecef(x: f64, y: f64, z: f64) -> Geodetic {
+fn geodetic_from_ecef(x: f64, y: f64, z: f64) -> GeodeticPoint {
     const E4: f64 = WGS84_E2 * WGS84_E2;
 
     let xy2 = x * x + y * y;
@@ -230,7 +340,7 @@ fn geodetic_from_ecef(x: f64, y: f64, z: f64) -> Geodetic {
     // signature cannot report the failure, and 0°/0° is the one answer
     // indistinguishable from a real one — only the -a altitude marks it.
     if r <= 0.0 {
-        return Geodetic {
+        return GeodeticPoint {
             latitude: Degrees(0.0),
             longitude: Degrees(0.0),
             altitude: -WGS84_A,
@@ -247,11 +357,65 @@ fn geodetic_from_ecef(x: f64, y: f64, z: f64) -> Geodetic {
     let d = k * xy2.sqrt() / (k + WGS84_E2);
     let dz = (d * d + z * z).sqrt();
 
-    Geodetic {
+    GeodeticPoint {
         // The half-angle form is exact at both poles, where `d` is zero.
         latitude: Radians(2.0 * z.atan2(d + dz)).to_degrees(),
         longitude: Radians(y.atan2(x)).to_degrees(),
         altitude: (k + WGS84_E2 - 1.0) / k * dz,
+    }
+}
+
+/// State vector in the LVLH frame, relative to the satellite.
+///
+/// The axes are the satellite's local-vertical/local-horizontal triad:
+///
+/// ```text
+/// Z = -r̂                     nadir
+/// Y = -(r × v)/|r × v|        anti orbit-normal
+/// X = Y × Z                   along-track, positive in the velocity direction
+/// ```
+///
+/// X coincides with the velocity vector only for a circular orbit. Building
+/// from Z and the orbit normal keeps nadir exact at any eccentricity and lets
+/// X absorb the flight-path angle.
+///
+/// This is the nadir-pointing *reference* frame. It equals a spacecraft's body
+/// frame only when the bus is perfectly nadir-pointing with no attitude
+/// offset, which this crate does not model.
+///
+/// The velocity is the **inertial** relative velocity resolved on the LVLH
+/// axes, not the derivative of the LVLH position — no `ω_LVLH × r` term is
+/// subtracted. `range_rate` is `d|p|/dt`, which is frame-independent, so
+/// Doppler is unaffected by the distinction; a caller wanting the true
+/// rotating-frame derivative subtracts `ω_LVLH × p` with `ω_LVLH = (r × v)/r²`.
+pub type LvlhState = StateVector<markers::Lvlh>;
+
+/// Unit vector in the satellite's LVLH frame — see [`LvlhState`] for the axes.
+pub type LvlhDirection = UnitVector<markers::Lvlh>;
+
+impl LvlhState {
+    /// Reduce to the direction, range and range rate of the target.
+    #[must_use]
+    pub fn to_pointing(&self) -> Pointing {
+        let (x, y, z) = (self.position.x, self.position.y, self.position.z);
+        let range = (x * x + y * y + z * z).sqrt();
+
+        // A target at the satellite has no direction; report zero rather than
+        // NaN, as `elevation_and_rate` does at zenith. Documented on
+        // `Pointing::direction`, since a zero vector is not a unit one.
+        if range < 1e-9 {
+            return Pointing {
+                direction: LvlhDirection::new(0.0, 0.0, 0.0),
+                range: 0.0,
+                range_rate: 0.0,
+            };
+        }
+
+        Pointing {
+            direction: LvlhDirection::new(x / range, y / range, z / range),
+            range,
+            range_rate: (x * self.velocity.x + y * self.velocity.y + z * self.velocity.z) / range,
+        }
     }
 }
 
@@ -385,14 +549,66 @@ mod markers {
     /// Marker struct for ENU frame
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Enu;
+
+    /// Marker struct for the satellite-local LVLH frame
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+    pub struct Lvlh;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{EcefState, EnuState, Geodetic, WGS84_A, gmst, julian_date, sun_position_eci};
+    use super::{EcefState, EnuState, GeodeticPoint, WGS84_A, gmst, julian_date, sun_position_eci};
     use crate::angle::Degrees;
     use crate::vectors::{Position, Velocity};
     use chrono::{TimeZone, Utc};
+
+    // --- GeodeticPoint::to_ecef ---
+
+    #[test]
+    fn test_to_ecef_equator_prime_meridian() {
+        // At lat=0°, lon=0°, alt=0 the ECEF position is exactly [a, 0, 0]
+        // where a = 6 378 137 m (WGS-84 semi-major axis).
+        let ecef = GeodeticPoint {
+            latitude: Degrees(0.0),
+            longitude: Degrees(0.0),
+            altitude: 0.0,
+        }
+        .to_ecef();
+        assert!((ecef.position.x - WGS84_A).abs() < 1.0);
+        assert!(ecef.position.y.abs() < 1e-6);
+        assert!(ecef.position.z.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_to_ecef_north_pole() {
+        // At the geographic north pole the ECEF position is [0, 0, b]
+        // where b ≈ 6 356 752.314 m (WGS-84 semi-minor axis).
+        let ecef = GeodeticPoint {
+            latitude: Degrees(90.0),
+            longitude: Degrees(0.0),
+            altitude: 0.0,
+        }
+        .to_ecef();
+        assert!(ecef.position.x.abs() < 1.0);
+        assert!(ecef.position.y.abs() < 1e-6);
+        assert!(
+            (ecef.position.z - 6_356_752.314).abs() < 1.0,
+            "north-pole z = {:.3}, expected ≈ 6 356 752.314",
+            ecef.position.z
+        );
+    }
+
+    #[test]
+    fn test_to_ecef_velocity_is_zero() {
+        // A stationary ground point has no velocity in ECEF.
+        let ecef = GeodeticPoint {
+            latitude: Degrees(28.6),
+            longitude: Degrees(77.2),
+            altitude: 100.0,
+        }
+        .to_ecef();
+        assert_eq!(ecef.velocity, Velocity::new(0.0, 0.0, 0.0));
+    }
 
     // --- EcefState::to_geodetic ---
 
@@ -405,7 +621,7 @@ mod tests {
         for &h in &heights {
             for lat_deg in [-90.0, -89.9, -45.0, -0.1, 0.0, 23.5, 60.0, 89.9, 90.0] {
                 for lon_deg in [-180.0, -179.9, -90.0, -0.1, 0.0, 45.0, 179.9] {
-                    let start = Geodetic {
+                    let start = GeodeticPoint {
                         latitude: Degrees(lat_deg),
                         longitude: Degrees(lon_deg),
                         altitude: h,

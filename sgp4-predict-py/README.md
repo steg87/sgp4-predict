@@ -18,7 +18,7 @@ Find the passes over a ground station and sample each one:
 
 ```python
 from datetime import datetime, timedelta, timezone
-from sgp4_predict import GroundObserver, Interval, Predictor, Tle
+from sgp4_predict import GeodeticPoint, Interval, Predictor, Tle
 
 tle = Tle(
     "SENTINEL-2C",
@@ -27,7 +27,7 @@ tle = Tle(
 )
 predictor = Predictor.from_tle(tle)
 
-glasgow = GroundObserver(latitude_deg=55.86, longitude_deg=-4.25, altitude=40.0)
+glasgow = GeodeticPoint(latitude_deg=55.86, longitude_deg=-4.25, altitude=40.0)
 
 start = datetime(2025, 12, 22, tzinfo=timezone.utc)
 window = Interval(start=start, end=start + timedelta(days=1))
@@ -56,8 +56,17 @@ older than 3–7 days with caution. Fresh TLEs are available from [CelesTrak](ht
 
 Besides `transits_iter`, `Predictor` yields apsides, sunlit and eclipse windows, ground-track
 points, area overpasses and raw state vectors, and answers point queries such as `propagate`,
-`observe_at` and `sub_point`. The package ships type stubs, so an IDE or `help(Predictor)` lists
-them with their signatures and units.
+`observe_at`, `point_at` and `sub_point`. The package ships type stubs, so an IDE or
+`help(Predictor)` lists them with their signatures and units.
+
+`observe_at` looks up from the ground; `point_at` looks down from the satellite, which is what an
+RF link budget or an instrument-pointing calculation needs:
+
+```python
+pointing = predictor.point_at(t, glasgow)
+d = pointing.direction  # unit vector in the satellite's LVLH frame
+print(f"{pointing.off_nadir_deg:.1f}° off nadir, {pointing.range / 1000:.0f} km")
+```
 
 Every method taking a time range accepts any object with `.start` and `.end` datetime properties —
 an `Interval`, a `Transit`, an `Illumination`, an `AoiWindow`, or your own type. All iterators are
@@ -69,7 +78,7 @@ configuration for event times.
 ## Areas of interest
 
 An area is a region on the ground; `aoi_iter` yields the windows in which it is within the
-payload's reach. Points are `LatLon` objects, `Geodetic` objects whose altitude is ignored — so a
+payload's reach. Points are `LatLon` objects, `GeodeticPoint` objects whose altitude is ignored — so a
 `sub_point` result can be passed straight in — or plain `(latitude_deg, longitude_deg)` tuples.
 
 ```python

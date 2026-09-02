@@ -32,7 +32,7 @@ impl ObserverArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sgp4_predict::Observer as _;
+    use sgp4_predict::GeodeticPoint;
 
     fn args(gs: Option<&str>) -> ObserverArgs {
         ObserverArgs {
@@ -88,13 +88,14 @@ groundstations:
     }
 
     #[test]
-    fn test_resolved_station_is_an_observer() {
+    fn test_resolved_station_converts_to_a_geodetic_point() {
         let mut config = config();
         let args = args(Some("glasgow"));
         let id = args.validate(&config).unwrap();
         let gs = config.groundstations.remove(id).unwrap();
-        assert_eq!(gs.latitude().to_f64(), 55.86);
-        assert_eq!(gs.longitude().to_f64(), -4.25);
-        assert_eq!(gs.altitude(), 40.0);
+        let point = GeodeticPoint::from(&gs);
+        assert_eq!(point.latitude.to_f64(), 55.86);
+        assert_eq!(point.longitude.to_f64(), -4.25);
+        assert_eq!(point.altitude, 40.0);
     }
 }

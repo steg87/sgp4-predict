@@ -1,40 +1,22 @@
-//! Observer trait and ground-based observation types.
+//! What one end of a satellite-to-ground link sees of the other.
 //!
-//! [`Observer`] represents a fixed point on Earth's surface. Implement it on
-//! your own type to use [`Predictor::observe_at`] and the observation iterators.
+//! [`Observation`] is the ground's view of the satellite — azimuth, elevation,
+//! range and range rate. [`Pointing`] is the satellite's view of the ground —
+//! a direction in the spacecraft's [`LvlhState`] frame, plus the same range and
+//! range rate. Anything convertible into a [`GeodeticPoint`] serves as the
+//! ground end of either.
 //!
-//! [`Predictor::observe_at`]: crate::Predictor::observe_at
+//! [`LvlhState`]: crate::LvlhState
 
 use chrono::{DateTime, Duration, Utc};
-use std::fmt;
 
 use crate::{
     Predictor, Result,
-    angle::{Degrees, Radians},
-    frames::EcefState,
+    angle::Radians,
+    frames::{GeodeticPoint, LvlhDirection},
     predict::PredictionIter,
     time::IntervalRange,
 };
-
-/// A fixed point on Earth's surface from which satellite passes are observed.
-///
-/// Altitude is in **metres** above the WGS-84 ellipsoid.
-pub trait Observer {
-    /// Geodetic latitude (positive north).
-    fn latitude(&self) -> Degrees;
-    /// Geodetic longitude (positive east).
-    fn longitude(&self) -> Degrees;
-    /// Height above the WGS-84 ellipsoid in metres.
-    fn altitude(&self) -> f64;
-}
-
-pub(crate) trait ObserverExt: Observer {
-    fn to_ecef(&self) -> EcefState {
-        crate::frames::ecef_from_geodetic(self.latitude(), self.longitude(), self.altitude())
-    }
-}
-
-impl<T: Observer> ObserverExt for T {}
 
 /// A point observation of a satellite from a ground location.
 ///
@@ -58,42 +40,24 @@ pub struct Observation {
 ///
 /// Created by [`Predictor::observation_iter`](crate::Predictor::observation_iter).
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct ObservationIter<'a, O: Observer> {
+#[derive(Debug, Clone)]
+pub struct ObservationIter {
     predict_iter: PredictionIter,
-    observer: &'a O,
+    observer: GeodeticPoint,
 }
 
-// `O` is only ever held behind a shared reference, so a derive's `O: Debug` /
-// `O: Clone` bounds would be a false requirement on caller-supplied observers.
-impl<O: Observer> fmt::Debug for ObservationIter<'_, O> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ObservationIter")
-            .field("predict_iter", &self.predict_iter)
-            .finish_non_exhaustive()
-    }
-}
-
-impl<O: Observer> Clone for ObservationIter<'_, O> {
-    fn clone(&self) -> Self {
-        Self {
-            predict_iter: self.predict_iter.clone(),
-            observer: self.observer,
-        }
-    }
-}
-
-impl<'a, O: Observer> ObservationIter<'a, O> {
+impl ObservationIter {
     /// Sample observations across `interval` every `step`. Prefer
     /// [`Predictor::observation_iter`](crate::Predictor::observation_iter).
     pub fn new(
         predictor: Predictor,
-        observer: &'a O,
+        observer: impl Into<GeodeticPoint>,
         interval: impl IntervalRange,
         step: Duration,
     ) -> Self {
         Self {
             predict_iter: PredictionIter::new(predictor, interval, step),
-            observer,
+            observer: observer.into(),
         }
     }
 
@@ -104,7 +68,7 @@ impl<'a, O: Observer> ObservationIter<'a, O> {
     }
 }
 
-impl<'a, O: Observer> Iterator for ObservationIter<'a, O> {
+impl Iterator for ObservationIter {
     type Item = Result<(DateTime<Utc>, Observation)>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -126,7 +90,11 @@ impl Predictor {
     /// Observe the satellite from `observer` at time `t`.
     ///
     /// Returns its azimuth, elevation, range and range rate as seen from there.
-    pub fn observe_at<O: Observer>(&self, t: DateTime<Utc>, observer: &O) -> Result<Observation> {
+    pub fn observe_at(
+        &self,
+        t: DateTime<Utc>,
+        observer: impl Into<GeodeticPoint>,
+    ) -> Result<Observation> {
         let observation = self
             .propagate(t)?
             .to_ecef(t)
@@ -138,52 +106,96 @@ impl Predictor {
     /// Observe the satellite from `observer` across a time interval.
     ///
     /// Returns an iterator over time-stamped observations, one every `step`.
-    pub fn observation_iter<'a, O: Observer>(
+    pub fn observation_iter(
         &self,
-        observer: &'a O,
+        observer: impl Into<GeodeticPoint>,
         interval: impl IntervalRange,
         step: Duration,
-    ) -> ObservationIter<'a, O> {
+    ) -> ObservationIter {
         ObservationIter::new(self.clone(), observer, interval, step)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{angle::Degrees, types::GroundObserver};
+/// The satellite's view of a target on the ground.
+///
+/// `direction` is the primitive: a unit vector in the satellite's
+/// [`LvlhState`](crate::LvlhState) frame, which composes directly with an
+/// antenna or instrument mounting rotation. Nadir-referenced angles are
+/// derived from it — see [`off_nadir`](Pointing::off_nadir) — rather than
+/// stored, because a boresight is not always nadir.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Pointing {
+    /// Unit vector from the satellite to the target, in LVLH.
+    ///
+    /// Zero — not a unit vector — in the one degenerate case, a target at the
+    /// satellite's own position, where there is no direction to report and
+    /// [`range`](Pointing::range) is zero too. Check `range` before composing
+    /// this with a mounting rotation if that case is reachable for you.
+    pub direction: LvlhDirection,
+    /// Slant range from satellite to target in metres.
+    pub range: f64,
+    /// Rate of change of slant range in metres per second (positive = receding).
+    pub range_rate: f64,
+}
 
-    #[test]
-    fn test_to_ecef_equator_prime_meridian() {
-        // At lat=0°, lon=0°, alt=0 the ECEF position is exactly [a, 0, 0]
-        // where a = 6 378 137 m (WGS-84 semi-major axis).
-        let obs = GroundObserver::new(Degrees(0.0), Degrees(0.0), 0.0);
-        let ecef = obs.to_ecef();
-        assert!((ecef.position.x - 6_378_137.0).abs() < 1.0);
-        assert!(ecef.position.y.abs() < 1e-6);
-        assert!(ecef.position.z.abs() < 1e-6);
+impl Pointing {
+    /// Angle between [`direction`](Pointing::direction) and nadir, in `[0, π]`.
+    ///
+    /// Zero for the degenerate zero-range state, which is indistinguishable
+    /// from a target exactly at nadir — check
+    /// [`range`](Pointing::range) to tell them apart.
+    ///
+    /// Nadir is geocentric — measured from the position vector rather than the
+    /// ellipsoid normal — the same convention as
+    /// [`AoiIterOpts::max_off_nadir`](crate::AoiIterOpts::max_off_nadir), so
+    /// the two compare directly.
+    ///
+    /// Against an [`Observation`] of the same target, `sin(off_nadir)` equals
+    /// `(rₑ/r)·cos(elevation)` exactly where the ellipsoid normal is radial,
+    /// and differs by the deflection of the vertical elsewhere — up to about
+    /// 0.19° of tilt at mid-latitudes, since `elevation` is measured from the
+    /// geodetic horizon.
+    #[must_use]
+    pub fn off_nadir(&self) -> Radians {
+        let (x, y, z) = (self.direction.x, self.direction.y, self.direction.z);
+        Radians(x.hypot(y).atan2(z))
     }
+}
 
-    #[test]
-    fn test_to_ecef_north_pole() {
-        // At the geographic north pole the ECEF position is [0, 0, b]
-        // where b ≈ 6 356 752.314 m (WGS-84 semi-minor axis).
-        let obs = GroundObserver::new(Degrees(90.0), Degrees(0.0), 0.0);
-        let ecef = obs.to_ecef();
-        assert!(ecef.position.x.abs() < 1.0);
-        assert!(ecef.position.y.abs() < 1e-6);
-        assert!(
-            (ecef.position.z - 6_356_752.314).abs() < 1.0,
-            "north-pole z = {:.3}, expected ≈ 6 356 752.314",
-            ecef.position.z
-        );
-    }
-
-    #[test]
-    fn test_to_ecef_velocity_is_zero() {
-        // A stationary ground observer has no velocity in ECEF.
-        let obs = GroundObserver::new(Degrees(28.6), Degrees(77.2), 100.0);
-        let ecef = obs.to_ecef();
-        assert_eq!(ecef.velocity, crate::vectors::Velocity::new(0.0, 0.0, 0.0));
+impl Predictor {
+    /// Point the satellite at `target` at time `t`.
+    ///
+    /// Returns the direction to the target in the satellite's LVLH frame,
+    /// along with slant range and range rate.
+    ///
+    /// This is pure geometry and does **not** test line of sight: a target on
+    /// the far side of the Earth returns normally, with an
+    /// [`off_nadir`](Pointing::off_nadir) past the horizon angle. Use
+    /// [`observe_at`](Predictor::observe_at) and check its
+    /// [`elevation`](Observation::elevation) for visibility.
+    ///
+    /// ```no_run
+    /// # use sgp4_predict::{Degrees, GeodeticPoint, Predictor, Tle};
+    /// # use chrono::Utc;
+    /// # let tle: Tle = "ISS (ZARYA)\n1 ...\n2 ...".parse().unwrap();
+    /// let predictor = Predictor::from_tle(&tle).unwrap();
+    /// let t = Utc::now();
+    ///
+    /// let glasgow = GeodeticPoint {
+    ///     latitude: Degrees(55.86),
+    ///     longitude: Degrees(-4.25),
+    ///     altitude: 40.0,
+    /// };
+    /// let pointing = predictor.point_at(t, glasgow).unwrap();
+    /// println!(
+    ///     "{:.1} km away, {:.1}° off nadir",
+    ///     pointing.range / 1000.0,
+    ///     pointing.off_nadir().degrees(),
+    /// );
+    /// ```
+    pub fn point_at(&self, t: DateTime<Utc>, target: impl Into<GeodeticPoint>) -> Result<Pointing> {
+        let satellite = self.propagate(t)?;
+        let target = target.into().to_ecef().to_teme(t);
+        Ok(satellite.to_lvlh(target).to_pointing())
     }
 }

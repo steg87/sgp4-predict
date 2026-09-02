@@ -21,7 +21,7 @@ Find the passes over a ground station in the next 24 hours, and sample each one:
 
 ```rust,no_run
 use chrono::{Duration, Utc};
-use sgp4_predict::{Degrees, GroundObserver, Predictor, Tle};
+use sgp4_predict::{Degrees, GeodeticPoint, Predictor, Tle};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tle: Tle = "\
@@ -33,17 +33,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let predictor = Predictor::from_tle(&tle)?;
 
     // Glasgow: latitude, longitude, altitude in metres.
-    let glasgow = GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0);
+    let glasgow = GeodeticPoint {
+        latitude: Degrees(55.86),
+        longitude: Degrees(-4.25),
+        altitude: 40.0,
+    };
 
     let start = Utc::now();
     let interval = start..start + Duration::days(1);
 
-    for transit in predictor.transits_iter(&glasgow, interval, Degrees(5.0)) {
+    for transit in predictor.transits_iter(glasgow, interval, Degrees(5.0)) {
         let transit = transit?;
         println!("AoS {}  LoS {}", transit.start, transit.end);
 
         // A Transit is itself a time interval, so it can be passed straight back in.
-        for observation in predictor.observation_iter(&glasgow, transit, Duration::seconds(10)) {
+        for observation in predictor.observation_iter(glasgow, transit, Duration::seconds(10)) {
             let (t, obs) = observation?;
             println!(
                 "  {t}  az {:6.1}°  el {:5.1}°  range {:.0} km",
@@ -186,24 +190,29 @@ for window in predictor.aoi_iter_with_opts(
 
 ## Bring your own types
 
-If your application already has a satellite record or a ground-station type, implement
-[`TleRecord`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.TleRecord.html) or
-[`Observer`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.Observer.html) on it and pass
-it in directly — every method is generic over these traits:
+If your application already has a satellite record, implement
+[`TleRecord`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.TleRecord.html) on it and pass
+it to `Predictor::from_tle` directly. For a ground-station type, give it a `From` impl — every
+method taking a location takes `impl Into<GeodeticPoint>`:
 
 ```rust
-use sgp4_predict::{Degrees, Observer};
+use sgp4_predict::{Degrees, GeodeticPoint};
 
 struct Site {
+    name: String,
     lat: f64,
     lon: f64,
     elevation_m: f64,
 }
 
-impl Observer for Site {
-    fn latitude(&self) -> Degrees  { Degrees(self.lat) }
-    fn longitude(&self) -> Degrees { Degrees(self.lon) }
-    fn altitude(&self) -> f64      { self.elevation_m }
+impl From<&Site> for GeodeticPoint {
+    fn from(s: &Site) -> Self {
+        GeodeticPoint {
+            latitude: Degrees(s.lat),
+            longitude: Degrees(s.lon),
+            altitude: s.elevation_m,
+        }
+    }
 }
 ```
 
@@ -228,7 +237,7 @@ worked equator-crossing example, and [`tests/detect.rs`](tests/detect.rs) exerci
 Positions are in **metres** and velocities in **m/s** throughout.
 
 Angles are typed: `Degrees` and `Radians` are distinct, so they cannot be mixed up by accident.
-Observer coordinates are `Degrees`; `Observation::azimuth` and `elevation` are `Radians`. Convert
+`GeodeticPoint` coordinates are `Degrees`; `Observation::azimuth` and `elevation` are `Radians`. Convert
 with `.to_degrees()` / `.to_radians()`, or use `.degrees()` / `.radians()` to get a bare `f64`.
 Anywhere a `min_elevation` is taken, either unit is accepted.
 

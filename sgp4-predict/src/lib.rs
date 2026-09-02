@@ -8,7 +8,7 @@
 //! # Quick start
 //!
 //! ```no_run
-//! use sgp4_predict::{Degrees, GroundObserver, Predictor, Tle};
+//! use sgp4_predict::{Degrees, GeodeticPoint, Predictor, Tle};
 //! use chrono::{Duration, Utc};
 //!
 //! let tle: Tle = "\
@@ -19,12 +19,16 @@
 //!     .unwrap();
 //!
 //! let predictor = Predictor::from_tle(&tle).unwrap();
-//! let glasgow = GroundObserver::new(Degrees(55.86), Degrees(-4.25), 40.0);
+//! let glasgow = GeodeticPoint {
+//!     latitude: Degrees(55.86),
+//!     longitude: Degrees(-4.25),
+//!     altitude: 40.0,
+//! };
 //!
 //! let start = Utc::now();
 //! let end = start + Duration::days(1);
 //!
-//! for transit in predictor.transits_iter(&glasgow, start..end, Degrees(5.0)) {
+//! for transit in predictor.transits_iter(glasgow, start..end, Degrees(5.0)) {
 //!     let transit = transit.unwrap();
 //!     println!("AoS: {}  LoS: {}", transit.start, transit.end);
 //! }
@@ -33,8 +37,8 @@
 //! # Custom types
 //!
 //! If your application already has types that hold TLE data or coordinates,
-//! implement [`TleRecord`] and [`Observer`] on them instead of converting to
-//! [`Tle`] / [`GroundObserver`].
+//! implement [`TleRecord`] on them, and `From<&YourType> for `[`GeodeticPoint`],
+//! instead of converting first.
 //!
 //! # OMM support
 //!
@@ -55,9 +59,9 @@
 //! # Units
 //!
 //! Positions are in **metres** and velocities in **m/s**. Angles are typed:
-//! [`Observer::latitude`]/[`longitude`](Observer::longitude) take [`Degrees`],
-//! [`Observation::azimuth`]/[`elevation`](Observation::elevation) are
-//! [`Radians`], and `min_elevation` parameters accept either.
+//! [`GeodeticPoint::latitude`]/[`longitude`](GeodeticPoint::longitude) are
+//! [`Degrees`], [`Observation::azimuth`]/[`elevation`](Observation::elevation)
+//! are [`Radians`], and `min_elevation` parameters accept either.
 //!
 //! # Handling errors
 //!
@@ -158,15 +162,15 @@ pub use crate::{
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
     detect::Error as DetectError,
     fallible::{FallibleIter, OnError, Tolerate},
-    frames::{EcefState, EnuState, Geodetic, LatLon, TemeState},
+    frames::{EcefState, EnuState, GeodeticPoint, LatLon, LvlhDirection, LvlhState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationIterOpts, IlluminationState},
-    observe::{Observation, ObservationIter, Observer},
+    observe::{Observation, ObservationIter, Pointing},
     predict::{GroundTrackIter, PredictionIter},
     roots::{Error as RootsError, Refinement},
     time::{DateTimeIter, IntervalRange, TimeWindow},
     transits::{MaxElevationOpts, Transit, TransitIter, TransitIterOpts},
-    types::{GroundObserver, Tle, TleParseError},
-    vectors::{Position, StateVector, Velocity},
+    types::{Tle, TleParseError},
+    vectors::{Position, StateVector, UnitVector, Velocity},
 };
 
 #[cfg(feature = "generics")]
@@ -184,7 +188,7 @@ pub use crate::detect::{
 pub mod prelude {
     pub use crate::{
         AoiWindow, ApsisEvent, Classification, Degrees, Elements, Error, FallibleIter,
-        GroundObserver, IlluminationState, LatLon, Observation, Observer, Polygon, Predictor,
+        GeodeticPoint, IlluminationState, LatLon, Observation, Pointing, Polygon, Predictor,
         Radians, Result, TimeWindow, Tle, TleRecord, Transit,
     };
 }
@@ -319,7 +323,7 @@ impl Predictor {
     /// the satellite, with `altitude` its height above the WGS-84 ellipsoid.
     ///
     /// Sampling this over an interval traces the ground track.
-    pub fn sub_point(&self, t: DateTime<Utc>) -> Result<Geodetic> {
+    pub fn sub_point(&self, t: DateTime<Utc>) -> Result<GeodeticPoint> {
         Ok(self.propagate(t)?.to_ecef(t).to_geodetic())
     }
 

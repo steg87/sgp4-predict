@@ -3,7 +3,7 @@
 
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
-use sgp4_predict::{Degrees, Observer};
+use sgp4_predict::{Degrees, GeodeticPoint};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -350,19 +350,15 @@ impl Config {
     }
 }
 
-/// A ground station is itself an observer — no conversion to `GroundObserver` needed.
-/// Coordinates are range-checked by [`Config::groundstation`], the only way to obtain one.
-impl Observer for GroundStation {
-    fn latitude(&self) -> Degrees {
-        Degrees(self.location.latitude)
-    }
-
-    fn longitude(&self) -> Degrees {
-        Degrees(self.location.longitude)
-    }
-
-    fn altitude(&self) -> f64 {
-        self.location.altitude
+/// Coordinates are range-checked by [`Config::groundstation`], the only way to
+/// obtain a `GroundStation`, so the conversion cannot produce an invalid point.
+impl From<&GroundStation> for GeodeticPoint {
+    fn from(gs: &GroundStation) -> Self {
+        Self {
+            latitude: Degrees(gs.location.latitude),
+            longitude: Degrees(gs.location.longitude),
+            altitude: gs.location.altitude,
+        }
     }
 }
 
@@ -411,9 +407,10 @@ groundstations:
         assert_eq!(config.ids(), ["glasgow", "svalbard"]);
 
         let gs = config.groundstation("glasgow").unwrap();
-        assert_eq!(gs.latitude().to_f64(), 55.86);
-        assert_eq!(gs.longitude().to_f64(), -4.25);
-        assert_eq!(gs.altitude(), 40.0);
+        let point = GeodeticPoint::from(gs);
+        assert_eq!(point.latitude.to_f64(), 55.86);
+        assert_eq!(point.longitude.to_f64(), -4.25);
+        assert_eq!(point.altitude, 40.0);
     }
 
     #[test]
@@ -428,7 +425,10 @@ groundstations:
 ",
         )
         .unwrap();
-        assert_eq!(config.groundstation("svalbard").unwrap().altitude(), 0.0);
+        assert_eq!(
+            config.groundstation("svalbard").unwrap().location.altitude,
+            0.0
+        );
     }
 
     #[test]
@@ -555,8 +555,18 @@ groundstations:
 
         let reloaded = read(&path).unwrap();
         assert_eq!(reloaded.ids(), ["glasgow", "svalbard"]);
-        assert_eq!(reloaded.groundstation("glasgow").unwrap().altitude(), 40.0);
-        assert_eq!(reloaded.groundstation("svalbard").unwrap().altitude(), 0.0);
+        assert_eq!(
+            reloaded.groundstation("glasgow").unwrap().location.altitude,
+            40.0
+        );
+        assert_eq!(
+            reloaded
+                .groundstation("svalbard")
+                .unwrap()
+                .location
+                .altitude,
+            0.0
+        );
 
         // No stray temp file is left next to it.
         let leftovers: Vec<_> = std::fs::read_dir(&dir)
@@ -603,9 +613,10 @@ groundstations:
         assert_eq!(config.ids(), ["glasgow"]);
 
         let gs = config.groundstation("glasgow").unwrap();
-        assert_eq!(gs.latitude().to_f64(), 55.86);
-        assert_eq!(gs.longitude().to_f64(), -4.25);
-        assert_eq!(gs.altitude(), 40.0);
+        let point = GeodeticPoint::from(gs);
+        assert_eq!(point.latitude.to_f64(), 55.86);
+        assert_eq!(point.longitude.to_f64(), -4.25);
+        assert_eq!(point.altitude, 40.0);
 
         // What was returned is what landed on disk.
         assert_eq!(std::fs::read_to_string(&path).unwrap(), TEMPLATE);

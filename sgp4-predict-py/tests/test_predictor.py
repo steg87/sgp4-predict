@@ -11,7 +11,7 @@ from sgp4_predict import (
     ApsisEvent,
     Classification,
     Elements,
-    GroundObserver,
+    GeodeticPoint,
     IlluminationState,
     Interval,
     IntervalRange,
@@ -27,7 +27,7 @@ TLE_L1 = "1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990"
 TLE_L2 = "2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
 
 # Glasgow (matches tests/common/mod.rs ground station)
-GLASGOW = GroundObserver(55.86, -4.25, 40.0)
+GLASGOW = GeodeticPoint(55.86, -4.25, 40.0)
 
 START = datetime(2025, 12, 22, tzinfo=timezone.utc)
 END = START + timedelta(days=1)
@@ -38,11 +38,11 @@ def make_predictor() -> Predictor:
     return Predictor.from_tle(Tle(TLE_ID, TLE_L1, TLE_L2))
 
 
-# ── GroundObserver ──────────────────────────────────────────────────────────────
+# ── GeodeticPoint ──────────────────────────────────────────────────────────────
 
 
 def test_ground_station_round_trip():
-    gs = GroundObserver(51.5, -0.1, 10.0)
+    gs = GeodeticPoint(51.5, -0.1, 10.0)
     assert abs(gs.latitude_deg - 51.5) < 1e-10
     assert abs(gs.longitude_deg - -0.1) < 1e-10
     assert gs.altitude == 10.0
@@ -99,6 +99,73 @@ def test_observe_at_degrees_properties():
     obs = p.observe_at(t, GLASGOW)
     assert 0.0 <= obs.azimuth_deg < 360.0
     assert -90.0 <= obs.elevation_deg <= 90.0
+
+
+# ── point_at ───────────────────────────────────────────────────────────────────
+
+
+def test_point_at_direction_is_a_unit_vector():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    d = p.point_at(t, GLASGOW).direction
+    assert abs(math.sqrt(d.x**2 + d.y**2 + d.z**2) - 1.0) < 1e-12
+
+
+def test_point_at_range_matches_observe_at():
+    # The same scalar seen from either end of the link.
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    pointing = p.point_at(t, GLASGOW)
+    obs = p.observe_at(t, GLASGOW)
+    assert abs(pointing.range - obs.range) < 1e-6
+    assert abs(pointing.range_rate - obs.range_rate) < 1e-6
+
+
+def test_point_at_off_nadir_is_in_range():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    assert 0.0 <= p.point_at(t, GLASGOW).off_nadir_deg <= 180.0
+
+
+def test_pointing_repr():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    assert "Pointing(off_nadir=" in repr(p.point_at(t, GLASGOW))
+
+
+# ── LVLH frame ─────────────────────────────────────────────────────────────────
+
+
+def test_to_lvlh_zero_range_does_not_produce_nan():
+    # A target coincident with the satellite has no direction; guarded, not NaN.
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    sat = p.propagate(t)
+    pt = sat.to_lvlh(sat).to_pointing()
+    assert math.isfinite(pt.range)
+    assert math.isfinite(pt.off_nadir_deg)
+    assert math.isfinite(pt.direction.z)
+
+
+def test_to_teme_round_trips_to_ecef():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    teme = p.propagate(t)
+    back = teme.to_ecef(t).to_teme(t)
+    assert abs(back.position.x - teme.position.x) < 1e-6
+    assert abs(back.velocity.z - teme.velocity.z) < 1e-9
+
+
+def test_lvlh_state_exposes_position_and_velocity():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    sat = p.propagate(t)
+    ahead = p.propagate(t + timedelta(seconds=10))
+    lvlh = sat.to_lvlh(ahead)
+    # A target ahead in the orbital plane sits on +X with no cross-track part.
+    assert lvlh.position.x > 0.0
+    assert abs(lvlh.position.y) < 1.0
+    assert math.isfinite(lvlh.velocity.x)
 
 
 # ── transits_iter ─────────────────────────────────────────────────────────────

@@ -1,5 +1,3 @@
-# ruff: noqa: E501, F401, F403, F405
-
 from datetime import datetime
 from typing import Protocol, TypeAlias, runtime_checkable
 
@@ -7,7 +5,7 @@ from sgp4_predict._sgp4_predict import *
 from sgp4_predict._sgp4_predict import (
     Circle,
     Coverage,
-    Geodetic,
+    GeodeticPoint,
     LatLon,
     Polygon,
     Rectangle,
@@ -20,8 +18,8 @@ class IntervalRange(Protocol):
     @property
     def end(self) -> datetime: ...
 
-# A LatLon, a Geodetic, or a plain (latitude_deg, longitude_deg) tuple.
-LatLonLike: TypeAlias = LatLon | Geodetic | tuple[float, float]
+# A LatLon, a GeodeticPoint, or a plain (latitude_deg, longitude_deg) tuple.
+LatLonLike: TypeAlias = LatLon | GeodeticPoint | tuple[float, float]
 
 # A region on the ground, accepted by Predictor.aoi_iter and detect_aoi.
 Area: TypeAlias = Polygon | Rectangle | Circle
@@ -33,13 +31,12 @@ __all__ = [
     "ApsisEvent",
     "ApsisIter",
     "Area",
-    "Classification",
-    "Elements",
     "Circle",
+    "Classification",
     "Coverage",
+    "Elements",
     "FillRule",
-    "Geodetic",
-    "GroundObserver",
+    "GeodeticPoint",
     "GroundTrackIter",
     "Illumination",
     "IlluminationIter",
@@ -50,6 +47,7 @@ __all__ = [
     "LatLonLike",
     "Observation",
     "ObservationIter",
+    "Pointing",
     "Polygon",
     "PredictionIter",
     "Predictor",
@@ -57,6 +55,7 @@ __all__ = [
     "Refinement",
     "StateVectorEcef",
     "StateVectorEnu",
+    "StateVectorLvlh",
     "StateVectorTeme",
     "Tle",
     "Transit",

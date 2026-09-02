@@ -12,8 +12,7 @@ from sgp4_predict._sgp4_predict import (
     Coverage,
     Elements,
     FillRule,
-    Geodetic,
-    GroundObserver,
+    GeodeticPoint,
     GroundTrackIter,
     Illumination,
     IlluminationIter,
@@ -22,6 +21,7 @@ from sgp4_predict._sgp4_predict import (
     LatLon,
     Observation,
     ObservationIter,
+    Pointing,
     Polygon,
     PredictionIter,
     Predictor,
@@ -29,6 +29,7 @@ from sgp4_predict._sgp4_predict import (
     Refinement,
     StateVectorEcef,
     StateVectorEnu,
+    StateVectorLvlh,
     StateVectorTeme,
     Tle,
     Transit,
@@ -40,7 +41,7 @@ from sgp4_predict._sgp4_predict import (
 Area = Polygon | Rectangle | Circle
 
 #: Anywhere a point is taken, a `(latitude_deg, longitude_deg)` tuple works too.
-LatLonLike = LatLon | Geodetic | tuple[float, float]
+LatLonLike = LatLon | GeodeticPoint | tuple[float, float]
 
 
 @runtime_checkable
@@ -64,8 +65,7 @@ __all__ = [
     "Coverage",
     "Elements",
     "FillRule",
-    "Geodetic",
-    "GroundObserver",
+    "GeodeticPoint",
     "GroundTrackIter",
     "Illumination",
     "IlluminationIter",
@@ -76,6 +76,7 @@ __all__ = [
     "LatLonLike",
     "Observation",
     "ObservationIter",
+    "Pointing",
     "Polygon",
     "PredictionIter",
     "Predictor",
@@ -83,6 +84,7 @@ __all__ = [
     "Refinement",
     "StateVectorEcef",
     "StateVectorEnu",
+    "StateVectorLvlh",
     "StateVectorTeme",
     "Tle",
     "Transit",

@@ -1,16 +1,20 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{Degrees, GroundObserver, Predictor};
+use sgp4_predict::{Degrees, GeodeticPoint, Predictor};
 
 #[test]
 fn test_observe() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
     let observations = p
         .observation_iter(
-            &gs,
+            gs,
             common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-23T12:00:00Z"),
             Duration::minutes(1),
         )
@@ -33,10 +37,14 @@ fn test_observe() {
 fn test_observe_cross_validate_skyfield() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let t = common::datetime("2025-12-20T12:35:00Z");
-    let obs = p.observe_at(t, &gs).unwrap();
+    let obs = p.observe_at(t, gs).unwrap();
 
     let az_deg = obs.azimuth.normalized().degrees();
     let el_deg = obs.elevation.degrees();
@@ -75,13 +83,17 @@ fn test_next_transit_observations_to_csv() {
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let start = p.epoch();
     let end = start + Duration::hours(3);
 
     let next_transit = p
-        .transits_iter(&gs, start..end, Degrees(0.0))
+        .transits_iter(gs, start..end, Degrees(0.0))
         .next()
         .expect("No transits found in the next 3 hours")
         .unwrap();
@@ -107,10 +119,10 @@ fn test_next_transit_observations_to_csv() {
 
     let mut count = 0;
     for obs in p
-        .observation_iter(&gs, next_transit, Duration::seconds(10))
+        .observation_iter(gs, next_transit, Duration::seconds(10))
         .chain(std::iter::once(Ok((
             next_transit.end,
-            p.observe_at(next_transit.end, &gs).unwrap(),
+            p.observe_at(next_transit.end, gs).unwrap(),
         ))))
     {
         let (time, obs) = obs.unwrap();

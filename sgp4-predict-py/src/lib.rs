@@ -5,24 +5,23 @@ mod area;
 mod convert;
 mod elements;
 mod errors;
-mod observer;
 mod predictor;
 mod tle;
 mod types;
 mod vectors;
 
-use area::{Circle, Coverage, FillRule, Geodetic, LatLon, Polygon, Rectangle};
+use area::{Circle, Coverage, FillRule, GeodeticPoint, LatLon, Polygon, Rectangle};
 use elements::{Classification, Elements};
-use observer::GroundObserver;
 use predictor::{
     AoiIter, ApsisIter, GroundTrackIter, IlluminationIter, ObservationIter, PredictionIter,
     Predictor, Refinement, TransitIter,
 };
 use tle::Tle;
 use types::{
-    AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Interval, Observation, Transit,
+    AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Interval, Observation, Pointing,
+    Transit,
 };
-use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorTeme};
+use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorLvlh, StateVectorTeme};
 
 define_stub_info_gatherer!(stub_info);
 
@@ -35,15 +34,16 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Classification>()?;
     m.add_class::<Elements>()?;
     m.add_class::<Tle>()?;
-    m.add_class::<GroundObserver>()?;
     m.add_class::<LatLon>()?;
-    m.add_class::<Geodetic>()?;
+    m.add_class::<GeodeticPoint>()?;
     m.add_class::<PyVec3>()?;
     m.add_class::<StateVectorTeme>()?;
     m.add_class::<StateVectorEcef>()?;
     m.add_class::<StateVectorEnu>()?;
+    m.add_class::<StateVectorLvlh>()?;
     m.add_class::<Interval>()?;
     m.add_class::<Observation>()?;
+    m.add_class::<Pointing>()?;
     m.add_class::<Transit>()?;
     m.add_class::<ApsisEvent>()?;
     m.add_class::<Apsis>()?;

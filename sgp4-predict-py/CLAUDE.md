@@ -5,10 +5,17 @@
 Run from within `sgp4-predict-py/`:
 
 ```bash
-make dev    # compile the Rust extension in-place (maturin develop)
-make test   # compile + run pytest
-make lint   # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
+make dev         # compile the Rust extension in-place (maturin develop)
+make test        # compile + run pytest
+make lint        # ruff check --fix + ruff format (fixes in place, like the Rust make lint)
+make lint-check  # what CI runs: ruff check + ruff format --check, no fixing
 ```
+
+**`dev` is an optional-dependency _extra_, not a dependency group, so plain `uv sync` omits `ruff`, `pytest` and `maturin` — and uninstalls them if a previous run put them there.** Every target therefore depends on `init`, which passes `--extra dev`. Do not "simplify" that back to a bare `uv sync`: the failure mode is silent, because a stale `ruff` left on `PATH` keeps answering and `make lint` passes locally against a version CI does not use. That is exactly how an unsorted `__all__` reached CI once — the venv held ruff 0.15.21 while `pyproject.toml` pins 0.16.2, and RUF022 only fires on the latter.
+
+**`extend-exclude` names `**/_sgp4_predict/*.pyi`, not `**/*.pyi`.** Only the _generated_ stub is excluded, because `stub_gen` owns its formatting and `python.yml` fails on any diff — ruff reformatting it would deadlock the two. The hand-maintained `sgp4_predict/__init__.pyi` **is** linted: under the old blanket glob it was invisible to both `check` and `format`, so an out-of-band `ruff check --fix` on it by explicit path (which bypasses the exclude) once stripped its `# ruff: noqa` header and re-sorted `__all__` with no lint failure either before or after. Widening the glob back would restore that blind spot. Ruff's `.pyi` semantics mean the re-export star import needs no `noqa` of its own.
+
+`make lint` fixes in place, so it can pass on a dirty tree that CI then rejects. `make lint-check` mirrors CI; run it before pushing.
 
 To regenerate stubs after Rust API changes, run from the **repo root**:
 
@@ -56,15 +63,17 @@ The `Refinement` used by the iterators comes from `Predictor.with_refinement`, n
 
 Angles are plain `float` with `_deg`-suffixed field/arg names, converted to/from the library's `Degrees`/`Radians` at the FFI boundary — the Rust type safety deliberately stops here.
 
-In Rust, `Observer` is the _trait_ and `GroundObserver` the concrete type; in Python the class is also named `GroundObserver`.
+`Pointing` stores `direction` as a plain `[f64; 3]` and exposes it as a `Vec3` getter, matching how `Observation` stores radians and exposes `*_deg` — the library's `UnitVector<Lvlh>` type safety stops at the boundary like every other typed value.
+
+`GeodeticPoint` is the one location type on both sides. Anywhere the Rust API takes `impl Into<GeodeticPoint>`, the Python method takes a `GeodeticPoint` and passes its `inner` through.
 
 ## Areas of interest (`area.rs`)
 
-`area.rs` wraps all three shapes and dispatches through a private `AreaKind` enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly `Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, exactly as `TransitIter` borrows its `GroundObserver`.
+`area.rs` wraps all three shapes and dispatches through a private `AreaKind` enum implementing `Area`. That exists because `AoiIter<'a, A: Area>` is generic and `A` is implicitly `Sized`, so `Box<dyn Area>` does not fit without relaxing the library's bound; the enum keeps the change on the Python side. `AoiIter` then borrows an owned `AreaKind` through `ouroboros`, and is the only wrapper that needs to — every other library iterator owns its inputs, so the Python wrapper holds one directly.
 
 `AreaRef<'a>` is the borrowed twin of `AreaKind`, for `detect_aoi`, which does not outlive its argument. All three pyclasses are `frozen`, so `Bound::cast::<Polygon>()?.get()` yields a reference and the vertex vector is never cloned; `extract_area` clones out of an `AreaRef` rather than duplicating the dispatch. Note pyo3 spells this `cast`, not `downcast`. `LatLonArg`'s `FromPyObject` uses `cast` for that reason plus one more: the tuple form is the documented common case, and only `cast` misses without constructing a Python exception.
 
-Constructors take `LatLonArg`, so a point may be a `LatLon`, a `Geodetic`, or a `(latitude_deg, longitude_deg)` tuple. The polygon `vertices` argument stays a `&Bound<'_, PyAny>` with an `override_type`: it is iterated rather than extracted, so a `Vec<LatLonArg>` would narrow the stub to a sequence and reject a generator.
+Constructors take `LatLonArg`, so a point may be a `LatLon`, a `GeodeticPoint`, or a `(latitude_deg, longitude_deg)` tuple. The polygon `vertices` argument stays a `&Bound<'_, PyAny>` with an `override_type`: it is iterated rather than extracted, so a `Vec<LatLonArg>` would narrow the stub to a sequence and reject a generator.
 
 The cap `max_window_duration` sets is only escapable for an area the track actually leaves — a whole-Earth box has no window end, so it raises whatever the cap is.
 

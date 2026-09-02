@@ -7,13 +7,15 @@ use sgp4_predict::{
 };
 
 use crate::{
-    area::{AreaKind, Coverage, Geodetic, extract_area, extract_area_ref},
+    area::{AreaKind, Coverage, GeodeticPoint, extract_area, extract_area_ref},
     convert::IntervalArg,
     elements::Elements,
     errors::to_py_err,
-    observer::GroundObserver,
     tle::Tle,
-    types::{AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
+    types::{
+        AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Pointing,
+        Transit,
+    },
     vectors::StateVectorTeme,
 };
 
@@ -98,7 +100,7 @@ impl PredictionIter {
 
 // ── GroundTrackIter ────────────────────────────────────────────────────────────
 
-/// Lazy iterator yielding `(datetime, Geodetic)` sub-satellite points at regular intervals.
+/// Lazy iterator yielding `(datetime, GeodeticPoint)` sub-satellite points at regular intervals.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug)]
@@ -113,11 +115,11 @@ impl GroundTrackIter {
         slf
     }
 
-    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, Geodetic]", imports = ("datetime")))]
-    fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Geodetic)>> {
+    #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, GeodeticPoint]", imports = ("datetime")))]
+    fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, GeodeticPoint)>> {
         match self.inner.next() {
             None => Ok(None),
-            Some(Ok((t, point))) => Ok(Some((t, Geodetic::from_inner(point)))),
+            Some(Ok((t, point))) => Ok(Some((t, GeodeticPoint::from_inner(point)))),
             Some(Err(e)) => Err(to_py_err(e)),
         }
     }
@@ -193,20 +195,11 @@ impl IlluminationIter {
 
 // ── TransitIter ────────────────────────────────────────────────────────────────
 
-// Self-referential struct: owns the GroundObserver and the TransitIter that borrows it.
-#[self_referencing]
-struct TransitIterOwned {
-    observer: GroundObserver,
-    #[borrows(observer)]
-    #[covariant]
-    iter: sgp4_predict::TransitIter<'this, GroundObserver>,
-}
-
 /// Lazy iterator yielding satellite passes visible to an observer.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 pub struct TransitIter {
-    inner: TransitIterOwned,
+    inner: sgp4_predict::TransitIter,
 }
 
 #[gen_stub_pymethods]
@@ -218,14 +211,14 @@ impl TransitIter {
 
     #[gen_stub(override_return_type(type_repr = "Transit"))]
     fn __next__(&mut self) -> PyResult<Option<Transit>> {
-        self.inner.with_iter_mut(|iter| match iter.next() {
+        match self.inner.next() {
             None => Ok(None),
             Some(Ok(t)) => Ok(Some(Transit {
                 start: t.start,
                 end: t.end,
             })),
             Some(Err(e)) => Err(to_py_err(e)),
-        })
+        }
     }
 }
 
@@ -269,20 +262,11 @@ impl AoiIter {
 
 // ── ObservationIter ────────────────────────────────────────────────────────────
 
-// Self-referential struct: owns the GroundObserver and the ObservationIter that borrows it.
-#[self_referencing]
-struct ObservationIterOwned {
-    observer: GroundObserver,
-    #[borrows(observer)]
-    #[covariant]
-    iter: sgp4_predict::ObservationIter<'this, GroundObserver>,
-}
-
 /// Lazy iterator yielding time-stamped observations at regular intervals.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 pub struct ObservationIter {
-    inner: ObservationIterOwned,
+    inner: sgp4_predict::ObservationIter,
 }
 
 #[gen_stub_pymethods]
@@ -294,11 +278,11 @@ impl ObservationIter {
 
     #[gen_stub(override_return_type(type_repr = "tuple[datetime.datetime, Observation]", imports = ("datetime")))]
     fn __next__(&mut self) -> PyResult<Option<(DateTime<Utc>, Observation)>> {
-        self.inner.with_iter_mut(|iter| match iter.next() {
+        match self.inner.next() {
             None => Ok(None),
             Some(Ok((t, obs))) => Ok(Some((t, Observation::from_inner(obs)))),
             Some(Err(e)) => Err(to_py_err(e)),
-        })
+        }
     }
 }
 
@@ -436,10 +420,21 @@ impl Predictor {
     }
 
     /// Calculate the observation from an observer at the given UTC time.
-    fn observe_at(&self, t: DateTime<Utc>, observer: &GroundObserver) -> PyResult<Observation> {
+    fn observe_at(&self, t: DateTime<Utc>, observer: &GeodeticPoint) -> PyResult<Observation> {
         self.inner
-            .observe_at(t, observer)
+            .observe_at(t, observer.inner)
             .map(Observation::from_inner)
+            .map_err(to_py_err)
+    }
+
+    /// Where `target` lies as seen from the satellite at the given UTC time.
+    ///
+    /// Returns a `Pointing`: a unit vector in the satellite's LVLH frame, plus
+    /// slant range and range rate.
+    fn point_at(&self, t: DateTime<Utc>, target: &GeodeticPoint) -> PyResult<Pointing> {
+        self.inner
+            .point_at(t, target.inner)
+            .map(Pointing::from_inner)
             .map_err(to_py_err)
     }
 
@@ -460,19 +455,15 @@ impl Predictor {
     /// Pass an `Interval`, `Transit`, or `Illumination` object.
     fn observation_iter(
         &self,
-        observer: &GroundObserver,
+        observer: &GeodeticPoint,
         interval: IntervalArg,
         step: Duration,
     ) -> PyResult<ObservationIter> {
         let IntervalArg { start, end } = interval;
-        let obs_clone = observer.clone();
-        let predictor = self.inner.clone();
         Ok(ObservationIter {
-            inner: ObservationIterOwnedBuilder {
-                observer: obs_clone,
-                iter_builder: move |obs| predictor.observation_iter(obs, start..end, step),
-            }
-            .build(),
+            inner: self
+                .inner
+                .observation_iter(observer.inner, start..end, step),
         })
     }
 
@@ -509,7 +500,7 @@ impl Predictor {
     ))]
     fn transits_iter(
         &self,
-        observer: &GroundObserver,
+        observer: &GeodeticPoint,
         interval: IntervalArg,
         min_elevation_deg: f64,
         min_step: Option<Duration>,
@@ -520,8 +511,6 @@ impl Predictor {
         clamp_to_interval: Option<bool>,
     ) -> PyResult<TransitIter> {
         let IntervalArg { start, end } = interval;
-        let obs_clone = observer.clone();
-        let predictor = self.inner.clone();
         let refinement = self.inner.refinement();
         let opts = transit_opts(
             min_step,
@@ -532,34 +521,28 @@ impl Predictor {
             clamp_to_interval,
         );
         Ok(TransitIter {
-            inner: TransitIterOwnedBuilder {
-                observer: obs_clone,
-                iter_builder: move |obs| {
-                    predictor.transits_iter_with_opts(
-                        obs,
-                        start..end,
-                        Degrees(min_elevation_deg),
-                        opts,
-                        refinement,
-                    )
-                },
-            }
-            .build(),
+            inner: self.inner.transits_iter_with_opts(
+                observer.inner,
+                start..end,
+                Degrees(min_elevation_deg),
+                opts,
+                refinement,
+            ),
         })
     }
 
     /// The geodetic point directly beneath the satellite at time `t`.
-    fn sub_point(&self, t: DateTime<Utc>) -> PyResult<Geodetic> {
+    fn sub_point(&self, t: DateTime<Utc>) -> PyResult<GeodeticPoint> {
         self.inner
             .sub_point(t)
-            .map(Geodetic::from_inner)
+            .map(GeodeticPoint::from_inner)
             .map_err(to_py_err)
     }
 
     /// Trace the satellite's ground track at regular intervals.
     ///
     /// `interval` must expose `.start` and `.end` datetime properties.
-    /// Yields `(datetime, Geodetic)` sub-satellite points.
+    /// Yields `(datetime, GeodeticPoint)` sub-satellite points.
     fn ground_track_iter(
         &self,
         interval: IntervalArg,
@@ -774,7 +757,7 @@ impl Predictor {
     fn detect_transit(
         &self,
         t: DateTime<Utc>,
-        observer: &GroundObserver,
+        observer: &GeodeticPoint,
         min_elevation_deg: f64,
         walk_step: Option<Duration>,
         max_transit_duration: Option<Duration>,
@@ -787,7 +770,7 @@ impl Predictor {
             ..d
         };
         self.inner
-            .detect_transit_with_opts(t, observer, Degrees(min_elevation_deg), opts)
+            .detect_transit_with_opts(t, observer.inner, Degrees(min_elevation_deg), opts)
             .map(|opt| {
                 opt.map(|t| Transit {
                     start: t.start,
@@ -808,13 +791,13 @@ impl Predictor {
     #[pyo3(signature = (observer, interval, *, scan_step = None))]
     fn max_elevation(
         &self,
-        observer: &GroundObserver,
+        observer: &GeodeticPoint,
         interval: IntervalArg,
         scan_step: Option<Duration>,
     ) -> PyResult<(DateTime<Utc>, Observation)> {
         let IntervalArg { start, end } = interval;
         self.inner
-            .max_elevation_with_opts(start..end, observer, max_elevation_opts(scan_step))
+            .max_elevation_with_opts(start..end, observer.inner, max_elevation_opts(scan_step))
             .map(|(t, obs)| (t, Observation::from_inner(obs)))
             .map_err(to_py_err)
     }

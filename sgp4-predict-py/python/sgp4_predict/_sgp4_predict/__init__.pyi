@@ -18,8 +18,7 @@ __all__ = [
     "Coverage",
     "Elements",
     "FillRule",
-    "Geodetic",
-    "GroundObserver",
+    "GeodeticPoint",
     "GroundTrackIter",
     "Illumination",
     "IlluminationIter",
@@ -28,6 +27,7 @@ __all__ = [
     "LatLon",
     "Observation",
     "ObservationIter",
+    "Pointing",
     "Polygon",
     "PredictionIter",
     "Predictor",
@@ -35,6 +35,7 @@ __all__ = [
     "Refinement",
     "StateVectorEcef",
     "StateVectorEnu",
+    "StateVectorLvlh",
     "StateVectorTeme",
     "Tle",
     "Transit",
@@ -127,7 +128,7 @@ class Circle:
     A circular area on Earth's surface — a spherical cap.
     
     The radius is angular: a degree of arc is about 111.2 km on the ground. The
-    centre may be a `LatLon` object, a `Geodetic` object whose altitude is ignored,
+    centre may be a `LatLon` object, a `GeodeticPoint` object whose altitude is ignored,
     or a `(latitude_deg, longitude_deg)` tuple.
     
     Raises `ValueError` if the radius is outside `(0, 90)`, if the centre's latitude
@@ -318,7 +319,7 @@ class Elements:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class Geodetic:
+class GeodeticPoint:
     r"""
     A geodetic position on or above the WGS-84 ellipsoid.
     """
@@ -338,40 +339,16 @@ class Geodetic:
         Height above the WGS-84 ellipsoid in metres.
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
-    def __new__(cls, latitude_deg: builtins.float, longitude_deg: builtins.float, altitude: builtins.float) -> Geodetic: ...
+    def __new__(cls, latitude_deg: builtins.float, longitude_deg: builtins.float, altitude: builtins.float) -> GeodeticPoint: ...
     def __repr__(self) -> builtins.str: ...
-
-@typing.final
-class GroundObserver:
-    r"""
-    A fixed point on Earth's surface from which satellite passes are observed.
-    
-    Latitude and longitude are in degrees. Altitude is in metres above the WGS-84 ellipsoid.
-    """
-    @property
-    def latitude_deg(self) -> builtins.float:
-        r"""
-        Geodetic latitude in degrees (positive north).
-        """
-    @property
-    def longitude_deg(self) -> builtins.float:
-        r"""
-        Geodetic longitude in degrees (positive east).
-        """
-    @property
-    def altitude(self) -> builtins.float:
-        r"""
-        Height above the WGS-84 ellipsoid in metres.
-        """
-    def __new__(cls, latitude_deg: builtins.float, longitude_deg: builtins.float, altitude: builtins.float) -> GroundObserver: ...
 
 @typing.final
 class GroundTrackIter:
     r"""
-    Lazy iterator yielding `(datetime, Geodetic)` sub-satellite points at regular intervals.
+    Lazy iterator yielding `(datetime, GeodeticPoint)` sub-satellite points at regular intervals.
     """
     def __iter__(self) -> GroundTrackIter: ...
-    def __next__(self) -> tuple[datetime.datetime, Geodetic]: ...
+    def __next__(self) -> tuple[datetime.datetime, GeodeticPoint]: ...
 
 @typing.final
 class Illumination:
@@ -516,12 +493,50 @@ class ObservationIter:
     def __next__(self) -> tuple[datetime.datetime, Observation]: ...
 
 @typing.final
+class Pointing:
+    r"""
+    The satellite's view of a target on the ground.
+    
+    `direction` is a unit vector in the spacecraft's LVLH frame — Z along nadir,
+    Y along the negative orbit normal, X along-track — which composes directly
+    with an antenna or instrument mounting rotation. Range is in metres, range
+    rate in m/s (positive = receding).
+    """
+    @property
+    def range(self) -> builtins.float: ...
+    @property
+    def range_rate(self) -> builtins.float: ...
+    @property
+    def direction(self) -> Vec3:
+        r"""
+        Unit vector from the satellite to the target, in the LVLH frame.
+        
+        Zero — not a unit vector — for a target at the satellite's own
+        position, where there is no direction to report and `range` is zero
+        too. Check `range` before composing this with a mounting rotation.
+        """
+    @property
+    def off_nadir_deg(self) -> builtins.float:
+        r"""
+        Angle between `direction` and nadir, in degrees.
+        
+        Nadir is geocentric, the same convention as the `max_off_nadir` field of
+        regard, so the two compare directly.
+        
+        Reports `0.0` for the degenerate zero-range state, which is
+        indistinguishable from a target exactly at nadir — check `range` to
+        tell them apart.
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Polygon:
     r"""
     A closed polygon on Earth's surface whose edges are great-circle arcs.
     
     The ring closes implicitly and vertex order does not matter. Vertices may be
-    `LatLon` objects, `Geodetic` objects whose altitude is ignored, or
+    `LatLon` objects, `GeodeticPoint` objects whose altitude is ignored, or
     `(latitude_deg, longitude_deg)` tuples.
     
     Edges are great-circle arcs, so vertices at the same latitude are not joined
@@ -604,9 +619,16 @@ class Predictor:
         
         Returns a state vector in the TEME frame.
         """
-    def observe_at(self, t: datetime.datetime, observer: GroundObserver) -> Observation:
+    def observe_at(self, t: datetime.datetime, observer: GeodeticPoint) -> Observation:
         r"""
         Calculate the observation from an observer at the given UTC time.
+        """
+    def point_at(self, t: datetime.datetime, target: GeodeticPoint) -> Pointing:
+        r"""
+        Where `target` lies as seen from the satellite at the given UTC time.
+        
+        Returns a `Pointing`: a unit vector in the satellite's LVLH frame, plus
+        slant range and range rate.
         """
     def prediction_iter(self, interval: sgp4_predict.IntervalRange, step: datetime.timedelta) -> PredictionIter:
         r"""
@@ -615,14 +637,14 @@ class Predictor:
         `interval` must expose `.start` and `.end` datetime properties.
         Pass an `Interval`, `Transit`, or `Illumination` object.
         """
-    def observation_iter(self, observer: GroundObserver, interval: sgp4_predict.IntervalRange, step: datetime.timedelta) -> ObservationIter:
+    def observation_iter(self, observer: GeodeticPoint, interval: sgp4_predict.IntervalRange, step: datetime.timedelta) -> ObservationIter:
         r"""
         Iterate over observations from the given observer at regular intervals.
         
         `interval` must expose `.start` and `.end` datetime properties.
         Pass an `Interval`, `Transit`, or `Illumination` object.
         """
-    def transits_iter(self, observer: GroundObserver, interval: sgp4_predict.IntervalRange, min_elevation_deg: builtins.float, *, min_step: typing.Optional[datetime.timedelta] = None, max_step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_transit_duration: typing.Optional[datetime.timedelta] = None, skip_leading_partial: typing.Optional[builtins.bool] = None, clamp_to_interval: typing.Optional[builtins.bool] = None) -> TransitIter:
+    def transits_iter(self, observer: GeodeticPoint, interval: sgp4_predict.IntervalRange, min_elevation_deg: builtins.float, *, min_step: typing.Optional[datetime.timedelta] = None, max_step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_transit_duration: typing.Optional[datetime.timedelta] = None, skip_leading_partial: typing.Optional[builtins.bool] = None, clamp_to_interval: typing.Optional[builtins.bool] = None) -> TransitIter:
         r"""
         Iterate over satellite passes visible to the observer within the interval.
         
@@ -643,7 +665,7 @@ class Predictor:
         `clamp_to_interval` clamps a transit still in progress at the interval
         end to the interval, instead of walking forward for its true LoS.
         """
-    def sub_point(self, t: datetime.datetime) -> Geodetic:
+    def sub_point(self, t: datetime.datetime) -> GeodeticPoint:
         r"""
         The geodetic point directly beneath the satellite at time `t`.
         """
@@ -652,7 +674,7 @@ class Predictor:
         Trace the satellite's ground track at regular intervals.
         
         `interval` must expose `.start` and `.end` datetime properties.
-        Yields `(datetime, Geodetic)` sub-satellite points.
+        Yields `(datetime, GeodeticPoint)` sub-satellite points.
         """
     def aoi_iter(self, area: sgp4_predict.Area, interval: sgp4_predict.IntervalRange, *, max_off_nadir_deg: typing.Optional[builtins.float] = None, coverage: typing.Optional[Coverage] = None, min_step: typing.Optional[datetime.timedelta] = None, max_step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None, skip_leading_partial: typing.Optional[builtins.bool] = None, clamp_to_interval: typing.Optional[builtins.bool] = None) -> AoiIter:
         r"""
@@ -727,7 +749,7 @@ class Predictor:
         `max_window_duration` raises `RuntimeError`; sunlit windows are the gaps
         between eclipse windows and are never bounded by it.
         """
-    def detect_transit(self, t: datetime.datetime, observer: GroundObserver, min_elevation_deg: builtins.float, *, walk_step: typing.Optional[datetime.timedelta] = None, max_transit_duration: typing.Optional[datetime.timedelta] = None) -> typing.Optional[Transit]:
+    def detect_transit(self, t: datetime.datetime, observer: GeodeticPoint, min_elevation_deg: builtins.float, *, walk_step: typing.Optional[datetime.timedelta] = None, max_transit_duration: typing.Optional[datetime.timedelta] = None) -> typing.Optional[Transit]:
         r"""
         Detect whether a transit is in progress at time `t`.
         
@@ -738,7 +760,7 @@ class Predictor:
         `max_transit_duration`, which defaults to one hour. See `transits_iter`;
         the other knobs there do not apply to this single-point detection.
         """
-    def max_elevation(self, observer: GroundObserver, interval: sgp4_predict.IntervalRange, *, scan_step: typing.Optional[datetime.timedelta] = None) -> tuple[datetime.datetime, Observation]:
+    def max_elevation(self, observer: GeodeticPoint, interval: sgp4_predict.IntervalRange, *, scan_step: typing.Optional[datetime.timedelta] = None) -> tuple[datetime.datetime, Observation]:
         r"""
         Find the peak elevation of the satellite over an observer within the interval.
         
@@ -766,7 +788,7 @@ class Rectangle:
     
     The box runs **eastward** from the south-west corner, so a north-east corner at
     a smaller longitude wraps across the antimeridian. Corners may be `LatLon`
-    objects, `Geodetic` objects whose altitude is ignored, or
+    objects, `GeodeticPoint` objects whose altitude is ignored, or
     `(latitude_deg, longitude_deg)` tuples.
     
     Raises `ValueError` if a latitude is outside [-90, 90], if a coordinate is `nan`
@@ -850,9 +872,13 @@ class StateVectorEcef:
         Velocity in the ECEF frame (m/s).
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
-    def to_enu(self, observer: GroundObserver) -> StateVectorEnu:
+    def to_enu(self, observer: GeodeticPoint) -> StateVectorEnu:
         r"""
         Convert to the East-North-Up (ENU) frame relative to the given observer.
+        """
+    def to_teme(self, t: datetime.datetime) -> StateVectorTeme:
+        r"""
+        Convert back to the TEME frame, the inverse of `StateVectorTeme.to_ecef`.
         """
 
 @typing.final
@@ -878,6 +904,32 @@ class StateVectorEnu:
         """
 
 @typing.final
+class StateVectorLvlh:
+    r"""
+    State vector in the satellite's LVLH frame: Z along nadir, Y along the
+    negative orbit normal, X completing the right-handed triad along-track.
+    Positions in metres, velocities in m/s.
+    
+    The velocity is the inertial relative velocity resolved on the LVLH axes,
+    not the derivative of the LVLH position, so `range_rate` is Doppler-correct.
+    """
+    @property
+    def position(self) -> Vec3:
+        r"""
+        Position in the LVLH frame (metres).
+        """
+    @property
+    def velocity(self) -> Vec3:
+        r"""
+        Velocity in the LVLH frame (m/s).
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def to_pointing(self) -> Pointing:
+        r"""
+        Reduce to the direction, range and range rate of the target.
+        """
+
+@typing.final
 class StateVectorTeme:
     r"""
     State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
@@ -897,6 +949,13 @@ class StateVectorTeme:
     def to_ecef(self, t: datetime.datetime) -> StateVectorEcef:
         r"""
         Convert to the Earth-Centred Earth-Fixed (ECEF) frame at the given UTC time.
+        """
+    def to_lvlh(self, target: StateVectorTeme) -> StateVectorLvlh:
+        r"""
+        Express `target` relative to this satellite, in the satellite's LVLH frame.
+        
+        The receiver is the origin here — the mirror of `to_enu`, where the
+        receiver is the satellite and the argument supplies the origin.
         """
 
 @typing.final

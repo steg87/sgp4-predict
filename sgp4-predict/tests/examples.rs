@@ -2,8 +2,8 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4_predict::{
-    Degrees, FallibleIter, GroundObserver, IlluminationState, IntervalRange, Observation,
-    Predictor, Transit,
+    DateTimeIter, Degrees, FallibleIter, GeodeticPoint, IlluminationState, IntervalRange,
+    Observation, Predictor, Transit,
 };
 
 /// Propagate the satellite state in TEME and ECEF frames for the next day, sampled every 15 minutes.
@@ -39,14 +39,18 @@ fn daily_state_vectors() {
 fn current_ground_station_pass() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let start = p.epoch();
     let end = start + Duration::days(1);
 
     // Find the next transit so we have a known "mid-pass" time to hand to detect_transit.
     let transit: Transit = p
-        .transits_iter(&gs, start..end, Degrees(5.0))
+        .transits_iter(gs, start..end, Degrees(5.0))
         .next()
         .expect("no transits during search interval")
         .expect("error calculating transit");
@@ -56,7 +60,7 @@ fn current_ground_station_pass() {
 
     // Recover the full pass window from a single timestamp.
     let detected = p
-        .detect_transit(now, &gs, Degrees(5.0))
+        .detect_transit(now, gs, Degrees(5.0))
         .expect("propagation error")
         .expect("satellite is not overhead at the given time");
 
@@ -70,7 +74,7 @@ fn current_ground_station_pass() {
     // Sample observations across the detected pass so we can see the full arc.
     println!("time,azimuth [deg],elevation [deg],range [km],range rate [km/s]");
     for (t, obs) in p
-        .observation_iter(&gs, detected, Duration::seconds(10))
+        .observation_iter(gs, detected, Duration::seconds(10))
         .include_end()
         .skip_errors()
     {
@@ -91,14 +95,18 @@ fn current_ground_station_pass() {
 fn next_ground_station_pass() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let start = p.epoch();
     let end = start + Duration::days(1);
 
     // The iterator is lazy, so this scans only as far as the first transit.
     let next_transit = p
-        .transits_iter(&gs, start..end, Degrees(15.0))
+        .transits_iter(gs, start..end, Degrees(15.0))
         .next()
         .expect("no transits during search interval")
         .expect("error calculating transit");
@@ -106,7 +114,7 @@ fn next_ground_station_pass() {
     println!("time,azimuth [deg], elevation [deg], range [km], range rate [km/s]");
     for (t, observation) in p
         // Transit implements IntervalRange, so it doubles as the interval here.
-        .observation_iter(&gs, next_transit, Duration::seconds(10))
+        .observation_iter(gs, next_transit, Duration::seconds(10))
         // Sample the transit end time as well as the regular steps.
         .include_end()
         .skip_errors()
@@ -122,12 +130,58 @@ fn next_ground_station_pass() {
     }
 }
 
+/// Point the spacecraft at a ground station across a pass: the direction to it in the satellite's
+/// own LVLH frame, plus the slant range and range rate an RF link budget needs.
+#[test]
+fn pointing_at_a_ground_station() {
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
+
+    let start = p.epoch();
+    let next_transit = p
+        .transits_iter(gs, start..start + Duration::days(1), Degrees(15.0))
+        .next()
+        .expect("no transits during search interval")
+        .expect("error calculating transit");
+
+    println!("time,off nadir [deg],x,y,z,range [km],range rate [km/s]");
+    // A Transit is an interval, so DateTimeIter walks the pass directly.
+    for t in DateTimeIter::new(next_transit, Duration::seconds(30)) {
+        let pointing = p.point_at(t, gs).expect("error pointing at ground station");
+
+        // The direction is a unit vector in LVLH: +Z is nadir, +X along-track,
+        // +Y the negative orbit normal. Compose it with the antenna's mounting
+        // rotation to index a gain pattern; `off_nadir` is the special case for
+        // a nadir-mounted boresight.
+        let d = pointing.direction;
+        println!(
+            "{},{:.3},{:.4},{:.4},{:.4},{:.3},{:.3}",
+            t.format("%Y-%m-%d %H:%M:%S"),
+            pointing.off_nadir().degrees(),
+            d.x,
+            d.y,
+            d.z,
+            pointing.range / 1000.0,
+            pointing.range_rate / 1000.0,
+        );
+    }
+}
+
 /// Calculate ground station passes over 10° for the next 3 days
 #[test]
 fn ground_station_passes() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -142,16 +196,16 @@ fn ground_station_passes() {
 
     println!("start,end,aos_azimuth_deg,los_azimuth_deg,tca_elevation_deg,duration");
     for pass in p
-        .transits_iter(&gs, start..end, Degrees(10.0))
+        .transits_iter(gs, start..end, Degrees(10.0))
         .skip_errors()
         .map(|t| GroundStationPass {
             start: t.start(),
             end: t.end(),
             aos: p
-                .observe_at(t.start(), &gs)
+                .observe_at(t.start(), gs)
                 .expect("failed to calculate aos"),
-            los: p.observe_at(t.end(), &gs).expect("failed to calculate los"),
-            tca: p.max_elevation(t, &gs).expect("failed to calculate tca").1,
+            los: p.observe_at(t.end(), gs).expect("failed to calculate los"),
+            tca: p.max_elevation(t, gs).expect("failed to calculate tca").1,
         })
     {
         println!(
@@ -199,7 +253,11 @@ fn sunlight_windows() {
 fn eclipse_transits() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -209,10 +267,7 @@ fn eclipse_transits() {
     let mut n_transits = 0;
     let mut n_windows = 0;
     println!("start,end,duration");
-    for transit in p
-        .transits_iter(&gs, start..end, Degrees(30.0))
-        .skip_errors()
-    {
+    for transit in p.transits_iter(gs, start..end, Degrees(30.0)).skip_errors() {
         n_transits += 1;
         for window in p
             .illumination_iter(transit)
@@ -239,7 +294,11 @@ fn eclipse_transits() {
 fn resilient_pass_scan() {
     let tle = common::create_tle();
     let p = Predictor::from_tle(&tle).unwrap();
-    let gs = GroundObserver::new(Degrees(55.8642), Degrees(-4.2518), 40.0);
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -249,7 +308,7 @@ fn resilient_pass_scan() {
     // `log_errors()` logs at warn; `on_error` is the one that can also count.
     let mut unrefined = 0usize;
     let passes = p
-        .transits_iter(&gs, start..end, Degrees(10.0))
+        .transits_iter(gs, start..end, Degrees(10.0))
         .on_error(|e| {
             unrefined += 1;
             tracing::warn!(error = %e, "skipping unrefined pass");
@@ -261,7 +320,7 @@ fn resilient_pass_scan() {
         // run of them means the TLE is unusable, not that one sample was awkward. Stop after three
         // in a row. `until_error()` is the zero-tolerance case.
         let mut samples = p
-            .observation_iter(&gs, transit, Duration::seconds(10))
+            .observation_iter(gs, transit, Duration::seconds(10))
             .tolerate_errors(3);
 
         // Iterate `&mut` so the adapter survives the loop and can be asked why it stopped.

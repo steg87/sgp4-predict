@@ -61,13 +61,41 @@ Deliberately absent: an `inspect_errors` that would let `log_errors` and `tolera
 
 `detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) powers `ApsisIter`, `TransitIter` and `IlluminationIter` internally, so the module always compiles — but its crate-root re-exports are gated behind the off-by-default `generics` feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
 
+### Locations: `GeodeticPoint` and `Into`, not a trait
+
+**There is exactly one type for a point on the Earth, and every method taking a location takes `impl Into<GeodeticPoint>`.** This replaced an `Observer` trait (three methods: `latitude`/`longitude`/`altitude`) and a `GroundObserver` struct that between them spelled the same three fields three times. A one-method trait yielding a `Copy` value _is_ `Into`; std already has it.
+
+The payoff was deletion, not idiom. `Observer` was queried behind `&'a O` at every sample, which is the only reason `ObservationIter`, `TransitIter` and `ElevationAboveMin` were generic and lifetime-parameterised. Owning a `GeodeticPoint` by value removed the type parameters, six hand-written `Debug`/`Clone` impls, and two `ouroboros` self-referential structs in the Python bindings. The observer is now resolved **once, at construction** rather than per sample — faithful to the old trait's "a fixed point on Earth's surface" contract.
+
+`to_enu` still recomputes `ecef_from_geodetic` and four `sin_cos` per sample. Caching those at iterator construction is now _possible_ (it was not, behind `&'a O`) but is not done: it needs an internal path separate from the public `to_enu`, and the gain is unmeasured against one SGP4 propagation per sample.
+
+**`TleRecord` is deliberately not given the same treatment.** It _lends_ borrowed `&str`s; `Into` cannot express that without allocating three `String`s into a temporary — the `Into<String>` vs `AsRef<str>` split in std. It also has one consumer (`from_tle`) and no iterator holds a `&'a T`, so there is nothing to delete. `tests/validation.rs` implements it on a YAML-deserialized struct, which is the trait working as intended. Do not "finish the job".
+
+A caller with their own station type writes `From<&MyStation> for GeodeticPoint`; that is what a station name hangs off now, which is why `GroundObserver` was not kept for it. `From<&GeodeticPoint>` exists so `&point` also passes.
+
 ### Type-safe coordinate frames
 
-`frames.rs` uses phantom marker structs (`Teme`, `Ecef`, `Enu`) to make frame tracking a compile-time guarantee; `StateVector<F>`, `Position<F>` and `Velocity<F>` in `vectors.rs` are generic over frame, with conversions implemented on the concrete instantiations.
+`frames.rs` uses phantom marker structs (`Teme`, `Ecef`, `Enu`, `Lvlh`) to make frame tracking a compile-time guarantee; `StateVector<F>`, `Position<F>`, `Velocity<F>` and `UnitVector<F>` in `vectors.rs` are generic over frame, with conversions implemented on the concrete instantiations. `UnitVector` is a separate _kind_ from `Position` so a dimensionless direction cannot be mixed with a displacement in metres.
+
+### Pointing and the LVLH frame
+
+`TemeState::to_lvlh` expresses a target relative to the satellite in its local-vertical/local-horizontal triad, and `LvlhState::to_pointing` reduces that to a `Pointing`. The chain mirrors observation in the opposite direction: `TEME → ECEF → ENU → Observation` looking up, `TEME → LVLH → Pointing` looking down.
+
+**The triad is built Z-first**: `Z = -r̂`, `Y = -(r × v)/|r × v|`, `X = Y × Z`. X coincides with the velocity vector only at zero eccentricity — defining X as `v̂` and orthogonalising Z off it tilts Z off true nadir by the flight-path angle. Building from Z and the orbit normal keeps nadir exact and lets X absorb the flight-path angle instead. Do not "simplify" to `X = v̂`.
+
+**The frame is `Lvlh`, not `Body`.** It is the nadir-pointing _reference_ frame; it equals a bus's body frame only at zero attitude offset, which this crate does not model. A `Body` marker plus an `Attitude` rotation is the upgrade path.
+
+**`Pointing::direction` is a unit vector, and the angles are derived.** An RF antenna or instrument pattern is indexed off its own _boresight_, which coincides with nadir only for a nadir-mounted payload; a unit vector composes with a mounting rotation, a nadir-referenced angle pair has to be undone first. `range` gives free-space path loss and `range_rate` gives Doppler, so a link budget needs nothing else. Do not "simplify" this into an az/el pair for symmetry with `Observation`. `off_nadir()` is the one derived accessor, and only because it is the bridge to `aoi.rs`'s `max_off_nadir` — same geocentric-nadir convention, so the two compare directly. A clock angle about nadir is deliberately absent: it is `atan2(y, x)` on public fields and it presumes nadir is the boresight.
+
+**`EcefState::to_teme` is a complete inverse of `to_ecef`, frame-drag term included**, because the LVLH triad must be built from _inertial_ velocity — ECEF `r × v` is off by the ω⊕ term, so an orbit normal taken there is wrong. A ground point is stationary in ECEF and moving in TEME; the drag term is what gives it that velocity, and it is what makes `Pointing::range_rate` match `Observation::range_rate`.
+
+**`LvlhState`'s velocity is the inertial relative velocity resolved on the LVLH axes**, not the derivative of the LVLH position — no `ω_LVLH × r` term is subtracted. The two differ by ~1 m/s at LEO and both look plausible, so it is documented on the type. `range_rate` is `d|p|/dt`, frame-independent, so Doppler is right either way.
+
+Deliberately absent: a `pointing_iter`. It would be `ObservationIter` with one line changed; add it when a caller needs a swath. The CLI has no pointing command for the same reason — there is no iterator for one to drive. Python *does* have the full surface (`Predictor.point_at`, `Pointing`, `StateVectorLvlh`, `StateVectorEcef.to_teme`).
 
 **All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `predict.rs` in the `From<sgp4::Prediction>` impl.
 
-**Angles are type-safe** (`angle.rs`): `Degrees(f64)` and `Radians(f64)` tag a float with its unit so the two can't be mixed at a function boundary. There is deliberately no `From<f64>` for either — construction is always explicit. `Observer::latitude()`/`longitude()` take `Degrees`; `Observation::azimuth`/`elevation` are `Radians`; `min_elevation` parameters take `impl Into<Radians>` so either unit passes directly without a round-trip. Internal-only angle math (GMST, elevation rate, sun position) stays plain `f64` — it never crosses the public API, so typing it would be ceremony without payoff.
+**Angles are type-safe** (`angle.rs`): `Degrees(f64)` and `Radians(f64)` tag a float with its unit so the two can't be mixed at a function boundary. There is deliberately no `From<f64>` for either — construction is always explicit. `GeodeticPoint::latitude`/`longitude` are `Degrees`; `Observation::azimuth`/`elevation` are `Radians`; `min_elevation` parameters take `impl Into<Radians>` so either unit passes directly without a round-trip. Internal-only angle math (GMST, elevation rate, sun position) stays plain `f64` — it never crosses the public API, so typing it would be ceremony without payoff.
 
 ### Apsis detection (`apsides.rs`)
 
@@ -147,21 +175,24 @@ variant out first, which is what makes the sub-error derives reachable at all. `
 everywhere: `roots::Error::FailedToConverge` carries `f64`s.
 
 **Where a generic is only held behind a shared reference, the trait impls are hand-written**
-(`TransitIter`, `ObservationIter`, `AoiIter`, `ElevationAboveMin`, `GroundTrackInside`, and
-`ValueFn`/`RateFn` in `detect.rs`). `OnError`'s `Debug` is hand-written for the same reason —
+(`AoiIter`, `GroundTrackInside`, and `ValueFn`/`RateFn` in `detect.rs`). `TransitIter`,
+`ObservationIter` and `ElevationAboveMin` used to be in this list and are not any more: they own a
+`GeodeticPoint` by value now, so they have no type parameter to over-bound and derive both.
+`OnError`'s `Debug` is hand-written for the same reason —
 `on_error`'s general case is a closure, so a derive's `F: Debug` bound would be dead exactly where
 the type is most used. It is `Clone` but deliberately not `Copy`: std's iterator adapters aren't,
 because a `Copy` iterator gets silently copied into a `for` loop leaving the original unadvanced. A derive bounds on the type parameter itself, so
-`#[derive(Clone)]` on `TransitIter<'a, O>` would emit `where O: Clone` for a field that is a
-`&'a O` — making the iterator un-`Clone` for any caller-supplied `Observer` that isn't. `ValueFn`
+`#[derive(Clone)]` on `AoiIter<'a, A>` emits `where A: Clone` for a field that is a
+`&'a A` — making the iterator un-`Clone` for any caller-supplied `Area` that isn't. `ValueFn`
 is the sharper case: `F` is always a closure and closures are never `Debug`, so a derived `Debug`
 would be dead for the type's entire intended use and would propagate up through
 `WindowDetector`/`DetectIter` to make the whole `generics` surface un-`Debug`. Do not "simplify"
 these back to derives.
 
-`Copy` on `GroundObserver`, `Observation` and `Apsis` is a one-way door — removing it is breaking,
-and it forecloses ever adding a non-`Copy` field (a station name on `GroundObserver` is the
-obvious candidate). Accepted: they are small numeric records and pass-by-value is how they read.
+`Copy` on `GeodeticPoint`, `Observation`, `Pointing` and `Apsis` is a one-way door — removing it is
+breaking, and it forecloses ever adding a non-`Copy` field. Accepted: they are small numeric records
+and pass-by-value is how they read, and it is what lets every location-taking method be
+`impl Into<GeodeticPoint>` without a borrow.
 
 The window types' derived `Ord` is field-order dependent, and the chronological order is a
 documented promise. `time.rs`'s `test_window_ordering_is_chronological` pins it for all four.

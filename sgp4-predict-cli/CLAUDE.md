@@ -52,7 +52,7 @@ Coordinate range checks live in `Location::validate()`, run from `Config::ground
 
 `ObserverArgs` carries this: `validate(&Config)` enforces that `--gs` is present and names a usable station; `resolve(config_path)` loads the config and `remove`s the station to return it owned (the `Config` is local to `resolve`). Errors list the ids the config actually defines, via `Config::ids_hint()` — preserve that wording, which `tests/config.rs` asserts on. Both commands then `.expect()` on `args.observer.gs` when writing the header, sound only because `resolve` ran first.
 
-`GroundStation` implements the library's `Observer` trait directly, so the CLI never constructs a `GroundObserver` — it hands `&GroundStation` straight to `observation_iter`/`transits_iter`/`observe_at`. This is the "implement the trait on your own type" path the library README documents; don't reintroduce a conversion.
+`GroundStation` gets a `From<&GroundStation> for GeodeticPoint` impl, so the CLI hands `&GroundStation` straight to `observation_iter`/`transits_iter`/`observe_at` — every library method taking a location takes `impl Into<GeodeticPoint>`. This is the "bring your own type" path the library README documents; don't add an intermediate location struct.
 
 ## Prompts (`commands/gs.rs`, `commands/aoi.rs`)
 

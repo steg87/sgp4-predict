@@ -11,6 +11,20 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `Predictor.point_at(t, target)` — where a ground target lies as seen from the satellite.
+  Returns a `Pointing` with a `direction` unit vector in the LVLH frame, `range`, `range_rate`
+  and `off_nadir_deg`.
+- `StateVectorLvlh`, reached via `StateVectorTeme.to_lvlh(target)`, with `to_pointing()`.
+- `StateVectorEcef.to_teme(t)`, the inverse of `StateVectorTeme.to_ecef(t)`.
+
+### Changed
+
+- **Breaking:** `GroundObserver` is removed and `Geodetic` is renamed to `GeodeticPoint`, which
+  now serves as both the observer and the target type. The constructor signature is unchanged, so
+  `GroundObserver(55.86, -4.25, 40.0)` becomes `GeodeticPoint(55.86, -4.25, 40.0)`.
+
 ## [0.2.1] - 2026-08-26
 
 ### Added
