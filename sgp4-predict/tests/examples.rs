@@ -130,6 +130,58 @@ fn next_ground_station_pass() {
     }
 }
 
+/// Point the spacecraft at a ground station across a pass: the direction to it in the satellite's
+/// own LVLH frame, plus the slant range and range rate an RF link budget needs.
+#[test]
+fn pointing_at_a_ground_station() {
+    let tle = common::create_tle();
+    let p = Predictor::from_tle(&tle).unwrap();
+    let gs = GeodeticPoint {
+        latitude: Degrees(55.8642),
+        longitude: Degrees(-4.2518),
+        altitude: 40.0,
+    };
+
+    let start = p.epoch();
+    let next_transit = p
+        .transits_iter(gs, start..start + Duration::days(1), Degrees(15.0))
+        .next()
+        .expect("no transits during search interval")
+        .expect("error calculating transit");
+
+    println!("time,off nadir [deg],x,y,z,range [km],range rate [km/s]");
+    for (t, _) in p
+        .observation_iter(gs, next_transit, Duration::seconds(30))
+        .include_end()
+        .skip_errors()
+    {
+        let pointing = p.point_at(t, gs).expect("error pointing at ground station");
+
+        // The direction is a unit vector in LVLH: +Z is nadir, +X along-track,
+        // +Y the negative orbit normal. Compose it with the antenna's mounting
+        // rotation to index a gain pattern; `off_nadir` is the special case for
+        // a nadir-mounted boresight.
+        let d = pointing.direction;
+        println!(
+            "{},{:.3},{:.4},{:.4},{:.4},{:.3},{:.3}",
+            t.format("%Y-%m-%d %H:%M:%S"),
+            pointing.off_nadir().degrees(),
+            d.x,
+            d.y,
+            d.z,
+            pointing.range / 1000.0,
+            pointing.range_rate / 1000.0,
+        );
+    }
+
+    // At closest approach the station is nearest to nadir and the range rate
+    // passes through zero.
+    let (tca, _) = p.max_elevation(next_transit, gs).unwrap();
+    let closest = p.point_at(tca, gs).unwrap();
+    assert!(closest.range_rate.abs() < 100.0, "near zero Doppler at TCA");
+    assert!(closest.off_nadir().degrees() < 90.0);
+}
+
 /// Calculate ground station passes over 10° for the next 3 days
 #[test]
 fn ground_station_passes() {
