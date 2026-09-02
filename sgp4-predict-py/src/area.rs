@@ -28,13 +28,13 @@ impl LatLon {
         }
     }
 
-    /// GeodeticPoint latitude in degrees (positive north).
+    /// Geodetic latitude in degrees (positive north).
     #[getter]
     fn latitude_deg(&self) -> f64 {
         self.inner.latitude.to_f64()
     }
 
-    /// GeodeticPoint longitude in degrees (positive east).
+    /// Geodetic longitude in degrees (positive east).
     #[getter]
     fn longitude_deg(&self) -> f64 {
         self.inner.longitude.to_f64()
@@ -55,7 +55,7 @@ impl LatLon {
     }
 }
 
-// ── GeodeticPoint ───────────────────────────────────────────────────────────────────
+// ── GeodeticPoint ──────────────────────────────────────────────────────────────
 
 /// A geodetic position on or above the WGS-84 ellipsoid.
 #[gen_stub_pyclass]
@@ -79,13 +79,13 @@ impl GeodeticPoint {
         }
     }
 
-    /// GeodeticPoint latitude in degrees (positive north).
+    /// Geodetic latitude in degrees (positive north).
     #[getter]
     fn latitude_deg(&self) -> f64 {
         self.inner.latitude.to_f64()
     }
 
-    /// GeodeticPoint longitude in degrees (positive east).
+    /// Geodetic longitude in degrees (positive east).
     #[getter]
     fn longitude_deg(&self) -> f64 {
         self.inner.longitude.to_f64()

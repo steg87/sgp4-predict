@@ -326,12 +326,12 @@ class GeodeticPoint:
     @property
     def latitude_deg(self) -> builtins.float:
         r"""
-        GeodeticPoint latitude in degrees (positive north).
+        Geodetic latitude in degrees (positive north).
         """
     @property
     def longitude_deg(self) -> builtins.float:
         r"""
-        GeodeticPoint longitude in degrees (positive east).
+        Geodetic longitude in degrees (positive east).
         """
     @property
     def altitude(self) -> builtins.float:
@@ -448,12 +448,12 @@ class LatLon:
     @property
     def latitude_deg(self) -> builtins.float:
         r"""
-        GeodeticPoint latitude in degrees (positive north).
+        Geodetic latitude in degrees (positive north).
         """
     @property
     def longitude_deg(self) -> builtins.float:
         r"""
-        GeodeticPoint longitude in degrees (positive east).
+        Geodetic longitude in degrees (positive east).
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __new__(cls, latitude_deg: builtins.float, longitude_deg: builtins.float) -> LatLon: ...

@@ -126,6 +126,11 @@ impl Predictor {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Pointing {
     /// Unit vector from the satellite to the target, in LVLH.
+    ///
+    /// Zero — not a unit vector — in the one degenerate case, a target at the
+    /// satellite's own position, where there is no direction to report and
+    /// [`range`](Pointing::range) is zero too. Check `range` before composing
+    /// this with a mounting rotation if that case is reachable for you.
     pub direction: LvlhDirection,
     /// Slant range from satellite to target in metres.
     pub range: f64,
@@ -135,6 +140,10 @@ pub struct Pointing {
 
 impl Pointing {
     /// Angle between [`direction`](Pointing::direction) and nadir, in `[0, π]`.
+    ///
+    /// Zero for the degenerate zero-range state, which is indistinguishable
+    /// from a target exactly at nadir — check
+    /// [`range`](Pointing::range) to tell them apart.
     ///
     /// Nadir is geocentric — measured from the position vector rather than the
     /// ellipsoid normal — the same convention as
@@ -158,6 +167,12 @@ impl Predictor {
     ///
     /// Returns the direction to the target in the satellite's LVLH frame,
     /// along with slant range and range rate.
+    ///
+    /// This is pure geometry and does **not** test line of sight: a target on
+    /// the far side of the Earth returns normally, with an
+    /// [`off_nadir`](Pointing::off_nadir) past the horizon angle. Use
+    /// [`observe_at`](Predictor::observe_at) and check its
+    /// [`elevation`](Observation::elevation) for visibility.
     ///
     /// ```no_run
     /// # use sgp4_predict::{Degrees, GeodeticPoint, Predictor, Tle};

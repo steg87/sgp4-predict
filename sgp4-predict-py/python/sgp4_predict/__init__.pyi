@@ -1,3 +1,4 @@
+# ruff: noqa: E501, F401, F403, F405
 
 from datetime import datetime
 from typing import Protocol, TypeAlias, runtime_checkable
@@ -32,10 +33,10 @@ __all__ = [
     "ApsisEvent",
     "ApsisIter",
     "Area",
-    "Circle",
     "Classification",
-    "Coverage",
     "Elements",
+    "Circle",
+    "Coverage",
     "FillRule",
     "GeodeticPoint",
     "GroundTrackIter",

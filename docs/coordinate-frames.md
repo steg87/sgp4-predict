@@ -40,16 +40,16 @@ Looking down, from the satellite:
 
 ```mermaid
 flowchart LR
-    GP["GeodeticPoint"]
-    -->|"to_ecef()"| ECEF2["StateVector&lt;Ecef&gt;"]
-    -->|"to_teme(t)"| TEME2["StateVector&lt;Teme&gt;"]
-    -->|"to_lvlh(target)"| LVLH["StateVector&lt;Lvlh&gt;"]
-    -->|"to_pointing()"| PT["Pointing"]
+    GP["GeodeticPoint"] -->|"to_ecef()"| ECEF2["StateVector&lt;Ecef&gt;"]
+    ECEF2 -->|"to_teme(t)"| TGT["target in TEME"]
+    SAT["satellite in TEME"] -->|"sat.to_lvlh(target)"| LVLH["StateVector&lt;Lvlh&gt;"]
+    TGT --> LVLH
+    LVLH -->|"to_pointing()"| PT["Pointing"]
 ```
 
-`to_teme` is the inverse of `to_ecef`, frame-drag term included — the LVLH triad is built from
-inertial velocity, so a ground point's TEME motion has to be right. `to_lvlh` is called on the
-satellite's own state with the target as its argument.
+`to_lvlh` is called on the **satellite's** state with the target as its argument — the triad is the
+satellite's, so it is the receiver. `to_teme` is the inverse of `to_ecef`, frame-drag term included:
+the triad is built from inertial velocity, so a ground point's TEME motion has to be right.
 
 `Predictor::observe_at` and `Predictor::point_at` run their whole chain. The individual steps are
 public for callers who need an intermediate frame.

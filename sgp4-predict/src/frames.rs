@@ -8,8 +8,9 @@
 //! - **LVLH** ([`LvlhState`]): the satellite's local-vertical/local-horizontal
 //!   triad, for pointing from the spacecraft.
 //!
-//! Observing from the ground is `TEME → ECEF → ENU → `[`Observation`]; pointing
-//! from the satellite runs the other way, `TEME → LVLH → `[`Pointing`].
+//! Observing from the ground runs `TEME → ECEF → ENU` into an [`Observation`];
+//! pointing from the satellite runs the other way, `TEME → LVLH` into a
+//! [`Pointing`].
 //!
 //! [`Observation`]: crate::Observation
 //! [`Pointing`]: crate::Pointing
@@ -73,15 +74,20 @@ impl TemeState {
             ),
         )
     }
-}
 
-impl TemeState {
     /// Express `target` relative to this satellite, in the satellite's LVLH
     /// frame — see [`LvlhState`] for the axis definitions.
     ///
     /// The receiver is the *origin* here. This is the mirror of
     /// [`EcefState::to_enu`], where the receiver is the satellite and the
     /// argument supplies the origin.
+    ///
+    /// The receiver must be a real orbital state: the triad is undefined, and
+    /// every component comes back `NaN`, if its position is at Earth's centre
+    /// or its velocity is purely radial (`r × v` is zero). Neither is
+    /// reachable from a propagated state, so there is no guard — unlike
+    /// [`LvlhState::to_pointing`], where a zero range is reachable simply by
+    /// aiming at the satellite's own position.
     #[must_use]
     pub fn to_lvlh(&self, target: &TemeState) -> LvlhState {
         let (r, v) = (self.position, self.velocity);
@@ -207,9 +213,9 @@ impl EcefState {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LatLon {
-    /// GeodeticPoint latitude (positive north).
+    /// Geodetic latitude (positive north).
     pub latitude: Degrees,
-    /// GeodeticPoint longitude (positive east).
+    /// Geodetic longitude (positive east).
     pub longitude: Degrees,
 }
 
@@ -270,9 +276,9 @@ impl From<(Degrees, Degrees)> for LatLon {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GeodeticPoint {
-    /// GeodeticPoint latitude (positive north).
+    /// Geodetic latitude (positive north).
     pub latitude: Degrees,
-    /// GeodeticPoint longitude (positive east).
+    /// Geodetic longitude (positive east).
     pub longitude: Degrees,
     /// Height above the WGS-84 ellipsoid in metres.
     pub altitude: f64,
@@ -293,7 +299,7 @@ impl From<&GeodeticPoint> for GeodeticPoint {
     }
 }
 
-/// GeodeticPoint to ECEF. The forward transform [`geodetic_from_ecef`] inverts.
+/// Geodetic to ECEF. The forward transform [`geodetic_from_ecef`] inverts.
 pub(crate) fn ecef_from_geodetic(
     latitude: Degrees,
     longitude: Degrees,
@@ -393,7 +399,8 @@ impl LvlhState {
         let range = (x * x + y * y + z * z).sqrt();
 
         // A target at the satellite has no direction; report zero rather than
-        // NaN, as `elevation_and_rate` does at zenith.
+        // NaN, as `elevation_and_rate` does at zenith. Documented on
+        // `Pointing::direction`, since a zero vector is not a unit one.
         if range < 1e-9 {
             return Pointing {
                 direction: LvlhDirection::new(0.0, 0.0, 0.0),
