@@ -510,6 +510,10 @@ class Pointing:
     def direction(self) -> Vec3:
         r"""
         Unit vector from the satellite to the target, in the LVLH frame.
+        
+        Zero — not a unit vector — for a target at the satellite's own
+        position, where there is no direction to report and `range` is zero
+        too. Check `range` before composing this with a mounting rotation.
         """
     @property
     def off_nadir_deg(self) -> builtins.float:
@@ -518,6 +522,10 @@ class Pointing:
         
         Nadir is geocentric, the same convention as the `max_off_nadir` field of
         regard, so the two compare directly.
+        
+        Reports `0.0` for the degenerate zero-range state, which is
+        indistinguishable from a target exactly at nadir — check `range` to
+        tell them apart.
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...

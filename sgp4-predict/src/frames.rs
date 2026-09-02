@@ -1,6 +1,6 @@
 //! Coordinate frame types and the conversions between them.
 //!
-//! Three frames are used in the prediction pipeline:
+//! Four frames are used in the prediction pipeline:
 //!
 //! - **TEME** ([`TemeState`]): True Equator Mean Equinox — the native SGP4 output frame.
 //! - **ECEF** ([`EcefState`]): Earth-Centred Earth-Fixed — rotates with Earth.
@@ -91,7 +91,7 @@ impl TemeState {
     /// [`LvlhState::to_pointing`], where a zero range is reachable simply by
     /// aiming at the satellite's own position.
     #[must_use]
-    pub fn to_lvlh(&self, target: &TemeState) -> LvlhState {
+    pub fn to_lvlh(&self, target: TemeState) -> LvlhState {
         let (r, v) = (self.position, self.velocity);
 
         // Z = -r̂

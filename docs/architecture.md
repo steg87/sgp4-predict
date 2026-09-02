@@ -39,14 +39,14 @@ graph TD
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lib.rs`          | `Predictor` — the public entry point                                                                                                                              |
 | `predict.rs`      | SGP4 call + km→m conversion; produces `StateVector<Teme>`                                                                                                         |
-| `observe.rs`      | TEME→ECEF→ENU→`Observation` pipeline                                                                                                                              |
+| `observe.rs`      | `Observation` (ground→satellite) and `Pointing` (satellite→ground); `observe_at` / `point_at`                                                                     |
 | `detect.rs`       | Generic event/window detection: `Detector`, `EventIter`, `WindowIter`, step strategies                                                                            |
 | `transits.rs`     | `TransitIter` over `WindowIter` (event function: elevation − min_elevation)                                                                                       |
 | `apsides.rs`      | `ApsisIter` over `EventIter` (event function: radial velocity `r·v`)                                                                                              |
 | `illumination.rs` | Cylindrical shadow model; `IlluminationIter` over `WindowIter`                                                                                                    |
 | `aoi.rs`          | `Area`/`Polygon`/`Rectangle`/`Circle` spherical geometry; `AoiIter` over `WindowIter` (event function: the area's signed angular offset from the payload's reach) |
-| `frames.rs`       | Frame marker types `Teme`, `Ecef`, `Enu`, `Lvlh`; geodetic `LatLon` / `GeodeticPoint` and the ECEF inverse                                                             |
-| `vectors.rs`      | `StateVector<F>`, `Position<F>`, `Velocity<F>`, generic over frame                                                                                                |
+| `frames.rs`       | Frame marker types `Teme`, `Ecef`, `Enu`, `Lvlh`; geodetic `LatLon` / `GeodeticPoint` and the ECEF inverse                                                        |
+| `vectors.rs`      | `StateVector<F>`, `Position<F>`, `Velocity<F>`, `UnitVector<F>`, generic over frame                                                                               |
 | `angle.rs`        | `Degrees` / `Radians` newtypes                                                                                                                                    |
 | `roots.rs`        | `Refinement` — bracketed hybrid root solver                                                                                                                       |
 | `time.rs`         | `IntervalRange` / `TimeWindow` traits and `DateTimeIter`                                                                                                          |

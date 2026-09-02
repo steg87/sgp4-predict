@@ -362,12 +362,6 @@ impl From<&GroundStation> for GeodeticPoint {
     }
 }
 
-impl From<GroundStation> for GeodeticPoint {
-    fn from(gs: GroundStation) -> Self {
-        Self::from(&gs)
-    }
-}
-
 impl Location {
     pub fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(

@@ -83,7 +83,7 @@ impl StateVectorTeme {
     /// receiver is the satellite and the argument supplies the origin.
     fn to_lvlh(&self, target: &StateVectorTeme) -> StateVectorLvlh {
         StateVectorLvlh {
-            inner: self.inner.to_lvlh(&target.inner),
+            inner: self.inner.to_lvlh(target.inner),
         }
     }
 }

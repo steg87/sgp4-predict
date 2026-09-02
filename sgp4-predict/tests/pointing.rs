@@ -83,7 +83,7 @@ fn test_lvlh_axes_are_orthonormal_and_right_handed() {
                 ),
                 sgp4_predict::Velocity::new(0.0, 0.0, 0.0),
             );
-            let dir = sat.to_lvlh(&target).to_pointing().direction;
+            let dir = sat.to_lvlh(target).to_pointing().direction;
             [dir.x, dir.y, dir.z]
         })
         .collect();
@@ -106,7 +106,7 @@ fn test_lvlh_axes_are_orthonormal_and_right_handed() {
         sgp4_predict::Position::new(0.0, 0.0, 0.0),
         sgp4_predict::Velocity::new(0.0, 0.0, 0.0),
     );
-    let d = sat.to_lvlh(&centre).to_pointing().direction;
+    let d = sat.to_lvlh(centre).to_pointing().direction;
     assert!(
         d.x.abs() < 1e-12 && d.y.abs() < 1e-12,
         "nadir not +Z: {d:?}"
@@ -155,7 +155,7 @@ fn test_target_ahead_of_the_satellite_is_along_track() {
     let p = predictor();
     let sat = p.propagate(t).unwrap();
     let ahead = p.propagate(t + Duration::seconds(10)).unwrap();
-    let d = sat.to_lvlh(&ahead).to_pointing().direction;
+    let d = sat.to_lvlh(ahead).to_pointing().direction;
 
     assert!(d.x > 0.0, "target ahead should be +X, got {}", d.x);
     assert!(
@@ -262,7 +262,7 @@ fn test_zero_range_does_not_produce_nan() {
     let t = common::datetime("2025-12-20T12:00:00Z");
     let p = predictor();
     let sat = p.propagate(t).unwrap();
-    let pointing = sat.to_lvlh(&sat).to_pointing();
+    let pointing = sat.to_lvlh(sat).to_pointing();
 
     assert!(pointing.direction.x.is_finite());
     assert!(pointing.direction.y.is_finite());

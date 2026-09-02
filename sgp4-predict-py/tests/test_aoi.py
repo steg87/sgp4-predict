@@ -55,7 +55,7 @@ def europe_polygon() -> Polygon:
 SOUTH_OF_60N = Rectangle.latitude_band(-90.0, 60.0)
 
 
-# ── LatLon / GeodeticPoint ──────────────────────────────────────────────────────────
+# ── LatLon / GeodeticPoint ─────────────────────────────────────────────────────
 
 
 def test_lat_lon_round_trip():

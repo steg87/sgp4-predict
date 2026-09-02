@@ -34,6 +34,10 @@ impl Pointing {
 #[pymethods]
 impl Pointing {
     /// Unit vector from the satellite to the target, in the LVLH frame.
+    ///
+    /// Zero — not a unit vector — for a target at the satellite's own
+    /// position, where there is no direction to report and `range` is zero
+    /// too. Check `range` before composing this with a mounting rotation.
     #[getter]
     fn direction(&self) -> PyVec3 {
         PyVec3::new(self.direction[0], self.direction[1], self.direction[2])
@@ -43,6 +47,10 @@ impl Pointing {
     ///
     /// Nadir is geocentric, the same convention as the `max_off_nadir` field of
     /// regard, so the two compare directly.
+    ///
+    /// Reports `0.0` for the degenerate zero-range state, which is
+    /// indistinguishable from a target exactly at nadir — check `range` to
+    /// tell them apart.
     #[getter]
     fn off_nadir_deg(&self) -> f64 {
         let [x, y, z] = self.direction;

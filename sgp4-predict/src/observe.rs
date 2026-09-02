@@ -196,6 +196,6 @@ impl Predictor {
     pub fn point_at(&self, t: DateTime<Utc>, target: impl Into<GeodeticPoint>) -> Result<Pointing> {
         let satellite = self.propagate(t)?;
         let target = target.into().to_ecef().to_teme(t);
-        Ok(satellite.to_lvlh(&target).to_pointing())
+        Ok(satellite.to_lvlh(target).to_pointing())
     }
 }

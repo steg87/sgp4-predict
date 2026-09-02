@@ -2,10 +2,9 @@
 //!
 //! [`Position`], [`Velocity`] and [`UnitVector`] are type aliases over
 //! [`Vec3`], distinguished by kind markers so they cannot be accidentally
-//! mixed. [`StateVector`] pairs
-//! the two and carries a phantom frame type `F` — one of the TEME, ECEF, or
-//! ENU marker structs — so the compiler rejects passing a vector in the wrong
-//! frame.
+//! mixed. [`StateVector`] pairs a position and a velocity and carries a
+//! phantom frame type `F` — one of the TEME, ECEF, ENU or LVLH marker
+//! structs — so the compiler rejects passing a vector in the wrong frame.
 //!
 //! All values are in SI units: metres for position, metres per second for
 //! velocity.
@@ -14,7 +13,8 @@ use std::marker::PhantomData;
 
 /// Backing 3-component vector type, parameterised by kind `K` and frame `F`.
 ///
-/// Not used directly; prefer the [`Position`] and [`Velocity`] type aliases.
+/// Not used directly; prefer the [`Position`], [`Velocity`] and [`UnitVector`]
+/// type aliases.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Vec3<K, F> {
     /// X component.
@@ -48,14 +48,15 @@ impl<K, F> std::ops::Sub for Vec3<K, F> {
 
 /// Position and velocity in a single coordinate frame `F`.
 ///
-/// `F` is one of the frame marker types (`Teme`, `Ecef`, `Enu`).
+/// `F` is one of the frame marker types (`Teme`, `Ecef`, `Enu`, `Lvlh`).
 /// Frame-conversion methods are defined on the concrete type aliases
-/// [`TemeState`], [`EcefState`], and [`EnuState`] in the frames module,
-/// so the compiler enforces correct frame usage at each conversion step.
+/// [`TemeState`], [`EcefState`], [`EnuState`] and [`LvlhState`] in the frames
+/// module, so the compiler enforces correct frame usage at each conversion step.
 ///
 /// [`TemeState`]: crate::TemeState
 /// [`EcefState`]: crate::EcefState
 /// [`EnuState`]: crate::EnuState
+/// [`LvlhState`]: crate::LvlhState
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct StateVector<F> {
     /// Position in frame `F`, in metres.

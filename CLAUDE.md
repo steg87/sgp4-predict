@@ -91,7 +91,7 @@ A caller with their own station type writes `From<&MyStation> for GeodeticPoint`
 
 **`LvlhState`'s velocity is the inertial relative velocity resolved on the LVLH axes**, not the derivative of the LVLH position — no `ω_LVLH × r` term is subtracted. The two differ by ~1 m/s at LEO and both look plausible, so it is documented on the type. `range_rate` is `d|p|/dt`, frame-independent, so Doppler is right either way.
 
-Deliberately absent: a `pointing_iter`. It would be `ObservationIter` with one line changed; add it when a caller needs a swath. Python and CLI bindings for `point_at` likewise.
+Deliberately absent: a `pointing_iter`. It would be `ObservationIter` with one line changed; add it when a caller needs a swath. The CLI has no pointing command for the same reason — there is no iterator for one to drive. Python *does* have the full surface (`Predictor.point_at`, `Pointing`, `StateVectorLvlh`, `StateVectorEcef.to_teme`).
 
 **All coordinates are in SI units (meters, m/s).** The `sgp4` crate outputs km/km·s⁻¹; conversion happens in `predict.rs` in the `From<sgp4::Prediction>` impl.
 
