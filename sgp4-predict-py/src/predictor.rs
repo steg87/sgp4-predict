@@ -12,7 +12,10 @@ use crate::{
     elements::Elements,
     errors::to_py_err,
     tle::Tle,
-    types::{AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Transit},
+    types::{
+        AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Pointing,
+        Transit,
+    },
     vectors::StateVectorTeme,
 };
 
@@ -421,6 +424,17 @@ impl Predictor {
         self.inner
             .observe_at(t, observer.inner)
             .map(Observation::from_inner)
+            .map_err(to_py_err)
+    }
+
+    /// Where `target` lies as seen from the satellite at the given UTC time.
+    ///
+    /// Returns a `Pointing`: a unit vector in the satellite's LVLH frame, plus
+    /// slant range and range rate.
+    fn point_at(&self, t: DateTime<Utc>, target: &GeodeticPoint) -> PyResult<Pointing> {
+        self.inner
+            .point_at(t, target.inner)
+            .map(Pointing::from_inner)
             .map_err(to_py_err)
     }
 

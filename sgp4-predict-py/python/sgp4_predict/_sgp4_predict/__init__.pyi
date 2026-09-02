@@ -27,6 +27,7 @@ __all__ = [
     "LatLon",
     "Observation",
     "ObservationIter",
+    "Pointing",
     "Polygon",
     "PredictionIter",
     "Predictor",
@@ -34,6 +35,7 @@ __all__ = [
     "Refinement",
     "StateVectorEcef",
     "StateVectorEnu",
+    "StateVectorLvlh",
     "StateVectorTeme",
     "Tle",
     "Transit",
@@ -491,6 +493,36 @@ class ObservationIter:
     def __next__(self) -> tuple[datetime.datetime, Observation]: ...
 
 @typing.final
+class Pointing:
+    r"""
+    The satellite's view of a target on the ground.
+    
+    `direction` is a unit vector in the spacecraft's LVLH frame — Z along nadir,
+    Y along the negative orbit normal, X along-track — which composes directly
+    with an antenna or instrument mounting rotation. Range is in metres, range
+    rate in m/s (positive = receding).
+    """
+    @property
+    def range(self) -> builtins.float: ...
+    @property
+    def range_rate(self) -> builtins.float: ...
+    @property
+    def direction(self) -> Vec3:
+        r"""
+        Unit vector from the satellite to the target, in the LVLH frame.
+        """
+    @property
+    def off_nadir_deg(self) -> builtins.float:
+        r"""
+        Angle between `direction` and nadir, in degrees.
+        
+        Nadir is geocentric, the same convention as the `max_off_nadir` field of
+        regard, so the two compare directly.
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Polygon:
     r"""
     A closed polygon on Earth's surface whose edges are great-circle arcs.
@@ -582,6 +614,13 @@ class Predictor:
     def observe_at(self, t: datetime.datetime, observer: GeodeticPoint) -> Observation:
         r"""
         Calculate the observation from an observer at the given UTC time.
+        """
+    def point_at(self, t: datetime.datetime, target: GeodeticPoint) -> Pointing:
+        r"""
+        Where `target` lies as seen from the satellite at the given UTC time.
+        
+        Returns a `Pointing`: a unit vector in the satellite's LVLH frame, plus
+        slant range and range rate.
         """
     def prediction_iter(self, interval: sgp4_predict.IntervalRange, step: datetime.timedelta) -> PredictionIter:
         r"""
@@ -829,6 +868,10 @@ class StateVectorEcef:
         r"""
         Convert to the East-North-Up (ENU) frame relative to the given observer.
         """
+    def to_teme(self, t: datetime.datetime) -> StateVectorTeme:
+        r"""
+        Convert back to the TEME frame, the inverse of `StateVectorTeme.to_ecef`.
+        """
 
 @typing.final
 class StateVectorEnu:
@@ -853,6 +896,32 @@ class StateVectorEnu:
         """
 
 @typing.final
+class StateVectorLvlh:
+    r"""
+    State vector in the satellite's LVLH frame: Z along nadir, Y along the
+    negative orbit normal, X completing the right-handed triad along-track.
+    Positions in metres, velocities in m/s.
+    
+    The velocity is the inertial relative velocity resolved on the LVLH axes,
+    not the derivative of the LVLH position, so `range_rate` is Doppler-correct.
+    """
+    @property
+    def position(self) -> Vec3:
+        r"""
+        Position in the LVLH frame (metres).
+        """
+    @property
+    def velocity(self) -> Vec3:
+        r"""
+        Velocity in the LVLH frame (m/s).
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def to_pointing(self) -> Pointing:
+        r"""
+        Reduce to the direction, range and range rate of the target.
+        """
+
+@typing.final
 class StateVectorTeme:
     r"""
     State vector in the True Equator Mean Equinox (TEME) frame — the native SGP4 output frame.
@@ -872,6 +941,13 @@ class StateVectorTeme:
     def to_ecef(self, t: datetime.datetime) -> StateVectorEcef:
         r"""
         Convert to the Earth-Centred Earth-Fixed (ECEF) frame at the given UTC time.
+        """
+    def to_lvlh(self, target: StateVectorTeme) -> StateVectorLvlh:
+        r"""
+        Express `target` relative to this satellite, in the satellite's LVLH frame.
+        
+        The receiver is the origin here — the mirror of `to_enu`, where the
+        receiver is the satellite and the argument supplies the origin.
         """
 
 @typing.final

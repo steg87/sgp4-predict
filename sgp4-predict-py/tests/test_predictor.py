@@ -101,6 +101,73 @@ def test_observe_at_degrees_properties():
     assert -90.0 <= obs.elevation_deg <= 90.0
 
 
+# ── point_at ───────────────────────────────────────────────────────────────────
+
+
+def test_point_at_direction_is_a_unit_vector():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    d = p.point_at(t, GLASGOW).direction
+    assert abs(math.sqrt(d.x**2 + d.y**2 + d.z**2) - 1.0) < 1e-12
+
+
+def test_point_at_range_matches_observe_at():
+    # The same scalar seen from either end of the link.
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    pointing = p.point_at(t, GLASGOW)
+    obs = p.observe_at(t, GLASGOW)
+    assert abs(pointing.range - obs.range) < 1e-6
+    assert abs(pointing.range_rate - obs.range_rate) < 1e-6
+
+
+def test_point_at_off_nadir_is_in_range():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    assert 0.0 <= p.point_at(t, GLASGOW).off_nadir_deg <= 180.0
+
+
+def test_pointing_repr():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    assert "Pointing(off_nadir=" in repr(p.point_at(t, GLASGOW))
+
+
+# ── LVLH frame ─────────────────────────────────────────────────────────────────
+
+
+def test_to_lvlh_zero_range_does_not_produce_nan():
+    # A target coincident with the satellite has no direction; guarded, not NaN.
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    sat = p.propagate(t)
+    pt = sat.to_lvlh(sat).to_pointing()
+    assert math.isfinite(pt.range)
+    assert math.isfinite(pt.off_nadir_deg)
+    assert math.isfinite(pt.direction.z)
+
+
+def test_to_teme_round_trips_to_ecef():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    teme = p.propagate(t)
+    back = teme.to_ecef(t).to_teme(t)
+    assert abs(back.position.x - teme.position.x) < 1e-6
+    assert abs(back.velocity.z - teme.velocity.z) < 1e-9
+
+
+def test_lvlh_state_exposes_position_and_velocity():
+    p = make_predictor()
+    t = datetime(2025, 12, 22, 9, 55, 0, tzinfo=timezone.utc)
+    sat = p.propagate(t)
+    ahead = p.propagate(t + timedelta(seconds=10))
+    lvlh = sat.to_lvlh(ahead)
+    # A target ahead in the orbital plane sits on +X with no cross-track part.
+    assert lvlh.position.x > 0.0
+    assert abs(lvlh.position.y) < 1.0
+    assert math.isfinite(lvlh.velocity.x)
+
+
 # ── transits_iter ─────────────────────────────────────────────────────────────
 
 

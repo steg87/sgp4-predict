@@ -56,8 +56,17 @@ older than 3–7 days with caution. Fresh TLEs are available from [CelesTrak](ht
 
 Besides `transits_iter`, `Predictor` yields apsides, sunlit and eclipse windows, ground-track
 points, area overpasses and raw state vectors, and answers point queries such as `propagate`,
-`observe_at` and `sub_point`. The package ships type stubs, so an IDE or `help(Predictor)` lists
-them with their signatures and units.
+`observe_at`, `point_at` and `sub_point`. The package ships type stubs, so an IDE or
+`help(Predictor)` lists them with their signatures and units.
+
+`observe_at` looks up from the ground; `point_at` looks down from the satellite, which is what an
+RF link budget or an instrument-pointing calculation needs:
+
+```python
+pointing = predictor.point_at(t, glasgow)
+d = pointing.direction  # unit vector in the satellite's LVLH frame
+print(f"{pointing.off_nadir_deg:.1f}° off nadir, {pointing.range / 1000:.0f} km")
+```
 
 Every method taking a time range accepts any object with `.start` and `.end` datetime properties —
 an `Interval`, a `Transit`, an `Illumination`, an `AoiWindow`, or your own type. All iterators are

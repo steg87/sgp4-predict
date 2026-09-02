@@ -56,6 +56,8 @@ The `Refinement` used by the iterators comes from `Predictor.with_refinement`, n
 
 Angles are plain `float` with `_deg`-suffixed field/arg names, converted to/from the library's `Degrees`/`Radians` at the FFI boundary — the Rust type safety deliberately stops here.
 
+`Pointing` stores `direction` as a plain `[f64; 3]` and exposes it as a `Vec3` getter, matching how `Observation` stores radians and exposes `*_deg` — the library's `UnitVector<Lvlh>` type safety stops at the boundary like every other typed value.
+
 `GeodeticPoint` is the one location type on both sides. Anywhere the Rust API takes `impl Into<GeodeticPoint>`, the Python method takes a `GeodeticPoint` and passes its `inner` through.
 
 ## Areas of interest (`area.rs`)
