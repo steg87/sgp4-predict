@@ -8,7 +8,8 @@ use crate::detect::MIN_POSITIVE_STEP;
 /// A half-open time interval `[start, end)`.
 ///
 /// Anything that spans time can implement it, and any implementor can be
-/// passed directly to the prediction and observation iterators.
+/// passed directly to the prediction and observation iterators — by value, or
+/// by reference when it is not `Copy`, since `&T` implements it too.
 pub trait IntervalRange {
     /// Inclusive start of the interval.
     fn start(&self) -> DateTime<Utc>;
@@ -84,6 +85,15 @@ impl IntervalRange for Range<DateTime<Utc>> {
     }
     fn end(&self) -> DateTime<Utc> {
         self.end
+    }
+}
+
+impl<T: IntervalRange + ?Sized> IntervalRange for &T {
+    fn start(&self) -> DateTime<Utc> {
+        (**self).start()
+    }
+    fn end(&self) -> DateTime<Utc> {
+        (**self).end()
     }
 }
 
@@ -370,5 +380,28 @@ mod tests {
                 "step {step} did not fall back to 1s"
             );
         }
+    }
+
+    // A caller's interval type need not be Copy or Clone: `&T` is an
+    // `IntervalRange` too, so it can be borrowed into the iterators.
+    #[test]
+    fn test_interval_range_by_reference() {
+        struct NotCopy(Range<DateTime<Utc>>);
+        impl IntervalRange for NotCopy {
+            fn start(&self) -> DateTime<Utc> {
+                self.0.start
+            }
+            fn end(&self) -> DateTime<Utc> {
+                self.0.end
+            }
+        }
+
+        let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let interval = NotCopy(start..start + Duration::seconds(2));
+
+        let times: Vec<_> = DateTimeIter::new(&interval, Duration::seconds(1)).collect();
+        assert_eq!(times, vec![start, start + Duration::seconds(1)]);
+        // Still usable afterwards — nothing was moved.
+        assert_eq!(interval.duration(), Duration::seconds(2));
     }
 }
