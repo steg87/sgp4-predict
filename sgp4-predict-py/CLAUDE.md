@@ -13,6 +13,8 @@ make lint-check  # what CI runs: ruff check + ruff format --check, no fixing
 
 **`dev` is an optional-dependency _extra_, not a dependency group, so plain `uv sync` omits `ruff`, `pytest` and `maturin` — and uninstalls them if a previous run put them there.** Every target therefore depends on `init`, which passes `--extra dev`. Do not "simplify" that back to a bare `uv sync`: the failure mode is silent, because a stale `ruff` left on `PATH` keeps answering and `make lint` passes locally against a version CI does not use. That is exactly how an unsorted `__all__` reached CI once — the venv held ruff 0.15.21 while `pyproject.toml` pins 0.16.2, and RUF022 only fires on the latter.
 
+**`extend-exclude` names `**/_sgp4_predict/*.pyi`, not `**/*.pyi`.** Only the _generated_ stub is excluded, because `stub_gen` owns its formatting and `python.yml` fails on any diff — ruff reformatting it would deadlock the two. The hand-maintained `sgp4_predict/__init__.pyi` **is** linted: under the old blanket glob it was invisible to both `check` and `format`, so an out-of-band `ruff check --fix` on it by explicit path (which bypasses the exclude) once stripped its `# ruff: noqa` header and re-sorted `__all__` with no lint failure either before or after. Widening the glob back would restore that blind spot. Ruff's `.pyi` semantics mean the re-export star import needs no `noqa` of its own.
+
 `make lint` fixes in place, so it can pass on a dirty tree that CI then rejects. `make lint-check` mirrors CI; run it before pushing.
 
 To regenerate stubs after Rust API changes, run from the **repo root**:

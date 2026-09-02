@@ -49,6 +49,10 @@ module-name = "sgp4_predict._sgp4_predict"
 features = ["pyo3/extension-module"]
 
 [tool.ruff]
-# Exclude auto-generated stub files from format checking, and Markdown so
-# ruff format never touches README.md's hand-aligned example comments.
-extend-exclude = ["**/*.pyi", "*.md"]
+# Exclude the *generated* stub — stub_gen owns its formatting, and python.yml
+# fails on any diff, so ruff reformatting it would deadlock the two. The
+# hand-maintained sgp4_predict/__init__.pyi is deliberately NOT excluded: a
+# blanket `**/*.pyi` hid it from both check and format, so damage to it passed
+# lint silently. Markdown is excluded so ruff format never touches README.md's
+# hand-aligned example comments.
+extend-exclude = ["**/_sgp4_predict/*.pyi", "*.md"]

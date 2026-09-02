@@ -46,12 +46,14 @@ impl TemeState {
     ///
     /// Position: `r_ECEF = R(θ) · r_TEME`
     ///
-    /// Velocity requires an extra term because ECEF is a rotating frame.
-    /// Differentiating `r_ECEF = R(θ) · r_TEME` with respect to time gives:
-    ///   `v_ECEF = R(θ) · v_TEME + ω_Earth × r_ECEF`
+    /// Velocity requires an extra term because ECEF is a rotating frame. A
+    /// velocity in a frame rotating at `ω` is the inertial one less `ω × r`:
+    ///   `v_ECEF = R(θ) · v_TEME − ω_Earth × r_ECEF`
     ///
     /// where `ω_Earth = [0, 0, ω_E]`. Expanding the cross product:
-    ///   `ω_Earth × r_ECEF = [ω_E · ry, -ω_E · rx, 0]`
+    ///   `ω_Earth × r_ECEF = [−ω_E · ry, ω_E · rx, 0]`
+    ///
+    /// so the term the code *adds* is `[ω_E · ry, −ω_E · rx, 0]`.
     #[must_use]
     pub fn to_ecef(&self, t: DateTime<Utc>) -> EcefState {
         let (sin_g, cos_g) = gmst(julian_date(t)).to_f64().sin_cos();
@@ -61,7 +63,7 @@ impl TemeState {
         let ry = -sin_g * self.position.x + cos_g * self.position.y;
         let rz = self.position.z;
 
-        // Rotate velocity into ECEF, then add the frame-drag term ω_Earth × r_ECEF
+        // Rotate velocity into ECEF, then subtract the frame-drag term ω_Earth × r_ECEF
         let vx_rot = cos_g * self.velocity.x + sin_g * self.velocity.y;
         let vy_rot = -sin_g * self.velocity.x + cos_g * self.velocity.y;
 
@@ -159,9 +161,9 @@ impl EcefState {
 
     /// Convert ECEF state back to TEME, the inverse of [`TemeState::to_ecef`].
     ///
-    /// Undoes the frame-drag term before the rotation, mirroring the forward
+    /// Restores the frame-drag term before the rotation, mirroring the forward
     /// transform's order:
-    ///   `v_TEME = R(-θ) · (v_ECEF - ω_Earth × r_ECEF)`
+    ///   `v_TEME = R(−θ) · (v_ECEF + ω_Earth × r_ECEF)`
     ///
     /// A ground point is stationary in ECEF but moving in TEME, so the drag
     /// term is what gives it its inertial velocity.
@@ -173,7 +175,7 @@ impl EcefState {
         let rx = cos_g * self.position.x - sin_g * self.position.y;
         let ry = sin_g * self.position.x + cos_g * self.position.y;
 
-        // Remove ω_Earth × r_ECEF = [ω_E · ry_ecef, -ω_E · rx_ecef, 0], then rotate.
+        // Add back ω_Earth × r_ECEF = [-ω_E · ry_ecef, ω_E · rx_ecef, 0], then rotate.
         let vx = self.velocity.x - OMEGA_EARTH * self.position.y;
         let vy = self.velocity.y + OMEGA_EARTH * self.position.x;
 
