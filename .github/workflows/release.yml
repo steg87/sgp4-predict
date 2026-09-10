@@ -54,7 +54,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
 
       - name: Plan
         id: plan
@@ -107,7 +107,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
 
       - name: Publish
         run: |
@@ -222,7 +222,7 @@ jobs:
         with:
           command: sdist
           args: --out dist -m sgp4-predict-py/Cargo.toml
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
