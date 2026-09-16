@@ -14,7 +14,7 @@ test: dev
 
 .PHONY: stubs
 stubs:
-	cargo run --bin stub_gen
+	cargo run --bin stub-gen
 
 # Fixes in place. `lint-check` is what CI runs; keep the two in step.
 .PHONY: lint
