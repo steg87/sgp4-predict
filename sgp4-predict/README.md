@@ -42,7 +42,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Utc::now();
     let interval = start..start + Duration::days(1);
 
-    for transit in predictor.transits_iter(glasgow, interval, Degrees(5.0)) {
+    // Pass `&interval` and it is not consumed, so it can drive any number of scans.
+    let (peak, best) = predictor.max_elevation(&interval, glasgow)?;
+    println!("best pass peaks {peak} at {:.1}°", best.elevation.degrees());
+
+    for transit in predictor.transits_iter(glasgow, &interval, Degrees(5.0)) {
         let transit = transit?;
         println!("AoS {}  LoS {}", transit.start, transit.end);
 

@@ -8,8 +8,22 @@ use crate::detect::MIN_POSITIVE_STEP;
 /// A half-open time interval `[start, end)`.
 ///
 /// Anything that spans time can implement it, and any implementor can be
-/// passed directly to the prediction and observation iterators — by value, or
-/// by reference when it is not `Copy`, since `&T` implements it too.
+/// passed directly to the prediction and observation iterators.
+///
+/// Pass `&interval` rather than `interval` to go on using it afterwards: `&T`
+/// is an `IntervalRange` too, so one interval can drive any number of scans.
+///
+/// ```
+/// use chrono::{Duration, TimeZone, Utc};
+/// use sgp4_predict::{DateTimeIter, IntervalRange};
+///
+/// let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+/// let search = start..start + Duration::hours(24);
+///
+/// assert_eq!(DateTimeIter::new(&search, Duration::hours(6)).count(), 4);
+/// assert_eq!(DateTimeIter::new(&search, Duration::hours(12)).count(), 2);
+/// assert_eq!(search.duration(), Duration::hours(24));
+/// ```
 pub trait IntervalRange {
     /// Inclusive start of the interval.
     fn start(&self) -> DateTime<Utc>;
