@@ -121,39 +121,36 @@ When the region really is "these latitudes by these longitudes", use `Rectangle`
 and south edges follow their parallels exactly, it has no hemisphere restriction, and it wraps across
 the antimeridian:
 
-```rust,no_run
+```rust
 use sgp4_predict::{Degrees, LatLon, Rectangle};
 
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
 let scotland = Rectangle::new(
     LatLon { latitude: Degrees(54.0), longitude: Degrees(-8.0) },
     LatLon { latitude: Degrees(60.0), longitude: Degrees(-1.0) },
-)?;
+)
+.unwrap();
 
 // Runs eastward from the south-west corner, so this wraps the antimeridian.
 let pacific = Rectangle::new(
     (Degrees(-20.0), Degrees(160.0)),
     (Degrees(20.0), Degrees(-160.0)),
-)?;
+)
+.unwrap();
 
-let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0))?;
-# Ok(())
-# }
+let arctic = Rectangle::latitude_band(Degrees(66.5), Degrees(90.0)).unwrap();
 ```
 
 `Circle` is a spherical cap, given by its centre and an angular radius:
 
-```rust,no_run
+```rust
 use sgp4_predict::{Circle, Degrees, LatLon};
 
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
 // A circular area 500 km across. A degree of arc is about 111.2 km on the ground.
 let cape_town = Circle::new(
     LatLon { latitude: Degrees(-33.9), longitude: Degrees(18.4) },
     Degrees(2.25),
-)?;
-# Ok(())
-# }
+)
+.unwrap();
 ```
 
 Implement `Area` on your own type for other shapes; the docs for the trait give the contract its
@@ -167,29 +164,34 @@ slewed to — and the window instead covers whenever the area is within reach:
 use chrono::{Duration, Utc};
 use sgp4_predict::{AoiIterOpts, Coverage, Degrees, Predictor, Refinement, Rectangle, Tle};
 
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
-# let tle: Tle = unimplemented!();
-# let predictor = Predictor::from_tle(tle)?;
-# let area = Rectangle::latitude_band(Degrees(50.0), Degrees(60.0))?;
-let start = Utc::now();
-let opts = AoiIterOpts {
-    max_off_nadir: Degrees(30.0).into(),
-    // Or `Coverage::Full`, requiring all of the area to be in reach at once.
-    coverage: Coverage::Any,
-    ..AoiIterOpts::default()
-};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tle: Tle = "\
+        SENTINEL-2C
+        1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
+        2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+        .parse()?;
+    let predictor = Predictor::from_tle(&tle)?;
+    let area = Rectangle::latitude_band(Degrees(50.0), Degrees(60.0))?;
 
-for window in predictor.aoi_iter_with_opts(
-    &area,
-    start..start + Duration::days(1),
-    opts,
-    Refinement::default(),
-) {
-    let window = window?;
-    println!("in reach from {} to {}", window.start, window.end);
+    let start = Utc::now();
+    let opts = AoiIterOpts {
+        max_off_nadir: Degrees(30.0).into(),
+        // Or `Coverage::Full`, requiring all of the area to be in reach at once.
+        coverage: Coverage::Any,
+        ..AoiIterOpts::default()
+    };
+
+    for window in predictor.aoi_iter_with_opts(
+        &area,
+        start..start + Duration::days(1),
+        opts,
+        Refinement::default(),
+    ) {
+        let window = window?;
+        println!("in reach from {} to {}", window.start, window.end);
+    }
+    Ok(())
 }
-# Ok(())
-# }
 ```
 
 ## Bring your own types
