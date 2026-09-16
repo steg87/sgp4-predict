@@ -10,6 +10,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-16
+
 ### Added
 
 - `IntervalRange` is implemented for `&T`, so an interval type that is not `Copy` can be passed to
