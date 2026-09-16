@@ -11,6 +11,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-16
+
 ### Added
 
 - `Predictor.point_at(t, target)` — where a ground target lies as seen from the satellite.
