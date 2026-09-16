@@ -45,7 +45,7 @@ After changing the Rust API, regenerate the stubs from the repository root:
 
 ```bash
 PYO3_PYTHON=sgp4-predict-py/.venv/bin/python \
-  cargo run --manifest-path sgp4-predict-py/Cargo.toml --bin stub_gen
+  cargo run --manifest-path sgp4-predict-py/Cargo.toml --bin stub-gen
 ```
 
 ## Guidelines

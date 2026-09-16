@@ -45,11 +45,11 @@ python-source = "python"
 module-name = "sgp4_predict._sgp4_predict"
 # Only maturin builds enable extension-module (so libpython is not linked into
 # the wheel — required for manylinux/auditwheel compliance). Plain cargo builds
-# (tests, the stub_gen bin) deliberately omit it so they can link libpython.
+# (tests, the stub-gen bin) deliberately omit it so they can link libpython.
 features = ["pyo3/extension-module"]
 
 [tool.ruff]
-# Exclude the *generated* stub — stub_gen owns its formatting, and python.yml
+# Exclude the *generated* stub — stub-gen owns its formatting, and python.yml
 # fails on any diff, so ruff reformatting it would deadlock the two. The
 # hand-maintained sgp4_predict/__init__.pyi is deliberately NOT excluded: a
 # blanket `**/*.pyi` hid it from both check and format, so damage to it passed
