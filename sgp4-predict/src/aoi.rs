@@ -290,7 +290,6 @@ impl Polygon {
     }
 
     /// The polygon's vertices in ring order, after deduplication.
-    #[must_use]
     pub fn vertices(&self) -> impl DoubleEndedIterator<Item = LatLon> + ExactSizeIterator + '_ {
         self.verts.iter().map(|&v| lat_lon_from_unit(v))
     }
