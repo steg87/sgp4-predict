@@ -582,6 +582,11 @@ pub struct WindowDetector<F, S> {
     /// Where to resume the coarse scan once a window has been fully
     /// resolved (its end, which may lie outside the interval).
     resume: Option<DateTime<Utc>>,
+    /// The first negative sample past the most recently resolved window —
+    /// `resume`'s value, kept after the scan consumes it so
+    /// [`finish`](Detector::finish) can tell whether the interval end was
+    /// already covered.
+    walked_to: Option<DateTime<Utc>>,
     /// Whether [`finish`](Detector::finish) has already produced its one
     /// possible trailing window.
     flushed: bool,
@@ -615,6 +620,7 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
         // Resume from an already-sampled point, never from the window's end
         // itself — see walk_to_crossing's doc comment.
         self.resume = Some(resume_from);
+        self.walked_to = Some(resume_from);
         self.last_boundary = Some(end);
         Ok(None)
     }
@@ -638,6 +644,7 @@ impl<F: EventFunction, S: StepStrategy> WindowDetector<F, S> {
         // Resume from an already-sampled point, never from the window's end
         // itself — see walk_to_crossing's doc comment.
         self.resume = Some(resume_from);
+        self.walked_to = Some(resume_from);
 
         let gap_start = self.last_boundary;
         self.last_boundary = Some(window.end);
@@ -701,23 +708,21 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
             return Ok(None);
         };
         if last_boundary >= end {
-            // The most recently resolved positive window already reached
-            // (or, walked/clamped, extended past) the interval end: nothing
-            // left to check. Sampling at `end` here would re-enter that
-            // same already-emitted window and duplicate it.
+            // The last window already reached (or extended past) the end.
             return Ok(None);
         }
-        // A crossing may still lie between the last coarse-scan sample and
-        // the exact interval end.
-        let s = self.f.sample(end)?;
-        if s.value < 0.0 {
-            return Ok(
-                (!self.positive_only && last_boundary < end).then_some(Window {
-                    start: last_boundary,
-                    end,
-                    positive: false,
-                }),
-            );
+        // `last_boundary` is a refined crossing, accurate only to the
+        // refinement tolerance, so it can land just short of an `end` that the
+        // true crossing lies just past. Once a boundary walk has *sampled* past
+        // `end`, the stretch up to it is known negative: re-sampling `end`
+        // would re-enter the window just emitted and duplicate it.
+        let walked_past_end = self.walked_to.is_some_and(|w| w >= end);
+        if walked_past_end || self.f.sample(end)?.value < 0.0 {
+            return Ok((!self.positive_only).then_some(Window {
+                start: last_boundary,
+                end,
+                positive: false,
+            }));
         }
         self.resolve_window(end, false)
     }
@@ -1034,6 +1039,7 @@ impl<F: EventFunction, S: StepStrategy> WindowIterBuilder<F, S> {
                 last_boundary: None,
                 pending: None,
                 resume: None,
+                walked_to: None,
                 flushed: false,
             },
         ))
@@ -1360,6 +1366,34 @@ mod tests {
         // ISO-8601 `PT300S`, so it can be passed straight back in.
         let message = results[0].as_ref().unwrap_err().to_string();
         assert!(message.contains("5m"), "{message}");
+    }
+
+    #[test]
+    fn test_window_iter_end_between_refined_and_true_crossing_emits_once() {
+        // Positive on [100, 300). A 10 s tolerance lets the refined end settle
+        // on the positive side of the 300 s step, short of an interval end
+        // that the true crossing lies just past: the window is still open at
+        // the end, but it is the one already emitted.
+        let iter = WindowIter::builder()
+            .interval(t0()..t0() + Duration::milliseconds(299_999))
+            .function(|t| {
+                Ok(if (100.0..300.0).contains(&secs(t)) {
+                    1.0
+                } else {
+                    -1.0
+                })
+            })
+            .step(FixedStep(Duration::seconds(60)))
+            .refinement(Refinement {
+                time_tolerance: 10.0,
+                ..Refinement::default()
+            })
+            .build()
+            .unwrap();
+
+        let windows: Vec<Window> = iter.map(|w| w.unwrap()).collect();
+        assert_eq!(windows.len(), 1, "{windows:?}");
+        assert!(secs(windows[0].end) < 299.999);
     }
 
     // --- detect_window ---

@@ -10,6 +10,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `transits_iter` and `aoi_iter` no longer report the same window twice when the interval ends
+  within the refinement tolerance of a window's end — for example, when searching exactly a
+  previously returned `Transit`. Any `WindowIter` with `clamp_to_interval` off was affected.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added
