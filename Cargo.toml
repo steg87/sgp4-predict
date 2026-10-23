@@ -4,3 +4,11 @@ resolver = "2"
 
 [workspace.lints.clippy]
 must_use_candidate = "warn"
+
+[workspace.dependencies]
+chrono = "0.4"
+humantime = "2"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
