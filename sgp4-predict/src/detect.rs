@@ -712,13 +712,11 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
         // the exact interval end.
         let s = self.f.sample(end)?;
         if s.value < 0.0 {
-            return Ok(
-                (!self.positive_only && last_boundary < end).then_some(Window {
-                    start: last_boundary,
-                    end,
-                    positive: false,
-                }),
-            );
+            return Ok((!self.positive_only).then_some(Window {
+                start: last_boundary,
+                end,
+                positive: false,
+            }));
         }
         self.resolve_window(end, false)
     }

@@ -263,6 +263,23 @@ mod tests {
     }
 
     #[test]
+    fn test_refinement_solve_returns_negative_endpoint() {
+        // The positive side is closer to zero, so a closest-endpoint rule
+        // would return a point where f is positive.
+        let f = |x: f64| Ok::<_, Infallible>((if x < 1.0 { -2.0 } else { 1.0 }, None));
+        let root = Refinement::default().solve(0.0, 3.0, f).unwrap();
+        assert!(f(root).unwrap().0 < 0.0, "{root}");
+    }
+
+    #[test]
+    fn test_refinement_solve_exact_zero_endpoint_b() {
+        let root = Refinement::default()
+            .solve(1.0, 2.0, |x| Ok::<_, Infallible>((2.0 - x, None)))
+            .unwrap();
+        assert_eq!(root, 2.0);
+    }
+
+    #[test]
     fn test_refinement_solve_unbracketed() {
         let result =
             Refinement::default().solve(2.4, 3.0, |x| Ok::<_, Infallible>((x.powi(3) - 8.0, None)));
