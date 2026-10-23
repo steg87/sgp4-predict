@@ -10,6 +10,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-23
+
 ### Changed
 
 - `Refinement::solve` returns the negative endpoint of its final bracket, rather than the endpoint
