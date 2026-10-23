@@ -11,6 +11,11 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Pass and area-of-interest listings whose time range is exactly one previously listed window
+  now show it once. It could be listed twice, or not at all.
+
 ## [0.3.0] - 2026-09-16
 
 ## [0.2.0] - 2026-08-24
