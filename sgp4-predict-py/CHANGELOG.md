@@ -11,6 +11,12 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Searching exactly a previously returned transit or area-of-interest window with
+  `transits_iter` or `aoi_iter` now finds that window once. It could come back twice, or not
+  at all.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added

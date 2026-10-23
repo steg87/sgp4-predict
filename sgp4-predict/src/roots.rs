@@ -57,23 +57,25 @@ impl Refinement {
     ///
     /// `f(x)` returns `(value, rate)`, where `rate` is the time derivative
     /// of the value when cheaply available; `f(a)` and `f(b)` must have
-    /// opposite signs. Returns a point within
-    /// [`time_tolerance`](Refinement::time_tolerance) of a sign change.
+    /// opposite signs, a zero counting as positive. Returns the final
+    /// bracket's negative endpoint, within
+    /// [`time_tolerance`](Refinement::time_tolerance) of the sign change, so
+    /// re-evaluating `f` at the result never lands on the positive side. If
+    /// `f` has no sign change but is exactly zero at `a` or `b`, returns that
+    /// endpoint.
     pub fn solve<F, E>(&self, a: f64, b: f64, mut f: F) -> std::result::Result<f64, Error>
     where
         F: FnMut(f64) -> std::result::Result<(f64, Option<f64>), E>,
         E: std::error::Error,
     {
         let (fa, _) = f(a).map_err(|e| Error::CostFn(e.to_string()))?;
-        if fa == 0.0 {
-            return Ok(a);
-        }
         let (fb, rb) = f(b).map_err(|e| Error::CostFn(e.to_string()))?;
-        if fb == 0.0 {
-            return Ok(b);
-        }
-        if (fa > 0.0) == (fb > 0.0) {
-            return Err(Error::Unbracketed);
+        if (fa < 0.0) == (fb < 0.0) {
+            return match (fa == 0.0, fb == 0.0) {
+                (true, _) => Ok(a),
+                (_, true) => Ok(b),
+                _ => Err(Error::Unbracketed),
+            };
         }
 
         // Normalise the bracket to lo < hi. The current iterate (x, fx, rx)
@@ -92,8 +94,7 @@ impl Refinement {
 
         for _ in 0..self.max_iter {
             if hi - lo < self.time_tolerance {
-                // Converged: return the bracket endpoint closest to the root.
-                return Ok(if flo.abs() <= fhi.abs() { lo } else { hi });
+                return Ok(if flo < 0.0 { lo } else { hi });
             }
 
             let mut candidate = None;
@@ -123,11 +124,7 @@ impl Refinement {
                 .clamp(lo + margin, hi - margin);
 
             let (fx_new, r_new) = f(x_new).map_err(|e| Error::CostFn(e.to_string()))?;
-            if fx_new == 0.0 {
-                return Ok(x_new);
-            }
-
-            let updates_lo = (fx_new > 0.0) == (flo > 0.0);
+            let updates_lo = (fx_new < 0.0) == (flo < 0.0);
             if updates_lo {
                 (lo, flo) = (x_new, fx_new);
             } else {
@@ -261,6 +258,23 @@ mod tests {
         let r = Refinement::default();
         let root = r
             .solve(2.0, 3.0, |x| Ok::<_, Infallible>((x - 2.0, None)))
+            .unwrap();
+        assert_eq!(root, 2.0);
+    }
+
+    #[test]
+    fn test_refinement_solve_returns_negative_endpoint() {
+        // The positive side is closer to zero, so a closest-endpoint rule
+        // would return a point where f is positive.
+        let f = |x: f64| Ok::<_, Infallible>((if x < 1.0 { -2.0 } else { 1.0 }, None));
+        let root = Refinement::default().solve(0.0, 3.0, f).unwrap();
+        assert!(f(root).unwrap().0 < 0.0, "{root}");
+    }
+
+    #[test]
+    fn test_refinement_solve_exact_zero_endpoint_b() {
+        let root = Refinement::default()
+            .solve(1.0, 2.0, |x| Ok::<_, Infallible>((2.0 - x, None)))
             .unwrap();
         assert_eq!(root, 2.0);
     }

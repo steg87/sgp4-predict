@@ -10,6 +10,18 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- `Refinement::solve` returns the negative endpoint of its final bracket, rather than the endpoint
+  closer to the root. Every refined event time can move by up to the refinement tolerance (1 ms by
+  default).
+
+### Fixed
+
+- Searching exactly a previously returned `Transit` or `AoiWindow` now finds that window once.
+  It could come back twice, or not at all. Transit and area-of-interest window boundaries now lie
+  just outside the window, by at most the refinement tolerance.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added

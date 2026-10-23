@@ -291,6 +291,11 @@ pub struct Crossing {
 /// f64-seconds domain (and the root back) and reshapes samples into
 /// `(value, rate)` pairs.
 ///
+/// The result is the bracket's negative endpoint, so a window boundary always
+/// re-samples as outside the window: an interval built from a returned window
+/// neither opens inside it (and skips it as a leading partial) nor ends inside
+/// it (and resolves it again).
+///
 /// Shared by every crossing refinement in this module.
 fn refine_crossing<F: EventFunction>(
     f: &mut F,
@@ -313,13 +318,9 @@ fn refine_crossing<F: EventFunction>(
 ///
 /// Returns `(refined, resume_from)`: `refined` is the precise crossing (or,
 /// if clamped, the clamp bound), suitable for reporting as a window
-/// boundary. `resume_from` is always an already-*sampled* point — `refined`
-/// itself is not, in general (its exact value only ever comes from bisecting
-/// down to a tolerance, not from an `EventFunction` evaluation) — so it must
-/// never be re-sampled to decide what lies past it: at the true crossing,
-/// sign is inherently ambiguous in floating point, and resuming a scan from
-/// an ambiguous point risks detecting the same crossing over and over,
-/// forever.
+/// boundary. `resume_from` is the first negative sample of the walk itself:
+/// resuming a scan from anywhere within tolerance of the crossing risks
+/// detecting the same crossing over and over, forever.
 ///
 /// If `clamp` is `Some(bound)` and the walk would step at or past `bound`
 /// before finding a negative sample, `bound` itself is sampled — there may
@@ -711,13 +712,11 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
         // the exact interval end.
         let s = self.f.sample(end)?;
         if s.value < 0.0 {
-            return Ok(
-                (!self.positive_only && last_boundary < end).then_some(Window {
-                    start: last_boundary,
-                    end,
-                    positive: false,
-                }),
-            );
+            return Ok((!self.positive_only).then_some(Window {
+                start: last_boundary,
+                end,
+                positive: false,
+            }));
         }
         self.resolve_window(end, false)
     }
@@ -1315,8 +1314,9 @@ mod tests {
 
         let windows: Vec<Window> = iter.map(|w| w.unwrap()).collect();
         assert_eq!(windows.len(), 1);
+        // Within one refinement tolerance, plus f64 epoch-seconds rounding.
         assert!(
-            secs(windows[0].start).abs() < 1e-3,
+            secs(windows[0].start).abs() < 1.001e-3,
             "expected true start ≈0 s, got {}",
             secs(windows[0].start)
         );
@@ -1360,6 +1360,38 @@ mod tests {
         // ISO-8601 `PT300S`, so it can be passed straight back in.
         let message = results[0].as_ref().unwrap_err().to_string();
         assert!(message.contains("5m"), "{message}");
+    }
+
+    #[test]
+    fn test_window_iter_round_trips_a_returned_window() {
+        // Positive on [100, 300), with asymmetric magnitudes so that a
+        // closest-to-zero endpoint would land inside the window at both ends.
+        // Searching exactly the returned window must find it once: not skip
+        // it as a leading partial, nor resolve it again at the end.
+        let windows = |interval: Range<DateTime<Utc>>| -> Vec<Window> {
+            WindowIter::builder()
+                .interval(interval)
+                .function(|t| {
+                    Ok(match secs(t) {
+                        x if x < 100.0 => -2.0,
+                        x if x < 300.0 => 1.0,
+                        _ => -1.0,
+                    })
+                })
+                .step(FixedStep(Duration::seconds(60)))
+                .refinement(Refinement {
+                    time_tolerance: 10.0,
+                    ..Refinement::default()
+                })
+                .build()
+                .unwrap()
+                .map(|w| w.unwrap())
+                .collect()
+        };
+        let found = windows(t0()..t0() + Duration::seconds(600));
+        assert_eq!(found.len(), 1, "{found:?}");
+        let again = windows(found[0].start..found[0].end);
+        assert_eq!(again.len(), 1, "{again:?}");
     }
 
     // --- detect_window ---
