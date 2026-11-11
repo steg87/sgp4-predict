@@ -1,7 +1,6 @@
 //! Generic event and window detection over scalar functions of time.
 //!
-//! The building blocks that power `ApsisIter`, `TransitIter`, `AoiIter` and
-//! `IlluminationIter`. The module is private; its items are re-exported at the
+//! The building blocks that power the crate's detection iterators. The module is private; its items are re-exported at the
 //! crate root when the `generics` Cargo feature is enabled, which is where the
 //! user-facing overview of them lives.
 

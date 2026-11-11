@@ -86,7 +86,10 @@ fn test_non_finite_argument_errors_once_and_ends() {
     let p = predictor();
     let start = common::datetime("2025-12-20T12:00:00Z");
     let mut it = p.arg_lat_iter(start..start + Duration::minutes(300), Degrees(f64::NAN));
-    assert!(matches!(it.next(), Some(Err(Error::NonFiniteArgument(_)))));
+    assert!(matches!(
+        it.next(),
+        Some(Err(Error::NonFiniteArgumentOfLatitude(_)))
+    ));
     assert!(it.next().is_none());
 }
 

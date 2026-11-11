@@ -65,9 +65,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`Predictor` also finds apsides (`apsis_iter`), sunlit and eclipse windows (`illumination_iter`) and
-area-of-interest overpasses (`aoi_iter`), and answers point queries such as `propagate`,
-`observe_at` and `sub_point`. Each detection method has a `_with_opts` sibling taking scan steps and
+`Predictor` also finds other events and windows through its `*_iter` methods, and answers point
+queries such as `propagate`, `observe_at` and `sub_point`. Each detection method has a `_with_opts` sibling taking scan steps and
 other tuning knobs, and `Predictor::with_refinement` configures the root finder that pins down event
 times. See the [`Predictor` docs](https://docs.rs/sgp4-predict/latest/sgp4_predict/struct.Predictor.html).
 

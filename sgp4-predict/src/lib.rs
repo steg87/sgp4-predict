@@ -71,7 +71,7 @@
 //!
 //! # Generic event detection
 //!
-//! Transits, apsides, illumination and area overpasses are all found the same
+//! Every detection iterator finds its events the same
 //! way: a scalar event function `f(t)` is sampled across the interval by a
 //! step strategy, a sign change between two samples brackets a crossing, and
 //! the crossing time is refined by a bracketed hybrid solver. The concrete
@@ -375,7 +375,7 @@ pub enum Error {
     Aoi(#[from] aoi::Error),
     /// An argument of latitude was NaN or infinite.
     #[error("argument of latitude is not finite: {0}")]
-    NonFiniteArgument(f64),
+    NonFiniteArgumentOfLatitude(f64),
     /// The orbit is equatorial, so the argument of latitude is undefined: it
     /// is measured from the ascending node, and there is none.
     #[error("equatorial orbit has no ascending node")]

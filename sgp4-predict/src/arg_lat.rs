@@ -83,7 +83,7 @@ impl EventFunction for ArgLatFn {
 /// Created by [`Predictor::arg_lat_iter`](crate::Predictor::arg_lat_iter).
 /// Scans in fixed steps (60 seconds by default) and refines each crossing
 /// with the bracketed hybrid solver. A non-finite argument yields a single
-/// [`Error::NonFiniteArgument`] and ends; an equatorial orbit, which has no
+/// [`Error::NonFiniteArgumentOfLatitude`] and ends; an equatorial orbit, which has no
 /// ascending node, yields [`Error::NoAscendingNode`] at every sample.
 #[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
@@ -106,6 +106,12 @@ impl ArgLatIter {
     ) -> Self {
         let u0 = argument.into().to_f64();
         let (sin_u0, cos_u0) = u0.sin_cos();
+        if !u0.is_finite() {
+            return Self {
+                inner: None,
+                rejected: Some(u0),
+            };
+        }
         let detector = CrossingDetector::new(
             ArgLatFn {
                 predictor,
@@ -115,12 +121,6 @@ impl ArgLatIter {
             FixedStep(opts.step.max(MIN_POSITIVE_STEP)),
             refinement,
         );
-        if !u0.is_finite() {
-            return Self {
-                inner: None,
-                rejected: Some(u0),
-            };
-        }
         Self {
             rejected: None,
             inner: Some(DetectIter::new(interval, detector)),
@@ -133,7 +133,7 @@ impl Iterator for ArgLatIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(value) = self.rejected.take() {
-            return Some(Err(Error::NonFiniteArgument(value)));
+            return Some(Err(Error::NonFiniteArgumentOfLatitude(value)));
         }
         let crossing = match self.inner.as_mut()?.next()? {
             Ok(crossing) => crossing,
@@ -163,7 +163,13 @@ impl Predictor {
     /// orbit.
     pub fn argument_of_latitude(&self, t: DateTime<Utc>) -> Result<Radians> {
         let (sin_u, cos_u) = self.sin_cos_argument_of_latitude(t)?;
-        Ok(Radians(sin_u.atan2(cos_u)).normalized())
+        let u = Radians(sin_u.atan2(cos_u)).normalized();
+        // `rem_euclid` can round a tiny negative angle up to exactly a full turn.
+        Ok(if u.0 >= std::f64::consts::TAU {
+            Radians(0.0)
+        } else {
+            u
+        })
     }
 
     fn sin_cos_argument_of_latitude(&self, t: DateTime<Utc>) -> Result<(f64, f64)> {

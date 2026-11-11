@@ -8,7 +8,7 @@ pub fn to_py_err(e: Error) -> PyErr {
         | Error::Tle(_)
         | Error::Elements(_)
         | Error::Interval(_)
-        | Error::NonFiniteArgument(_)
+        | Error::NonFiniteArgumentOfLatitude(_)
         | Error::NoAscendingNode
         // A rejected area is bad input, not a runtime failure.
         | Error::Aoi(_) => PyValueError::new_err(e.to_string()),
