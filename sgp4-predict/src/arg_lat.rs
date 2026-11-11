@@ -2,9 +2,8 @@
 //!
 //! [`ArgLatIter`] scans with a fixed step (60 seconds by default) for the
 //! moments the satellite reaches a given argument of latitude `u₀` — its
-//! angle from the ascending node, measured along the orbit — and the
-//! opposite point `u₀ + 180°`. With `u₀ = 0` those are the ascending and
-//! descending nodes. Like [`ApsisIter`](crate::ApsisIter), it is a thin
+//! angle from the ascending node, measured along the orbit. With `u₀ = 0`
+//! that is the ascending node. Like [`ApsisIter`](crate::ApsisIter), it is a thin
 //! wrapper over the generic [`EventIter`](crate::EventIter).
 
 use chrono::{DateTime, Duration, Utc};
@@ -13,8 +12,8 @@ use crate::{
     Error, Predictor, Result,
     angle::Radians,
     detect::{
-        CrossingDetector, DetectIter, Direction, EventFunction, EventIter, FixedStep,
-        MIN_POSITIVE_STEP, Sample,
+        CrossingDetector, DetectIter, EventFunction, EventIter, FixedStep, MIN_POSITIVE_STEP,
+        Sample,
     },
     roots::Refinement,
     time,
@@ -38,28 +37,11 @@ impl Default for ArgLatIterOpts {
     }
 }
 
-/// Which of the two argument-of-latitude points an event is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ArgLatEvent {
-    /// The satellite reaches the requested argument of latitude `u₀`.
-    Argument,
-    /// The satellite reaches the opposite point, `u₀ + 180°`.
-    Antipode,
-}
-
-/// A detected argument-of-latitude event with its refined time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ArgLatCrossing {
-    /// Time of the event.
-    pub time: DateTime<Utc>,
-    /// Whether this is `u₀` or `u₀ + 180°`.
-    pub event: ArgLatEvent,
-}
-
 /// Event function: `sin(u − u₀)`, where `u` is the osculating argument of
 /// latitude from the TEME state.
 ///
-/// `Direction::Rising` zero crossings are at `u₀`, `Falling` ones at `u₀ + 180°`.
+/// `Direction::Rising` zero crossings are at `u₀`; `Falling` ones, at
+/// `u₀ + 180°`, are ignored.
 #[derive(Debug, Clone)]
 pub(crate) struct ArgLatFn {
     predictor: Predictor,
@@ -120,7 +102,8 @@ impl ArgLatIter {
             },
             FixedStep(opts.step.max(MIN_POSITIVE_STEP)),
             refinement,
-        );
+        )
+        .ignore_falling_crossings();
         Self {
             rejected: None,
             inner: Some(DetectIter::new(interval, detector)),
@@ -129,7 +112,7 @@ impl ArgLatIter {
 }
 
 impl Iterator for ArgLatIter {
-    type Item = Result<ArgLatCrossing>;
+    type Item = Result<DateTime<Utc>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(value) = self.rejected.take() {
@@ -139,15 +122,8 @@ impl Iterator for ArgLatIter {
             Ok(crossing) => crossing,
             Err(e) => return Some(Err(e)),
         };
-        let event = match crossing.direction {
-            Direction::Rising => ArgLatEvent::Argument,
-            Direction::Falling => ArgLatEvent::Antipode,
-        };
-        tracing::debug!(?event, time = %crossing.time, "argument of latitude reached");
-        Some(Ok(ArgLatCrossing {
-            time: crossing.time,
-            event,
-        }))
+        tracing::debug!(time = %crossing.time, "argument of latitude reached");
+        Some(Ok(crossing.time))
     }
 }
 
@@ -195,14 +171,12 @@ impl Predictor {
         Ok((sin_u, cos_u))
     }
 
-    /// Detect the times the satellite reaches `argument` of latitude, and the
-    /// opposite point 180° round the orbit.
+    /// Detect the times the satellite reaches `argument` of latitude.
     ///
     /// The argument of latitude is the angle from the ascending node along the
-    /// orbit, so `Degrees(0.0)` yields the ascending ([`ArgLatEvent::Argument`])
-    /// and descending ([`ArgLatEvent::Antipode`]) nodes. It is not a geographic
-    /// latitude: `Degrees(30.0)` yields `u = 30°` and `u = 210°`, which lie in
-    /// opposite hemispheres.
+    /// orbit, so `Degrees(0.0)` yields the ascending node and `Degrees(180.0)`
+    /// the descending one. It is not a geographic latitude: `Degrees(30.0)`
+    /// and `Degrees(210.0)` lie in opposite hemispheres.
     pub fn arg_lat_iter(
         &self,
         interval: impl time::IntervalRange,

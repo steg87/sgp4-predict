@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sgp4_predict import (
     ApsisEvent,
-    ArgLatEvent,
     Classification,
     Elements,
     GeodeticPoint,
@@ -258,12 +257,12 @@ def test_apsis_iter_consecutive_alternate():
 # ── arg_lat_iter ──────────────────────────────────────────────────────────────
 
 
-def test_arg_lat_iter_nodes_alternate():
+def test_arg_lat_iter_yields_one_node_per_orbit():
     p = make_predictor()
-    events = list(p.arg_lat_iter(Interval(START, START + timedelta(hours=3)), 0.0))
-    assert {e.event for e in events} == {ArgLatEvent.Argument, ArgLatEvent.Antipode}
-    for a, b in itertools.pairwise(events):
-        assert a.event != b.event
+    times = list(p.arg_lat_iter(Interval(START, START + timedelta(hours=3)), 0.0))
+    assert len(times) >= 1
+    gaps = [(b - a).total_seconds() for a, b in itertools.pairwise(times)]
+    assert all(abs(g - 6035) < 300 for g in gaps)
 
 
 def test_arg_lat_iter_rejects_non_finite_argument():

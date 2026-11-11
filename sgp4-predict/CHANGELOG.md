@@ -10,6 +10,14 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `EventIterBuilder::ignore_falling_crossings` and `CrossingDetector::ignore_falling_crossings`: yield only rising crossings.
+
+### Changed
+
+- **Breaking:** `Predictor::arg_lat_iter` yields only the times the satellite reaches the requested argument, as `DateTime<Utc>`; `ArgLatEvent` and `ArgLatCrossing` are removed. For the opposite point, pass the argument plus 180°.
+
 ## [0.4.0] - 2026-11-11
 
 ### Changed

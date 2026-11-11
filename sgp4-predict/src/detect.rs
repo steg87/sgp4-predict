@@ -477,6 +477,7 @@ pub struct CrossingDetector<F, S> {
     f: F,
     step: S,
     refinement: Refinement,
+    ignore_falling: bool,
     /// The last sample time, and the sample if it was defined.
     prev: Option<(DateTime<Utc>, Option<Sample>)>,
 }
@@ -488,8 +489,16 @@ impl<F: EventFunction, S: StepStrategy> CrossingDetector<F, S> {
             f,
             step,
             refinement,
+            ignore_falling: false,
             prev: None,
         }
+    }
+
+    /// Skip [`Direction::Falling`] crossings: they are neither refined nor
+    /// yielded.
+    pub fn ignore_falling_crossings(mut self) -> Self {
+        self.ignore_falling = true;
+        self
     }
 
     /// Mutably access the root-finder configuration.
@@ -520,6 +529,10 @@ impl<F: EventFunction, S: StepStrategy> Detector for CrossingDetector<F, S> {
                 } else {
                     Direction::Falling
                 };
+                if self.ignore_falling && direction == Direction::Falling {
+                    self.prev = Some((t, s));
+                    return Ok(None);
+                }
                 refine_crossing(&mut self.f, &self.refinement, p_time, t)
                     .map(|time| Some(Crossing { time, direction }))
             }
@@ -794,6 +807,7 @@ pub struct EventIterBuilder<F = Missing, S = FixedStep> {
     function: F,
     step: S,
     refinement: Refinement,
+    ignore_falling: bool,
 }
 
 impl EventIterBuilder {
@@ -803,6 +817,7 @@ impl EventIterBuilder {
             function: Missing,
             step: FixedStep(Duration::seconds(60)),
             refinement: Refinement::default(),
+            ignore_falling: false,
         }
     }
 }
@@ -840,6 +855,7 @@ impl<F, S> EventIterBuilder<F, S> {
             function: f,
             step: self.step,
             refinement: self.refinement,
+            ignore_falling: self.ignore_falling,
         }
     }
 
@@ -854,6 +870,7 @@ impl<F, S> EventIterBuilder<F, S> {
             function: self.function,
             step,
             refinement: self.refinement,
+            ignore_falling: self.ignore_falling,
         }
     }
 
@@ -862,16 +879,22 @@ impl<F, S> EventIterBuilder<F, S> {
         self.refinement = refinement;
         self
     }
+
+    /// Yield only [`Direction::Rising`] crossings (default: both). Falling
+    /// crossings are skipped without being refined.
+    pub fn ignore_falling_crossings(mut self) -> Self {
+        self.ignore_falling = true;
+        self
+    }
 }
 
 impl<F: EventFunction, S: StepStrategy> EventIterBuilder<F, S> {
     /// Build the iterator. Errors if no interval was supplied.
     pub fn build(self) -> Result<EventIter<F, S>> {
         let interval = self.interval.ok_or_else(|| missing_interval("EventIter"))?;
-        Ok(DetectIter::new(
-            interval,
-            CrossingDetector::new(self.function, self.step, self.refinement),
-        ))
+        let mut detector = CrossingDetector::new(self.function, self.step, self.refinement);
+        detector.ignore_falling = self.ignore_falling;
+        Ok(DetectIter::new(interval, detector))
     }
 }
 
@@ -1140,6 +1163,23 @@ mod tests {
             );
             assert_eq!(crossing.direction, direction);
         }
+    }
+
+    #[test]
+    fn test_event_iter_ignore_falling_crossings() {
+        let iter = EventIter::builder()
+            .interval(t0()..t0() + Duration::seconds(1500))
+            .function(sine(600.0))
+            .step(FixedStep(Duration::seconds(60)))
+            .ignore_falling_crossings()
+            .build()
+            .unwrap();
+
+        let crossings: Vec<Crossing> = iter.map(|c| c.unwrap()).collect();
+        let times: Vec<f64> = crossings.iter().map(|c| secs(c.time)).collect();
+        assert_eq!(times.len(), 2);
+        assert!((times[0] - 600.0).abs() < 1e-3 && (times[1] - 1200.0).abs() < 1e-3);
+        assert!(crossings.iter().all(|c| c.direction == Direction::Rising));
     }
 
     #[test]

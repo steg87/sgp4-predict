@@ -31,8 +31,6 @@ __all__ = [
     "ApsisEvent",
     "ApsisIter",
     "Area",
-    "ArgLatCrossing",
-    "ArgLatEvent",
     "ArgLatIter",
     "Circle",
     "Classification",
