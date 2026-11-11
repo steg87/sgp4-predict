@@ -72,26 +72,7 @@ impl EventFunction for ArgLatFn {
         if !self.sin_u0.is_finite() || !self.cos_u0.is_finite() {
             return Err(Error::Custom("argument of latitude is not finite".into()));
         }
-        let s = self.predictor.propagate(t)?;
-        let (r, v) = (s.position, s.velocity);
-        let h = (
-            r.y * v.z - r.z * v.y,
-            r.z * v.x - r.x * v.z,
-            r.x * v.y - r.y * v.x,
-        );
-        // Ascending-node direction (ẑ × h) and the in-plane direction 90° ahead
-        // of it (h × n), both unnormalised.
-        let node_norm = h.0.hypot(h.1);
-        if node_norm < 1e-9 * (node_norm.hypot(h.2)) {
-            return Err(Error::Custom(
-                "equatorial orbit has no ascending node".into(),
-            ));
-        }
-        let n = (-h.1, h.0, 0.0);
-        let p = (-h.2 * h.0, -h.2 * h.1, node_norm * node_norm);
-        let h_norm = node_norm.hypot(h.2);
-        let cos_u = (r.x * n.0 + r.y * n.1 + r.z * n.2) / node_norm;
-        let sin_u = (r.x * p.0 + r.y * p.1 + r.z * p.2) / (h_norm * node_norm);
+        let (sin_u, cos_u) = self.predictor.sin_cos_argument_of_latitude(t)?;
         Ok(Sample {
             time: t,
             value: sin_u * self.cos_u0 - cos_u * self.sin_u0,
@@ -160,6 +141,41 @@ impl Iterator for ArgLatIter {
 }
 
 impl Predictor {
+    /// Osculating argument of latitude at `t`, in `[0, 360°)`: the angle from
+    /// the ascending node to the satellite, measured along the orbit.
+    ///
+    /// # Errors
+    /// Propagation errors, and [`Error::Custom`] for an equatorial orbit, which
+    /// has no ascending node.
+    pub fn argument_of_latitude(&self, t: DateTime<Utc>) -> Result<Radians> {
+        let (sin_u, cos_u) = self.sin_cos_argument_of_latitude(t)?;
+        Ok(Radians(sin_u.atan2(cos_u)).normalized())
+    }
+
+    fn sin_cos_argument_of_latitude(&self, t: DateTime<Utc>) -> Result<(f64, f64)> {
+        let s = self.propagate(t)?;
+        let (r, v) = (s.position, s.velocity);
+        let h = (
+            r.y * v.z - r.z * v.y,
+            r.z * v.x - r.x * v.z,
+            r.x * v.y - r.y * v.x,
+        );
+        // Ascending-node direction (ẑ × h) and the in-plane direction 90° ahead
+        // of it (h × n), both unnormalised.
+        let node_norm = h.0.hypot(h.1);
+        let h_norm = node_norm.hypot(h.2);
+        if node_norm < 1e-9 * h_norm {
+            return Err(Error::Custom(
+                "equatorial orbit has no ascending node".into(),
+            ));
+        }
+        let n = (-h.1, h.0, 0.0);
+        let p = (-h.2 * h.0, -h.2 * h.1, node_norm * node_norm);
+        let cos_u = (r.x * n.0 + r.y * n.1 + r.z * n.2) / node_norm;
+        let sin_u = (r.x * p.0 + r.y * p.1 + r.z * p.2) / (h_norm * node_norm);
+        Ok((sin_u, cos_u))
+    }
+
     /// Detect the times the satellite reaches `argument` of latitude, and the
     /// opposite point 180° round the orbit.
     ///

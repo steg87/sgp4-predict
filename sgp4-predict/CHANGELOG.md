@@ -13,6 +13,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 ### Added
 
 - `Predictor::arg_lat_iter`: events where the satellite reaches a given argument of latitude (and the point 180° round the orbit). `Degrees(0.0)` yields the orbit's nodes.
+- `Predictor::argument_of_latitude`: the osculating argument of latitude at a given time.
 
 ## [0.3.1] - 2026-10-23
 

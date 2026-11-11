@@ -3,29 +3,6 @@ mod common;
 use chrono::Duration;
 use sgp4_predict::{ArgLatEvent, Degrees, Predictor};
 
-/// Osculating argument of latitude in degrees, in [0, 360).
-fn argument_of_latitude(p: &Predictor, t: chrono::DateTime<chrono::Utc>) -> f64 {
-    let s = p.propagate(t).unwrap();
-    let (r, v) = (s.position, s.velocity);
-    let h = [
-        r.y * v.z - r.z * v.y,
-        r.z * v.x - r.x * v.z,
-        r.x * v.y - r.y * v.x,
-    ];
-    let n = [-h[1], h[0], 0.0];
-    let cross = [
-        h[1] * n[2] - h[2] * n[1],
-        h[2] * n[0] - h[0] * n[2],
-        h[0] * n[1] - h[1] * n[0],
-    ];
-    let dot = |a: [f64; 3]| r.x * a[0] + r.y * a[1] + r.z * a[2];
-    let norm = |a: [f64; 3]| a.iter().map(|x| x * x).sum::<f64>().sqrt();
-    let u = (dot(cross) / norm(cross))
-        .atan2(dot(n) / norm(n))
-        .to_degrees();
-    u.rem_euclid(360.0)
-}
-
 fn run(argument: f64) -> (Predictor, Vec<sgp4_predict::ArgLatCrossing>) {
     let p = Predictor::from_tle(common::create_tle()).unwrap();
     let start = common::datetime("2025-12-20T12:00:00Z");
@@ -50,18 +27,54 @@ fn test_nodes_alternate_and_lie_on_the_equator() {
     }
 }
 
+// Mean elements of `common::create_tle()`: inclination, argument of perigee
+// and mean anomaly (degrees), and mean motion (rev/day). With e ≈ 1e-4 the
+// mean argument of latitude at epoch is ω + M, advancing at the mean motion.
+// Osculating and mean values differ by a few tenths of a degree, so these
+// checks are independent of the vector algebra but only good to that scale.
+const INCLINATION: f64 = 98.5671;
+const U_EPOCH: f64 = (95.1447 + 264.9872) % 360.0;
+const DEG_PER_MIN: f64 = 14.308_213_94 * 360.0 / 1440.0;
+
 #[test]
-fn test_argument_events_hit_u0_and_opposite() {
+fn test_event_time_matches_mean_elements() {
+    let (p, _) = run(0.0);
+    let u0 = 100.0;
+    let first = p
+        .arg_lat_iter(p.epoch()..p.epoch() + Duration::minutes(60), Degrees(u0))
+        .next()
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.event, ArgLatEvent::Rising);
+    let expected = (u0 - U_EPOCH) / DEG_PER_MIN * 60.0;
+    let got = (first.time - p.epoch()).num_milliseconds() as f64 / 1e3;
+    assert!((got - expected).abs() < 30.0, "{got} s vs {expected} s");
+}
+
+#[test]
+fn test_latitude_at_events_follows_inclination() {
+    // sin(latitude) = sin(i)·sin(u): +φ at u₀, −φ at u₀ + 180°.
     let (p, events) = run(30.0);
     assert!(!events.is_empty());
+    let want = (INCLINATION.to_radians().sin() * 30f64.to_radians().sin()).asin();
     for e in &events {
+        let s = p.propagate(e.time).unwrap();
+        let r = (s.position.x.powi(2) + s.position.y.powi(2) + s.position.z.powi(2)).sqrt();
+        let lat = (s.position.z / r).asin().to_degrees();
         let want = match e.event {
-            ArgLatEvent::Rising => 30.0,
-            ArgLatEvent::Falling => 210.0,
+            ArgLatEvent::Rising => want.to_degrees(),
+            ArgLatEvent::Falling => -want.to_degrees(),
         };
-        let got = argument_of_latitude(&p, e.time);
-        assert!((got - want).abs() < 1e-4, "{:?}: u = {got}", e.event);
+        assert!((lat - want).abs() < 0.5, "{:?}: {lat}° vs {want}°", e.event);
     }
+}
+
+#[test]
+fn test_argument_of_latitude_at_epoch() {
+    let (p, _) = run(0.0);
+    let u = p.argument_of_latitude(p.epoch()).unwrap().degrees();
+    let diff = (u - U_EPOCH + 180.0).rem_euclid(360.0) - 180.0;
+    assert!(diff.abs() < 0.5, "u = {u}°");
 }
 
 #[test]
