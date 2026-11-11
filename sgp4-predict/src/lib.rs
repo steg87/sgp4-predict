@@ -111,7 +111,7 @@
 //!
 //! let crossings = EventIter::builder()
 //!     .interval(start..start + Duration::days(1))
-//!     .function(move |t| Ok(predictor.propagate(t)?.position.z))
+//!     .function(move |t| Ok(Some(predictor.propagate(t)?.position.z)))
 //!     .step(FixedStep(Duration::seconds(60)))
 //!     .build()
 //!     .unwrap();

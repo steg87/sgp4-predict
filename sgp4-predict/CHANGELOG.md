@@ -10,6 +10,14 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `EventFunction::sample` returns `Result<Option<Sample>>`, and the closures passed to
+  `function` and `function_with_rate` return `Result<Option<f64>>` and
+  `Result<Option<(f64, f64)>>`. `None` means the function has no value at that time and reads as
+  negative, so a window closes at the edge of the function's domain. Wrap existing results in
+  `Some`.
+
 ## [0.3.2] - 2026-11-11
 
 ### Added

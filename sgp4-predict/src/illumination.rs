@@ -109,12 +109,12 @@ pub(crate) struct ShadowFunction {
 }
 
 impl EventFunction for ShadowFunction {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
-        Ok(Sample {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
+        Ok(Some(Sample {
             time: t,
             value: shadow_value(&self.predictor, t)?,
             rate: None,
-        })
+        }))
     }
 }
 
