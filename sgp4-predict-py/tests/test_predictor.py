@@ -3,6 +3,7 @@
 Uses the canonical SENTINEL-2C TLE from tests/common/mod.rs.
 """
 
+import itertools
 import math
 from datetime import datetime, timedelta, timezone
 
@@ -261,7 +262,7 @@ def test_arg_lat_iter_nodes_alternate():
     p = make_predictor()
     events = list(p.arg_lat_iter(Interval(START, START + timedelta(hours=3)), 0.0))
     assert {e.event for e in events} == {ArgLatEvent.Rising, ArgLatEvent.Falling}
-    for a, b in zip(events, events[1:]):
+    for a, b in itertools.pairwise(events):
         assert a.event != b.event
 
 
