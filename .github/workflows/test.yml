@@ -87,10 +87,8 @@ jobs:
         # declaration stays the single source of truth. Without this a
         # dependency raising its own floor only surfaces in a user's report.
         #
-        # No --locked: Cargo.lock is deliberately not committed for a library
-        # workspace, so there is nothing to lock to. Resolving fresh is also
-        # the more honest check — it is what a user installing on the declared
-        # MSRV actually gets, and the MSRV-aware resolver picks accordingly.
+        # Checked against the committed Cargo.lock, so a dependency update that
+        # raises its own floor fails here, in the PR that introduces it.
         run: |
           cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.rust_version) | "\(.name) \(.rust_version)"' \

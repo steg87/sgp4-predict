@@ -1,0 +1,26 @@
+name: Latest dependencies
+
+# Cargo.lock is committed, so CI no longer sees what a downstream user
+# resolving fresh would get. This does.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # weekly on Monday at 06:00 UTC
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test with latest dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - run: cargo update
+      - run: cargo test --all-targets --all-features
+      - run: cargo test --doc --all-features
