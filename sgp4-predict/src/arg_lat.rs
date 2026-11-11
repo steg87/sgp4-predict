@@ -68,13 +68,13 @@ pub(crate) struct ArgLatFn {
 }
 
 impl EventFunction for ArgLatFn {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
         let (sin_u, cos_u) = self.predictor.sin_cos_argument_of_latitude(t)?;
-        Ok(Sample {
+        Ok(Some(Sample {
             time: t,
             value: sin_u * self.cos_u0 - cos_u * self.sin_u0,
             rate: None,
-        })
+        }))
     }
 }
 

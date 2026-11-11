@@ -67,12 +67,12 @@ pub(crate) struct RadialVelocity {
 }
 
 impl EventFunction for RadialVelocity {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
-        Ok(Sample {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
+        Ok(Some(Sample {
             time: t,
             value: self.predictor.propagate(t)?.radial_velocity(),
             rate: None,
-        })
+        }))
     }
 }
 
