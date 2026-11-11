@@ -3,12 +3,14 @@
 Uses the canonical SENTINEL-2C TLE from tests/common/mod.rs.
 """
 
+import itertools
 import math
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from sgp4_predict import (
     ApsisEvent,
+    ArgLatEvent,
     Classification,
     Elements,
     GeodeticPoint,
@@ -251,6 +253,31 @@ def test_apsis_iter_consecutive_alternate():
     apsides = list(p.apsis_iter(Interval(START, START + timedelta(hours=3))))
     for i in range(len(apsides) - 1):
         assert apsides[i].event != apsides[i + 1].event
+
+
+# ── arg_lat_iter ──────────────────────────────────────────────────────────────
+
+
+def test_arg_lat_iter_nodes_alternate():
+    p = make_predictor()
+    events = list(p.arg_lat_iter(Interval(START, START + timedelta(hours=3)), 0.0))
+    assert {e.event for e in events} == {ArgLatEvent.Argument, ArgLatEvent.Antipode}
+    for a, b in itertools.pairwise(events):
+        assert a.event != b.event
+
+
+def test_arg_lat_iter_rejects_non_finite_argument():
+    p = make_predictor()
+    with pytest.raises(ValueError):
+        p.arg_lat_iter(Interval(START, START + timedelta(hours=3)), float("nan"))
+
+
+def test_argument_of_latitude_deg_matches_mean_elements():
+    """At epoch the mean argument of latitude is omega + M (TLE: 95.1447 + 264.9872)."""
+    p = make_predictor()
+    u = p.argument_of_latitude_deg(p.epoch)
+    assert 0.0 <= u < 360.0
+    assert abs((u - 0.1319 + 180.0) % 360.0 - 180.0) < 0.5
 
 
 # ── illumination_iter ─────────────────────────────────────────────────────────

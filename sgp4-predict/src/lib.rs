@@ -71,7 +71,7 @@
 //!
 //! # Generic event detection
 //!
-//! Transits, apsides, illumination and area overpasses are all found the same
+//! Every detection iterator finds its events the same
 //! way: a scalar event function `f(t)` is sampled across the interval by a
 //! step strategy, a sign change between two samples brackets a crossing, and
 //! the crossing time is refined by a bracketed hybrid solver. The concrete
@@ -135,6 +135,7 @@ struct Readme;
 mod angle;
 mod aoi;
 mod apsides;
+mod arg_lat;
 mod detect;
 mod fallible;
 mod frames;
@@ -160,6 +161,7 @@ pub use crate::{
         Polygon, Rectangle,
     },
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
+    arg_lat::{ArgLatCrossing, ArgLatEvent, ArgLatIter, ArgLatIterOpts},
     detect::Error as DetectError,
     fallible::{FallibleIter, OnError, Tolerate},
     frames::{EcefState, EnuState, GeodeticPoint, LatLon, LvlhDirection, LvlhState, TemeState},
@@ -371,6 +373,13 @@ pub enum Error {
     /// An [`Area`] could not be constructed from the given geometry.
     #[error("Area of interest error: {0}")]
     Aoi(#[from] aoi::Error),
+    /// An argument of latitude was NaN or infinite.
+    #[error("argument of latitude is not finite: {0}")]
+    NonFiniteArgumentOfLatitude(f64),
+    /// The orbit is equatorial, so the argument of latitude is undefined: it
+    /// is measured from the ascending node, and there is none.
+    #[error("equatorial orbit has no ascending node")]
+    NoAscendingNode,
     /// Escape hatch for custom `EventFunction` implementations (`generics`
     /// feature) whose failures don't fit another variant.
     #[error("{0}")]
