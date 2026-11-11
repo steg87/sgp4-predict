@@ -213,6 +213,23 @@ mod tests {
     }
 
     #[test]
+    fn test_refinement_solve_bisects_to_an_infinite_endpoint() {
+        // Undefined (-inf) below x = 2: the secant step is NaN, so the solver
+        // bisects to the edge where the value becomes defined.
+        let r = Refinement::default();
+        let root = r
+            .solve(0.0, 5.0, |x| {
+                Ok::<_, Infallible>(if x < 2.0 {
+                    (f64::NEG_INFINITY, None)
+                } else {
+                    (1.0, None)
+                })
+            })
+            .unwrap();
+        assert!((root - 2.0).abs() < r.time_tolerance);
+    }
+
+    #[test]
     fn test_refinement_solve_intermittent_rate() {
         // The rate is only available on every other evaluation; each
         // iteration must adapt to what the sample actually carries.

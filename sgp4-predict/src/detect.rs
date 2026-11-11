@@ -39,7 +39,9 @@ pub struct Sample {
 ///
 /// `sample` returns `None` where the function has no value at `t`; that reads
 /// as a negative value, so a positive window ends at the edge of the
-/// function's domain. An adaptive [`StepStrategy`] has no rate to go on there,
+/// function's domain. An [`EventIter`] likewise reports a [`Crossing`] where an
+/// undefined stretch borders a positive sample, and none against a negative
+/// one. An adaptive [`StepStrategy`] has no rate to go on there,
 /// so [`ThresholdStep`] takes its largest step; use [`FixedStep`] if the
 /// defined region can be shorter than that.
 ///
@@ -102,8 +104,9 @@ pub trait StepStrategy {
     /// Return the next sample time after `current`.
     ///
     /// `sample` is the function evaluation taken at `current`, when that
-    /// evaluation succeeded; strategies must still advance when it is `None`
-    /// (e.g. after an evaluation error) so iteration cannot stall.
+    /// evaluation succeeded and the function was defined there; strategies must
+    /// still advance when it is `None` (an evaluation error, or an undefined
+    /// stretch that may last many steps) so iteration cannot stall.
     fn next_time(&mut self, current: DateTime<Utc>, sample: Option<&Sample>) -> DateTime<Utc>;
 }
 
@@ -275,9 +278,9 @@ impl<D: Detector> Iterator for DetectIter<D> {
 /// The direction of a zero crossing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
-    /// The function value went from negative to positive.
+    /// The function value went from negative (or undefined) to positive.
     Rising,
-    /// The function value went from positive to negative.
+    /// The function value went from positive to negative (or undefined).
     Falling,
 }
 
@@ -1513,6 +1516,25 @@ mod tests {
         assert_eq!(bounds.len(), 2, "{bounds:?}");
         assert!((bounds[0].0 - 100.0).abs() < 0.01 && (bounds[0].1 - 300.0).abs() < 0.01);
         assert!((bounds[1].0 - 600.0).abs() < 0.01 && (bounds[1].1 - 900.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_event_iter_reports_no_crossing_between_negative_and_undefined() {
+        // sine is negative at the domain's end, so leaving it is not an edge.
+        let found: Vec<_> = EventIter::builder()
+            .interval(t0()..t0() + Duration::seconds(1500))
+            .event_function(Gated {
+                from: 100.0,
+                to: 1000.0,
+            })
+            .step(FixedStep(Duration::seconds(60)))
+            .build()
+            .unwrap()
+            .map(|c| secs(c.unwrap().time))
+            .collect();
+
+        assert_eq!(found.len(), 4, "{found:?}");
+        assert!(found.iter().all(|&t| t < 950.0), "{found:?}");
     }
 
     #[test]
