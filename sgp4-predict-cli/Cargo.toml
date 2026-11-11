@@ -15,21 +15,21 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-sgp4-predict       = { path = "../sgp4-predict", version = "0.4.0" }
-clap               = { version = "4", features = ["derive"] }
-anyhow             = "1"
-humantime          = { workspace = true }
-chrono             = { workspace = true }
-tracing            = { workspace = true }
+sgp4-predict = { path = "../sgp4-predict", version = "0.4.0" }
+anyhow = "1"
+chrono = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+clap_mangen = "0.3"
+dirs = "7"
+humantime = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-serde              = { workspace = true }
-serde_yaml         = { workspace = true }
-dirs               = "7"
-clap_complete      = "4"
-clap_mangen        = "0.3"
 
 [dev-dependencies]
-assert_approx_eq   = "1.1"
+assert_approx_eq = "1.1"
 
 [lints]
 workspace = true
