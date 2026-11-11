@@ -10,6 +10,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
 ### Changed
 
 - **Breaking:** `EventFunction::sample` returns `Result<Option<Sample>>`, and the closures passed to
