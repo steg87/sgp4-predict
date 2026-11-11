@@ -11,6 +11,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-11
+
 ### Added
 
 - `Predictor.arg_lat_iter`: events where the satellite reaches a given argument of latitude (and the point 180° round the orbit). `0.0` yields the orbit's nodes.
