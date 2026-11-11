@@ -10,6 +10,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-11
+
 ### Added
 
 - `EventIterBuilder::ignore_falling_crossings` and `CrossingDetector::ignore_falling_crossings`: yield only rising crossings.
