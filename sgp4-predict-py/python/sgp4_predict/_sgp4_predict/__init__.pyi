@@ -776,10 +776,11 @@ class Predictor:
         Iterate over the times the satellite reaches an argument of latitude.
         
         `argument_deg` is the angle from the ascending node along the orbit, so
-        `0.0` yields the ascending (`Rising`) and descending (`Falling`) nodes.
+        `0.0` yields the ascending (`Argument`) and descending (`Antipode`) nodes.
         Events are at `argument_deg` and `argument_deg + 180`. `interval` must
         expose `.start` and `.end` datetime properties; `step` is the coarse
-        scan step, defaulting to the library's own value.
+        scan step, defaulting to the library's own value. Raises `ValueError`
+        for a non-finite `argument_deg`.
         """
     def illumination_iter(self, interval: sgp4_predict.IntervalRange, *, step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None) -> IlluminationIter:
         r"""
@@ -1107,11 +1108,11 @@ class ArgLatEvent(enum.Enum):
     r"""
     Which of the two argument-of-latitude points an event is.
     """
-    Rising = ...
+    Argument = ...
     r"""
     The satellite reaches the requested argument of latitude.
     """
-    Falling = ...
+    Antipode = ...
     r"""
     The satellite reaches the opposite point, 180° round the orbit.
     """

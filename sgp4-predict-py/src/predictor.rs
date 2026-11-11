@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use ouroboros::self_referencing;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::{
@@ -184,8 +185,8 @@ impl ArgLatIter {
             Some(Ok(c)) => Ok(Some(ArgLatCrossing {
                 time: c.time,
                 event: match c.event {
-                    sgp4_predict::ArgLatEvent::Rising => ArgLatEvent::Rising,
-                    sgp4_predict::ArgLatEvent::Falling => ArgLatEvent::Falling,
+                    sgp4_predict::ArgLatEvent::Argument => ArgLatEvent::Argument,
+                    sgp4_predict::ArgLatEvent::Antipode => ArgLatEvent::Antipode,
                 },
             })),
             Some(Err(e)) => Err(to_py_err(e)),
@@ -764,10 +765,11 @@ impl Predictor {
     /// Iterate over the times the satellite reaches an argument of latitude.
     ///
     /// `argument_deg` is the angle from the ascending node along the orbit, so
-    /// `0.0` yields the ascending (`Rising`) and descending (`Falling`) nodes.
+    /// `0.0` yields the ascending (`Argument`) and descending (`Antipode`) nodes.
     /// Events are at `argument_deg` and `argument_deg + 180`. `interval` must
     /// expose `.start` and `.end` datetime properties; `step` is the coarse
-    /// scan step, defaulting to the library's own value.
+    /// scan step, defaulting to the library's own value. Raises `ValueError`
+    /// for a non-finite `argument_deg`.
     #[pyo3(signature = (interval, argument_deg, *, step = None))]
     fn arg_lat_iter(
         &self,
@@ -776,6 +778,11 @@ impl Predictor {
         step: Option<Duration>,
     ) -> PyResult<ArgLatIter> {
         let IntervalArg { start, end } = interval;
+        if !argument_deg.is_finite() {
+            return Err(PyValueError::new_err(format!(
+                "argument_deg is not finite: {argument_deg}"
+            )));
+        }
         Ok(ArgLatIter {
             inner: self.inner.arg_lat_iter_with_opts(
                 start..end,

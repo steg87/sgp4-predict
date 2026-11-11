@@ -373,6 +373,13 @@ pub enum Error {
     /// An [`Area`] could not be constructed from the given geometry.
     #[error("Area of interest error: {0}")]
     Aoi(#[from] aoi::Error),
+    /// An argument of latitude was NaN or infinite.
+    #[error("argument of latitude is not finite: {0}")]
+    NonFiniteArgument(f64),
+    /// The orbit is equatorial, so the argument of latitude is undefined: it
+    /// is measured from the ascending node, and there is none.
+    #[error("equatorial orbit has no ascending node")]
+    NoAscendingNode,
     /// Escape hatch for custom `EventFunction` implementations (`generics`
     /// feature) whose failures don't fit another variant.
     #[error("{0}")]

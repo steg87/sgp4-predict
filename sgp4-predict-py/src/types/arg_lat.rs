@@ -15,9 +15,9 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_py
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ArgLatEvent {
     /// The satellite reaches the requested argument of latitude.
-    Rising,
+    Argument,
     /// The satellite reaches the opposite point, 180° round the orbit.
-    Falling,
+    Antipode,
 }
 
 /// A detected argument-of-latitude event with its refined time.

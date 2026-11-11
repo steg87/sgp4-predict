@@ -42,9 +42,9 @@ impl Default for ArgLatIterOpts {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArgLatEvent {
     /// The satellite reaches the requested argument of latitude `u₀`.
-    Rising,
+    Argument,
     /// The satellite reaches the opposite point, `u₀ + 180°`.
-    Falling,
+    Antipode,
 }
 
 /// A detected argument-of-latitude event with its refined time.
@@ -59,7 +59,7 @@ pub struct ArgLatCrossing {
 /// Event function: `sin(u − u₀)`, where `u` is the osculating argument of
 /// latitude from the TEME state.
 ///
-/// Rising zero crossings are at `u₀`, falling ones at `u₀ + 180°`.
+/// `Direction::Rising` zero crossings are at `u₀`, `Falling` ones at `u₀ + 180°`.
 #[derive(Debug, Clone)]
 pub(crate) struct ArgLatFn {
     predictor: Predictor,
@@ -69,9 +69,6 @@ pub(crate) struct ArgLatFn {
 
 impl EventFunction for ArgLatFn {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
-        if !self.sin_u0.is_finite() || !self.cos_u0.is_finite() {
-            return Err(Error::Custom("argument of latitude is not finite".into()));
-        }
         let (sin_u, cos_u) = self.predictor.sin_cos_argument_of_latitude(t)?;
         Ok(Sample {
             time: t,
@@ -85,12 +82,15 @@ impl EventFunction for ArgLatFn {
 ///
 /// Created by [`Predictor::arg_lat_iter`](crate::Predictor::arg_lat_iter).
 /// Scans in fixed steps (60 seconds by default) and refines each crossing
-/// with the bracketed hybrid solver. Yields an error on every sample for a
-/// non-finite argument or an equatorial orbit, which has no ascending node.
+/// with the bracketed hybrid solver. A non-finite argument yields a single
+/// [`Error::NonFiniteArgument`] and ends; an equatorial orbit, which has no
+/// ascending node, yields [`Error::NoAscendingNode`] at every sample.
 #[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ArgLatIter {
-    inner: EventIter<ArgLatFn, FixedStep>,
+    // `None` once the argument has been rejected.
+    inner: Option<EventIter<ArgLatFn, FixedStep>>,
+    rejected: Option<f64>,
 }
 
 impl ArgLatIter {
@@ -104,7 +104,8 @@ impl ArgLatIter {
         opts: ArgLatIterOpts,
         refinement: Refinement,
     ) -> Self {
-        let (sin_u0, cos_u0) = argument.into().to_f64().sin_cos();
+        let u0 = argument.into().to_f64();
+        let (sin_u0, cos_u0) = u0.sin_cos();
         let detector = CrossingDetector::new(
             ArgLatFn {
                 predictor,
@@ -114,8 +115,15 @@ impl ArgLatIter {
             FixedStep(opts.step.max(MIN_POSITIVE_STEP)),
             refinement,
         );
+        if !u0.is_finite() {
+            return Self {
+                inner: None,
+                rejected: Some(u0),
+            };
+        }
         Self {
-            inner: DetectIter::new(interval, detector),
+            rejected: None,
+            inner: Some(DetectIter::new(interval, detector)),
         }
     }
 }
@@ -124,13 +132,16 @@ impl Iterator for ArgLatIter {
     type Item = Result<ArgLatCrossing>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let crossing = match self.inner.next()? {
+        if let Some(value) = self.rejected.take() {
+            return Some(Err(Error::NonFiniteArgument(value)));
+        }
+        let crossing = match self.inner.as_mut()?.next()? {
             Ok(crossing) => crossing,
             Err(e) => return Some(Err(e)),
         };
         let event = match crossing.direction {
-            Direction::Rising => ArgLatEvent::Rising,
-            Direction::Falling => ArgLatEvent::Falling,
+            Direction::Rising => ArgLatEvent::Argument,
+            Direction::Falling => ArgLatEvent::Antipode,
         };
         tracing::debug!(?event, time = %crossing.time, "argument of latitude reached");
         Some(Ok(ArgLatCrossing {
@@ -144,9 +155,12 @@ impl Predictor {
     /// Osculating argument of latitude at `t`, in `[0, 360°)`: the angle from
     /// the ascending node to the satellite, measured along the orbit.
     ///
+    /// The node is poorly conditioned as the inclination approaches zero, so
+    /// the value is noisy for near-equatorial orbits.
+    ///
     /// # Errors
-    /// Propagation errors, and [`Error::Custom`] for an equatorial orbit, which
-    /// has no ascending node.
+    /// Propagation errors, and [`Error::NoAscendingNode`] for an equatorial
+    /// orbit.
     pub fn argument_of_latitude(&self, t: DateTime<Utc>) -> Result<Radians> {
         let (sin_u, cos_u) = self.sin_cos_argument_of_latitude(t)?;
         Ok(Radians(sin_u.atan2(cos_u)).normalized())
@@ -165,14 +179,13 @@ impl Predictor {
         let node_norm = h.0.hypot(h.1);
         let h_norm = node_norm.hypot(h.2);
         if node_norm < 1e-9 * h_norm {
-            return Err(Error::Custom(
-                "equatorial orbit has no ascending node".into(),
-            ));
+            return Err(Error::NoAscendingNode);
         }
         let n = (-h.1, h.0, 0.0);
         let p = (-h.2 * h.0, -h.2 * h.1, node_norm * node_norm);
-        let cos_u = (r.x * n.0 + r.y * n.1 + r.z * n.2) / node_norm;
-        let sin_u = (r.x * p.0 + r.y * p.1 + r.z * p.2) / (h_norm * node_norm);
+        let r_norm = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt();
+        let cos_u = (r.x * n.0 + r.y * n.1 + r.z * n.2) / (node_norm * r_norm);
+        let sin_u = (r.x * p.0 + r.y * p.1 + r.z * p.2) / (h_norm * node_norm * r_norm);
         Ok((sin_u, cos_u))
     }
 
@@ -180,8 +193,8 @@ impl Predictor {
     /// opposite point 180° round the orbit.
     ///
     /// The argument of latitude is the angle from the ascending node along the
-    /// orbit, so `Degrees(0.0)` yields the ascending ([`ArgLatEvent::Rising`])
-    /// and descending ([`ArgLatEvent::Falling`]) nodes. It is not a geographic
+    /// orbit, so `Degrees(0.0)` yields the ascending ([`ArgLatEvent::Argument`])
+    /// and descending ([`ArgLatEvent::Antipode`]) nodes. It is not a geographic
     /// latitude: `Degrees(30.0)` yields `u = 30°` and `u = 210°`, which lie in
     /// opposite hemispheres.
     pub fn arg_lat_iter(

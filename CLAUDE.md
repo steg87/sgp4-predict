@@ -39,7 +39,7 @@ indistinguishable from "no passes this week", a silent no-op in scheduling code.
 knows which it can tolerate. Dropping `Result` is also a one-way door: an adapter is additive at any
 time, error reporting cannot be added back.
 
-`FallibleIter` is a blanket impl over `Iterator<Item = Result<T>>`, so all eight fallible iterators
+`FallibleIter` is a blanket impl over `Iterator<Item = Result<T>>`, so all nine fallible iterators
 gain it including the lifetime-parameterised ones, with no existing signature changed.
 
 - **`Tolerate` counts _consecutive_ errors, resetting the run on any `Ok`.** This is the
@@ -59,7 +59,7 @@ Deliberately absent: an `inspect_errors` that would let `log_errors` and `tolera
 
 ### Generic detection (`detect.rs`, opt-in `generics` feature)
 
-`detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) powers `ApsisIter`, `TransitIter` and `IlluminationIter` internally, so the module always compiles — but its crate-root re-exports are gated behind the off-by-default `generics` feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
+`detect.rs` (`EventIter`, `WindowIter`, `Detector`, `StepStrategy`, ...) powers `ApsisIter`, `ArgLatIter`, `TransitIter` and `IlluminationIter` internally, so the module always compiles — but its crate-root re-exports are gated behind the off-by-default `generics` feature to keep the everyday API surface small. `DetectError` stays exported unconditionally because `TransitIter` can surface it (`Error::Detect(WindowTooLong)`). `tests/detect.rs` is gated with `#![cfg(feature = "generics")]`; `make test` and `make lint` use `--all-features` so the gated code stays covered.
 
 ### Locations: `GeodeticPoint` and `Into`, not a trait
 
@@ -100,6 +100,16 @@ Deliberately absent: a `pointing_iter`. It would be `ObservationIter` with one l
 ### Apsis detection (`apsides.rs`)
 
 `ApsisIter` monitors the sign of the radial velocity `r · v` in TEME at a fixed step (60 s by default, see `ApsisIterOpts`). A sign change brackets an event: positive→negative is apogee, negative→positive is perigee. Brent's method refines the crossing time — no derivative needed, since the bracket is already known.
+
+### Argument-of-latitude detection (`arg_lat.rs`)
+
+`ArgLatIter` finds when the satellite reaches an argument of latitude `u₀` (`ArgLatEvent::Argument`) and `u₀ + 180°` (`Antipode`). The event function is `sin(u − u₀)`, built from the osculating TEME state (`ĥ = r×v`, node `n = ẑ×ĥ`, in-plane `p = ĥ×n`). It is continuous, so there is no 0/360° wrap to bracket across, which `u − u₀` would have. `u` always advances in the direction of motion because it is built from `h = r×v`, so `sin(u − u₀)` rises through zero at `u₀` and falls at `u₀ + 180°` for prograde and retrograde orbits alike.
+
+The variants are named for what is reached, not `Rising`/`Falling`: it is `sin(u − u₀)` that rises, not latitude, which falls after the apex when `u₀` is outside (−90°, 90°). `u₀ + 180°` is the opposite point of the orbit, *not* the same latitude on the other side; a request for latitude crossings is a different event function (`z/r − sin φ₀`).
+
+An equatorial orbit has no node, so `Error::NoAscendingNode`; a non-finite argument is `Error::NonFiniteArgument`, yielded once and then the iterator ends rather than failing at every sample (which `skip_errors` would turn into a silent empty iterator). Neither uses `Error::Custom`, which is reserved for user `EventFunction`s. `Radians` is returned and `impl Into<Radians>` taken, as elsewhere.
+
+Tests validate against the TLE's mean elements (`ω + M` advancing at the mean motion) and `sin φ = sin i · sin u`, not against the algebra under test; they are good to a few tenths of a degree (mean vs osculating).
 
 ### Transit detection (`transits.rs`)
 
