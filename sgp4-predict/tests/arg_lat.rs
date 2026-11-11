@@ -1,13 +1,14 @@
 mod common;
 
 use chrono::Duration;
-use sgp4_predict::{ArgLatEvent, Degrees, Elements, Error, Predictor, TleRecord};
+use chrono::{DateTime, Utc};
+use sgp4_predict::{Degrees, Elements, Error, Predictor, TleRecord};
 
 fn predictor() -> Predictor {
     Predictor::from_tle(common::create_tle()).unwrap()
 }
 
-fn run(argument: f64) -> (Predictor, Vec<sgp4_predict::ArgLatCrossing>) {
+fn run(argument: f64) -> (Predictor, Vec<DateTime<Utc>>) {
     let p = predictor();
     let start = common::datetime("2025-12-20T12:00:00Z");
     let events = p
@@ -18,16 +19,13 @@ fn run(argument: f64) -> (Predictor, Vec<sgp4_predict::ArgLatCrossing>) {
 }
 
 #[test]
-fn test_nodes_alternate_and_lie_on_the_equator() {
+fn test_ascending_nodes_lie_on_the_equator() {
     let (p, events) = run(0.0);
-    assert!(events.len() >= 5, "expected ~6 nodes in 300 min");
-    for pair in events.windows(2) {
-        assert_ne!(pair[0].event, pair[1].event);
-    }
-    for e in &events {
-        let s = p.propagate(e.time).unwrap();
+    assert!(events.len() >= 2, "expected ~3 ascending nodes in 300 min");
+    for &t in &events {
+        let s = p.propagate(t).unwrap();
         assert!(s.position.z.abs() < 50.0, "z = {} m", s.position.z);
-        assert_eq!(e.event == ArgLatEvent::Argument, s.velocity.z > 0.0);
+        assert!(s.velocity.z > 0.0);
     }
 }
 
@@ -49,27 +47,24 @@ fn test_event_time_matches_mean_elements() {
         .next()
         .unwrap()
         .unwrap();
-    assert_eq!(first.event, ArgLatEvent::Argument);
     let expected = (u0 - U_EPOCH) / DEG_PER_MIN * 60.0;
-    let got = (first.time - p.epoch()).num_milliseconds() as f64 / 1e3;
+    let got = (first - p.epoch()).num_milliseconds() as f64 / 1e3;
     assert!((got - expected).abs() < 30.0, "{got} s vs {expected} s");
 }
 
 #[test]
 fn test_latitude_at_events_follows_inclination() {
-    // sin(latitude) = sin(i)·sin(u): +φ at u₀, −φ at u₀ + 180°.
+    // sin(latitude) = sin(i)·sin(u)
     let (p, events) = run(30.0);
     assert!(!events.is_empty());
-    let want = (INCLINATION.to_radians().sin() * 30f64.to_radians().sin()).asin();
-    for e in &events {
-        let s = p.propagate(e.time).unwrap();
+    let want = (INCLINATION.to_radians().sin() * 30f64.to_radians().sin())
+        .asin()
+        .to_degrees();
+    for &t in &events {
+        let s = p.propagate(t).unwrap();
         let r = (s.position.x.powi(2) + s.position.y.powi(2) + s.position.z.powi(2)).sqrt();
         let lat = (s.position.z / r).asin().to_degrees();
-        let want = match e.event {
-            ArgLatEvent::Argument => want.to_degrees(),
-            ArgLatEvent::Antipode => -want.to_degrees(),
-        };
-        assert!((lat - want).abs() < 0.5, "{:?}: {lat}° vs {want}°", e.event);
+        assert!((lat - want).abs() < 0.5, "{lat}° vs {want}°");
     }
 }
 

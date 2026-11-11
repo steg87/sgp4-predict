@@ -11,6 +11,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Predictor.arg_lat_iter` yields only the times the satellite reaches the requested argument, as `datetime`; `ArgLatEvent` and `ArgLatCrossing` are removed. For the opposite point, pass the argument plus 180.
+
 ## [0.4.0] - 2026-11-11
 
 ## [0.3.2] - 2026-11-11

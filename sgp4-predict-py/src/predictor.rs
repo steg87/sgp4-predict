@@ -15,8 +15,8 @@ use crate::{
     errors::to_py_err,
     tle::Tle,
     types::{
-        AoiWindow, Apsis, ApsisEvent, ArgLatCrossing, ArgLatEvent, Illumination, IlluminationState,
-        Observation, Pointing, Transit,
+        AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Pointing,
+        Transit,
     },
     vectors::StateVectorTeme,
 };
@@ -163,7 +163,7 @@ impl ApsisIter {
 
 // ── ArgLatIter ─────────────────────────────────────────────────────────────────
 
-/// Lazy iterator yielding argument-of-latitude events within a time interval.
+/// Lazy iterator yielding the times the satellite reaches an argument of latitude within a time interval.
 #[gen_stub_pyclass]
 #[pyclass(module = "sgp4_predict._sgp4_predict")]
 #[derive(Debug)]
@@ -178,19 +178,9 @@ impl ArgLatIter {
         slf
     }
 
-    #[gen_stub(override_return_type(type_repr = "ArgLatCrossing"))]
-    fn __next__(&mut self) -> PyResult<Option<ArgLatCrossing>> {
-        match self.inner.next() {
-            None => Ok(None),
-            Some(Ok(c)) => Ok(Some(ArgLatCrossing {
-                time: c.time,
-                event: match c.event {
-                    sgp4_predict::ArgLatEvent::Argument => ArgLatEvent::Argument,
-                    sgp4_predict::ArgLatEvent::Antipode => ArgLatEvent::Antipode,
-                },
-            })),
-            Some(Err(e)) => Err(to_py_err(e)),
-        }
+    #[gen_stub(override_return_type(type_repr = "datetime.datetime", imports = ("datetime",)))]
+    fn __next__(&mut self) -> PyResult<Option<DateTime<Utc>>> {
+        self.inner.next().transpose().map_err(to_py_err)
     }
 }
 
@@ -765,8 +755,7 @@ impl Predictor {
     /// Iterate over the times the satellite reaches an argument of latitude.
     ///
     /// `argument_deg` is the angle from the ascending node along the orbit, so
-    /// `0.0` yields the ascending (`Argument`) and descending (`Antipode`) nodes.
-    /// Events are at `argument_deg` and `argument_deg + 180`. `interval` must
+    /// `0.0` yields the ascending node and `180.0` the descending one. `interval` must
     /// expose `.start` and `.end` datetime properties; `step` is the coarse
     /// scan step, defaulting to the library's own value. Raises `ValueError`
     /// for a non-finite `argument_deg`.

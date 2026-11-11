@@ -161,7 +161,7 @@ pub use crate::{
         Polygon, Rectangle,
     },
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
-    arg_lat::{ArgLatCrossing, ArgLatEvent, ArgLatIter, ArgLatIterOpts},
+    arg_lat::{ArgLatIter, ArgLatIterOpts},
     detect::Error as DetectError,
     fallible::{FallibleIter, OnError, Tolerate},
     frames::{EcefState, EnuState, GeodeticPoint, LatLon, LvlhDirection, LvlhState, TemeState},
