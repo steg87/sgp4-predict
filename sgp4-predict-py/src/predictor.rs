@@ -460,6 +460,17 @@ impl Predictor {
             .map_err(to_py_err)
     }
 
+    /// Osculating argument of latitude at the given UTC time, in degrees `[0, 360)`.
+    ///
+    /// The angle from the ascending node to the satellite along the orbit.
+    /// Raises for an equatorial orbit, which has no ascending node.
+    fn argument_of_latitude_deg(&self, t: DateTime<Utc>) -> PyResult<f64> {
+        self.inner
+            .argument_of_latitude(t)
+            .map(|u| u.degrees())
+            .map_err(to_py_err)
+    }
+
     /// Calculate the observation from an observer at the given UTC time.
     fn observe_at(&self, t: DateTime<Utc>, observer: &GeodeticPoint) -> PyResult<Observation> {
         self.inner

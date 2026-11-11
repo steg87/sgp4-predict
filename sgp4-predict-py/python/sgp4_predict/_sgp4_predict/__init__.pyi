@@ -648,6 +648,13 @@ class Predictor:
         
         Returns a state vector in the TEME frame.
         """
+    def argument_of_latitude_deg(self, t: datetime.datetime) -> builtins.float:
+        r"""
+        Osculating argument of latitude at the given UTC time, in degrees `[0, 360)`.
+        
+        The angle from the ascending node to the satellite along the orbit.
+        Raises for an equatorial orbit, which has no ascending node.
+        """
     def observe_at(self, t: datetime.datetime, observer: GeodeticPoint) -> Observation:
         r"""
         Calculate the observation from an observer at the given UTC time.

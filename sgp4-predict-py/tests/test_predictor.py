@@ -266,6 +266,14 @@ def test_arg_lat_iter_nodes_alternate():
         assert a.event != b.event
 
 
+def test_argument_of_latitude_deg_matches_mean_elements():
+    """At epoch the mean argument of latitude is omega + M (TLE: 95.1447 + 264.9872)."""
+    p = make_predictor()
+    u = p.argument_of_latitude_deg(p.epoch)
+    assert 0.0 <= u < 360.0
+    assert abs((u - 0.1319 + 180.0) % 360.0 - 180.0) < 0.5
+
+
 # ── illumination_iter ─────────────────────────────────────────────────────────
 
 
