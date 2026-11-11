@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sgp4_predict import (
     ApsisEvent,
+    ArgLatEvent,
     Classification,
     Elements,
     GeodeticPoint,
@@ -251,6 +252,17 @@ def test_apsis_iter_consecutive_alternate():
     apsides = list(p.apsis_iter(Interval(START, START + timedelta(hours=3))))
     for i in range(len(apsides) - 1):
         assert apsides[i].event != apsides[i + 1].event
+
+
+# ── arg_lat_iter ──────────────────────────────────────────────────────────────
+
+
+def test_arg_lat_iter_nodes_alternate():
+    p = make_predictor()
+    events = list(p.arg_lat_iter(Interval(START, START + timedelta(hours=3)), 0.0))
+    assert {e.event for e in events} == {ArgLatEvent.Rising, ArgLatEvent.Falling}
+    for a, b in zip(events, events[1:]):
+        assert a.event != b.event
 
 
 # ── illumination_iter ─────────────────────────────────────────────────────────

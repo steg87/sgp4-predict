@@ -13,6 +13,9 @@ __all__ = [
     "Apsis",
     "ApsisEvent",
     "ApsisIter",
+    "ArgLatCrossing",
+    "ArgLatEvent",
+    "ArgLatIter",
     "Circle",
     "Classification",
     "Coverage",
@@ -121,6 +124,32 @@ class ApsisIter:
     """
     def __iter__(self) -> ApsisIter: ...
     def __next__(self) -> Apsis: ...
+
+@typing.final
+class ArgLatCrossing:
+    r"""
+    A detected argument-of-latitude event with its refined time.
+    """
+    @property
+    def time(self) -> datetime.datetime:
+        r"""
+        Time of the event (UTC).
+        """
+    @property
+    def event(self) -> ArgLatEvent:
+        r"""
+        Whether this is the requested argument or the opposite point.
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class ArgLatIter:
+    r"""
+    Lazy iterator yielding argument-of-latitude events within a time interval.
+    """
+    def __iter__(self) -> ArgLatIter: ...
+    def __next__(self) -> ArgLatCrossing: ...
 
 @typing.final
 class Circle:
@@ -735,6 +764,16 @@ class Predictor:
         `step` is the fixed step used to scan for radial-velocity sign changes,
         defaulting to the library's own value.
         """
+    def arg_lat_iter(self, interval: sgp4_predict.IntervalRange, argument_deg: builtins.float, *, step: typing.Optional[datetime.timedelta] = None) -> ArgLatIter:
+        r"""
+        Iterate over the times the satellite reaches an argument of latitude.
+        
+        `argument_deg` is the angle from the ascending node along the orbit, so
+        `0.0` yields the ascending (`Rising`) and descending (`Falling`) nodes.
+        Events are at `argument_deg` and `argument_deg + 180`. `interval` must
+        expose `.start` and `.end` datetime properties; `step` is the coarse
+        scan step, defaulting to the library's own value.
+        """
     def illumination_iter(self, interval: sgp4_predict.IntervalRange, *, step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None) -> IlluminationIter:
         r"""
         Iterate over sunlit and eclipse windows within the interval.
@@ -1054,6 +1093,20 @@ class ApsisEvent(enum.Enum):
     Perigee = ...
     r"""
     Point of closest approach to Earth (minimum altitude).
+    """
+
+@typing.final
+class ArgLatEvent(enum.Enum):
+    r"""
+    Which of the two argument-of-latitude points an event is.
+    """
+    Rising = ...
+    r"""
+    The satellite reaches the requested argument of latitude.
+    """
+    Falling = ...
+    r"""
+    The satellite reaches the opposite point, 180° round the orbit.
     """
 
 @typing.final

@@ -3,7 +3,8 @@ use ouroboros::self_referencing;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::{
-    AoiIterOpts, ApsisIterOpts, Degrees, IlluminationIterOpts, MaxElevationOpts, TransitIterOpts,
+    AoiIterOpts, ApsisIterOpts, ArgLatIterOpts, Degrees, IlluminationIterOpts, MaxElevationOpts,
+    TransitIterOpts,
 };
 
 use crate::{
@@ -13,8 +14,8 @@ use crate::{
     errors::to_py_err,
     tle::Tle,
     types::{
-        AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Pointing,
-        Transit,
+        AoiWindow, Apsis, ApsisEvent, ArgLatCrossing, ArgLatEvent, Illumination, IlluminationState,
+        Observation, Pointing, Transit,
     },
     vectors::StateVectorTeme,
 };
@@ -153,6 +154,39 @@ impl ApsisIter {
                     sgp4_predict::ApsisEvent::Perigee => ApsisEvent::Perigee,
                 },
                 altitude: a.altitude,
+            })),
+            Some(Err(e)) => Err(to_py_err(e)),
+        }
+    }
+}
+
+// ── ArgLatIter ─────────────────────────────────────────────────────────────────
+
+/// Lazy iterator yielding argument-of-latitude events within a time interval.
+#[gen_stub_pyclass]
+#[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
+pub struct ArgLatIter {
+    inner: sgp4_predict::ArgLatIter,
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl ArgLatIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    #[gen_stub(override_return_type(type_repr = "ArgLatCrossing"))]
+    fn __next__(&mut self) -> PyResult<Option<ArgLatCrossing>> {
+        match self.inner.next() {
+            None => Ok(None),
+            Some(Ok(c)) => Ok(Some(ArgLatCrossing {
+                time: c.time,
+                event: match c.event {
+                    sgp4_predict::ArgLatEvent::Rising => ArgLatEvent::Rising,
+                    sgp4_predict::ArgLatEvent::Falling => ArgLatEvent::Falling,
+                },
             })),
             Some(Err(e)) => Err(to_py_err(e)),
         }
@@ -352,6 +386,13 @@ fn illumination_opts(
 fn apsis_opts(step: Option<Duration>) -> ApsisIterOpts {
     let d = ApsisIterOpts::default();
     ApsisIterOpts {
+        step: step.unwrap_or(d.step),
+    }
+}
+
+fn arg_lat_opts(step: Option<Duration>) -> ArgLatIterOpts {
+    let d = ArgLatIterOpts::default();
+    ArgLatIterOpts {
         step: step.unwrap_or(d.step),
     }
 }
@@ -709,6 +750,31 @@ impl Predictor {
         })
     }
 
+    /// Iterate over the times the satellite reaches an argument of latitude.
+    ///
+    /// `argument_deg` is the angle from the ascending node along the orbit, so
+    /// `0.0` yields the ascending (`Rising`) and descending (`Falling`) nodes.
+    /// Events are at `argument_deg` and `argument_deg + 180`. `interval` must
+    /// expose `.start` and `.end` datetime properties; `step` is the coarse
+    /// scan step, defaulting to the library's own value.
+    #[pyo3(signature = (interval, argument_deg, *, step = None))]
+    fn arg_lat_iter(
+        &self,
+        interval: IntervalArg,
+        argument_deg: f64,
+        step: Option<Duration>,
+    ) -> PyResult<ArgLatIter> {
+        let IntervalArg { start, end } = interval;
+        Ok(ArgLatIter {
+            inner: self.inner.arg_lat_iter_with_opts(
+                start..end,
+                Degrees(argument_deg),
+                arg_lat_opts(step),
+                self.inner.refinement(),
+            ),
+        })
+    }
+
     /// Iterate over sunlit and eclipse windows within the interval.
     ///
     /// `interval` must expose `.start` and `.end` datetime properties.
@@ -847,6 +913,7 @@ mod tests {
             IlluminationIterOpts::default()
         );
         assert_eq!(apsis_opts(None), ApsisIterOpts::default());
+        assert_eq!(arg_lat_opts(None), ArgLatIterOpts::default());
         assert_eq!(max_elevation_opts(None), MaxElevationOpts::default());
         assert_eq!(
             Refinement::new(None, None).inner,
@@ -913,6 +980,7 @@ mod tests {
         );
 
         assert_eq!(apsis_opts(Some(secs(1))).step, secs(1));
+        assert_eq!(arg_lat_opts(Some(secs(1))).step, secs(1));
         assert_eq!(max_elevation_opts(Some(secs(1))).scan_step, secs(1));
 
         let refinement = Refinement::new(Some(1e-6), Some(7)).inner;

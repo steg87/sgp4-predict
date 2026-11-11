@@ -135,6 +135,7 @@ struct Readme;
 mod angle;
 mod aoi;
 mod apsides;
+mod arg_lat;
 mod detect;
 mod fallible;
 mod frames;
@@ -160,6 +161,7 @@ pub use crate::{
         Polygon, Rectangle,
     },
     apsides::{Apsis, ApsisEvent, ApsisIter, ApsisIterOpts},
+    arg_lat::{ArgLatCrossing, ArgLatEvent, ArgLatIter, ArgLatIterOpts},
     detect::Error as DetectError,
     fallible::{FallibleIter, OnError, Tolerate},
     frames::{EcefState, EnuState, GeodeticPoint, LatLon, LvlhDirection, LvlhState, TemeState},
