@@ -14,7 +14,7 @@ Equator crossings, in full — the event function is a closure returning one sca
 ```rust,ignore
 let crossings = EventIter::builder()
     .interval(start..end)
-    .function(move |t| Ok(predictor.propagate(t)?.position.z))
+    .function(move |t| Ok(Some(predictor.propagate(t)?.position.z)))
     .step(FixedStep(Duration::seconds(60)))
     .build()?
     .collect::<Result<Vec<_>, _>>()?;

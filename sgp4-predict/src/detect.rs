@@ -53,7 +53,7 @@ pub trait EventFunction {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>>;
 }
 
-/// Adapts a `FnMut(DateTime<Utc>) -> Result<f64>` closure into an
+/// Adapts a `FnMut(DateTime<Utc>) -> Result<Option<f64>>` closure into an
 /// [`EventFunction`] with no derivative.
 #[derive(Clone, Copy)]
 pub struct ValueFn<F>(pub F);
@@ -66,17 +66,17 @@ impl<F> fmt::Debug for ValueFn<F> {
     }
 }
 
-impl<F: FnMut(DateTime<Utc>) -> Result<f64>> EventFunction for ValueFn<F> {
+impl<F: FnMut(DateTime<Utc>) -> Result<Option<f64>>> EventFunction for ValueFn<F> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
-        Ok(Some(Sample {
+        Ok((self.0)(t)?.map(|value| Sample {
             time: t,
-            value: (self.0)(t)?,
+            value,
             rate: None,
         }))
     }
 }
 
-/// Adapts a `FnMut(DateTime<Utc>) -> Result<(f64, f64)>` closure returning
+/// Adapts a `FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>` closure returning
 /// `(value, rate)` into an [`EventFunction`] with a derivative.
 #[derive(Clone, Copy)]
 pub struct RateFn<F>(pub F);
@@ -87,10 +87,9 @@ impl<F> fmt::Debug for RateFn<F> {
     }
 }
 
-impl<F: FnMut(DateTime<Utc>) -> Result<(f64, f64)>> EventFunction for RateFn<F> {
+impl<F: FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>> EventFunction for RateFn<F> {
     fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
-        let (value, rate) = (self.0)(t)?;
-        Ok(Some(Sample {
+        Ok((self.0)(t)?.map(|(value, rate)| Sample {
             time: t,
             value,
             rate: Some(rate),
@@ -817,7 +816,7 @@ impl<F, S> EventIterBuilder<F, S> {
     /// [`event_function`](Self::event_function) is used instead).
     pub fn function<F2>(self, f: F2) -> EventIterBuilder<ValueFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<f64>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<f64>>,
     {
         self.event_function(ValueFn(f))
     }
@@ -826,7 +825,7 @@ impl<F, S> EventIterBuilder<F, S> {
     /// enables Newton-Raphson refinement of crossings.
     pub fn function_with_rate<F2>(self, f: F2) -> EventIterBuilder<RateFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<(f64, f64)>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>,
     {
         self.event_function(RateFn(f))
     }
@@ -928,7 +927,7 @@ impl<F, S> WindowIterBuilder<F, S> {
     /// [`event_function`](Self::event_function) is used instead).
     pub fn function<F2>(self, f: F2) -> WindowIterBuilder<ValueFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<f64>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<f64>>,
     {
         self.event_function(ValueFn(f))
     }
@@ -937,7 +936,7 @@ impl<F, S> WindowIterBuilder<F, S> {
     /// enables Newton-Raphson refinement of crossings.
     pub fn function_with_rate<F2>(self, f: F2) -> WindowIterBuilder<RateFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<(f64, f64)>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>,
     {
         self.event_function(RateFn(f))
     }
@@ -1106,8 +1105,8 @@ mod tests {
 
     /// A sine wave with the given period in seconds: rising crossings at
     /// integer multiples of `period`, falling crossings at half-periods.
-    fn sine(period: f64) -> impl FnMut(DateTime<Utc>) -> Result<f64> {
-        move |t| Ok((secs(t) * std::f64::consts::TAU / period).sin())
+    fn sine(period: f64) -> impl FnMut(DateTime<Utc>) -> Result<Option<f64>> {
+        move |t| Ok(Some((secs(t) * std::f64::consts::TAU / period).sin()))
     }
 
     // --- EventIter / CrossingDetector ---
@@ -1146,7 +1145,7 @@ mod tests {
         // crossing at 500 s, refinable by Newton-Raphson in one step.
         let iter = EventIter::builder()
             .interval(t0()..t0() + Duration::seconds(1000))
-            .function_with_rate(|t| Ok((secs(t) - 500.0, 1.0)))
+            .function_with_rate(|t| Ok(Some((secs(t) - 500.0, 1.0))))
             .step(FixedStep(Duration::seconds(300)))
             .build()
             .unwrap();
@@ -1368,7 +1367,7 @@ mod tests {
         // give up after the max_window_duration.
         let iter = WindowIter::builder()
             .interval(t0()..t0() + Duration::seconds(600))
-            .function(|t| Ok(secs(t) - 100.0))
+            .function(|t| Ok(Some(secs(t) - 100.0)))
             .step(FixedStep(Duration::seconds(60)))
             .max_window_duration(Duration::minutes(5))
             .build()
@@ -1395,11 +1394,11 @@ mod tests {
             WindowIter::builder()
                 .interval(interval)
                 .function(|t| {
-                    Ok(match secs(t) {
+                    Ok(Some(match secs(t) {
                         x if x < 100.0 => -2.0,
                         x if x < 300.0 => 1.0,
                         _ => -1.0,
-                    })
+                    }))
                 })
                 .step(FixedStep(Duration::seconds(60)))
                 .refinement(Refinement {

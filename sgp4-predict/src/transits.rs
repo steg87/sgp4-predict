@@ -346,12 +346,13 @@ impl Predictor {
             .interval(interval)
             // Check for crossings when elevation rate is zero
             .function(|t| {
-                Ok(self
-                    .propagate(t)?
-                    .to_ecef(t)
-                    .to_enu(observer)
-                    .elevation_and_rate()
-                    .1)
+                Ok(Some(
+                    self.propagate(t)?
+                        .to_ecef(t)
+                        .to_enu(observer)
+                        .elevation_and_rate()
+                        .1,
+                ))
             })
             .step(FixedStep(opts.scan_step.max(MIN_POSITIVE_STEP)))
             .refinement(self.refinement)
