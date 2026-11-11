@@ -10,6 +10,31 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `EventIterBuilder::ignore_falling_crossings` and `CrossingDetector::ignore_falling_crossings`: yield only rising crossings.
+
+### Changed
+
+- **Breaking:** `Predictor::arg_lat_iter` yields only the times the satellite reaches the requested argument, as `DateTime<Utc>`; `ArgLatEvent` and `ArgLatCrossing` are removed. For the opposite point, pass the argument plus 180°.
+
+## [0.4.0] - 2026-11-11
+
+### Changed
+
+- **Breaking:** `EventFunction::sample` returns `Result<Option<Sample>>`, and the closures passed to
+  `function` and `function_with_rate` return `Result<Option<f64>>` and
+  `Result<Option<(f64, f64)>>`. `None` means the function has no value at that time and reads as
+  negative, so a window closes at the edge of the function's domain. Wrap existing results in
+  `Some`.
+
+## [0.3.2] - 2026-11-11
+
+### Added
+
+- `Predictor::arg_lat_iter`: events where the satellite reaches a given argument of latitude (and the point 180° round the orbit). `Degrees(0.0)` yields the orbit's nodes.
+- `Predictor::argument_of_latitude`: the osculating argument of latitude at a given time.
+
 ## [0.3.1] - 2026-10-23
 
 ### Changed

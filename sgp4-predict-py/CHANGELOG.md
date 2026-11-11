@@ -11,6 +11,19 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Predictor.arg_lat_iter` yields only the times the satellite reaches the requested argument, as `datetime`; `ArgLatEvent` and `ArgLatCrossing` are removed. For the opposite point, pass the argument plus 180.
+
+## [0.4.0] - 2026-11-11
+
+## [0.3.2] - 2026-11-11
+
+### Added
+
+- `Predictor.arg_lat_iter`: events where the satellite reaches a given argument of latitude (and the point 180° round the orbit). `0.0` yields the orbit's nodes.
+- `Predictor.argument_of_latitude_deg`: the osculating argument of latitude at a given time, in degrees.
+
 ## [0.3.1] - 2026-10-23
 
 ### Fixed

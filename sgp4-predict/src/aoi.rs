@@ -800,7 +800,7 @@ impl<'a, A: Area> AreaInView<'a, A> {
 }
 
 impl<'a, A: Area> EventFunction for AreaInView<'a, A> {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
         let ecef = self.predictor.propagate(t)?.to_ecef(t);
         let geodetic = ecef.to_geodetic();
         let position = ecef.position;
@@ -815,11 +815,11 @@ impl<'a, A: Area> EventFunction for AreaInView<'a, A> {
             Coverage::Any => self.area.signed_angular_offset(point).to_f64() + reach,
             Coverage::Full => reach - self.area.max_angular_distance(point).to_f64(),
         };
-        Ok(Sample {
+        Ok(Some(Sample {
             time: t,
             value,
             rate: None,
-        })
+        }))
     }
 }
 

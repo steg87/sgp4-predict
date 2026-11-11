@@ -11,6 +11,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
+## [0.3.2] - 2026-11-11
+
 ## [0.3.1] - 2026-10-23
 
 ### Fixed

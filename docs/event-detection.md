@@ -14,7 +14,7 @@ Equator crossings, in full — the event function is a closure returning one sca
 ```rust,ignore
 let crossings = EventIter::builder()
     .interval(start..end)
-    .function(move |t| Ok(predictor.propagate(t)?.position.z))
+    .function(move |t| Ok(Some(predictor.propagate(t)?.position.z)))
     .step(FixedStep(Duration::seconds(60)))
     .build()?
     .collect::<Result<Vec<_>, _>>()?;
@@ -46,15 +46,9 @@ function's units.
 
 ## The built-in event functions
 
-| Iterator           | Event function                                                                           | Step                                                                        |
-| ------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `TransitIter`      | elevation − `min_elevation`, with its rate as the derivative                             | adaptive: large while below or descending, small while approaching or above |
-| `ApsisIter`        | radial velocity `r·v` — `+ → −` is apogee, `− → +` perigee                               | fixed, 60 s                                                                 |
-| `IlluminationIter` | cylindrical shadow scalar, negative in sunlight                                          | fixed                                                                       |
-| `AoiIter`          | signed angular offset of the sub-satellite point from the area boundary, positive inside | `\|offset\| / ω_max`, which cannot reach the boundary within one step       |
-
-Each has an `Opts` struct carrying its step bounds and caps; `Predictor::with_refinement`
-configures the solver.
+Each detection iterator is a thin wrapper that supplies its own event function and step
+strategy; its rustdoc says which. Each has an `Opts` struct carrying its step bounds and caps, and
+`Predictor::with_refinement` configures the solver.
 
 ## Known limits
 

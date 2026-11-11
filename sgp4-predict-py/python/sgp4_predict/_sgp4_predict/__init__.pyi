@@ -13,6 +13,7 @@ __all__ = [
     "Apsis",
     "ApsisEvent",
     "ApsisIter",
+    "ArgLatIter",
     "Circle",
     "Classification",
     "Coverage",
@@ -121,6 +122,14 @@ class ApsisIter:
     """
     def __iter__(self) -> ApsisIter: ...
     def __next__(self) -> Apsis: ...
+
+@typing.final
+class ArgLatIter:
+    r"""
+    Lazy iterator yielding the times the satellite reaches an argument of latitude within a time interval.
+    """
+    def __iter__(self) -> ArgLatIter: ...
+    def __next__(self) -> datetime.datetime: ...
 
 @typing.final
 class Circle:
@@ -619,6 +628,13 @@ class Predictor:
         
         Returns a state vector in the TEME frame.
         """
+    def argument_of_latitude_deg(self, t: datetime.datetime) -> builtins.float:
+        r"""
+        Osculating argument of latitude at the given UTC time, in degrees `[0, 360)`.
+        
+        The angle from the ascending node to the satellite along the orbit.
+        Raises for an equatorial orbit, which has no ascending node.
+        """
     def observe_at(self, t: datetime.datetime, observer: GeodeticPoint) -> Observation:
         r"""
         Calculate the observation from an observer at the given UTC time.
@@ -734,6 +750,16 @@ class Predictor:
         `interval` must expose `.start` and `.end` datetime properties.
         `step` is the fixed step used to scan for radial-velocity sign changes,
         defaulting to the library's own value.
+        """
+    def arg_lat_iter(self, interval: sgp4_predict.IntervalRange, argument_deg: builtins.float, *, step: typing.Optional[datetime.timedelta] = None) -> ArgLatIter:
+        r"""
+        Iterate over the times the satellite reaches an argument of latitude.
+        
+        `argument_deg` is the angle from the ascending node along the orbit, so
+        `0.0` yields the ascending node and `180.0` the descending one. `interval` must
+        expose `.start` and `.end` datetime properties; `step` is the coarse
+        scan step, defaulting to the library's own value. Raises `ValueError`
+        for a non-finite `argument_deg`.
         """
     def illumination_iter(self, interval: sgp4_predict.IntervalRange, *, step: typing.Optional[datetime.timedelta] = None, walk_step: typing.Optional[datetime.timedelta] = None, max_window_duration: typing.Optional[datetime.timedelta] = None) -> IlluminationIter:
         r"""

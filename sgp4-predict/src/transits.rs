@@ -82,18 +82,18 @@ pub(crate) struct ElevationAboveMin {
 }
 
 impl EventFunction for ElevationAboveMin {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
         let (el, el_rate) = self
             .predictor
             .propagate(t)?
             .to_ecef(t)
             .to_enu(self.observer)
             .elevation_and_rate();
-        Ok(Sample {
+        Ok(Some(Sample {
             time: t,
             value: el - self.min_elevation,
             rate: Some(el_rate),
-        })
+        }))
     }
 }
 
@@ -346,12 +346,13 @@ impl Predictor {
             .interval(interval)
             // Check for crossings when elevation rate is zero
             .function(|t| {
-                Ok(self
-                    .propagate(t)?
-                    .to_ecef(t)
-                    .to_enu(observer)
-                    .elevation_and_rate()
-                    .1)
+                Ok(Some(
+                    self.propagate(t)?
+                        .to_ecef(t)
+                        .to_enu(observer)
+                        .elevation_and_rate()
+                        .1,
+                ))
             })
             .step(FixedStep(opts.scan_step.max(MIN_POSITIVE_STEP)))
             .refinement(self.refinement)

@@ -26,7 +26,7 @@ fn test_equator_crossings() {
     let predictor = p.clone();
     let crossings = EventIter::builder()
         .interval(start..end)
-        .function(move |t| Ok(predictor.propagate(t)?.position.z))
+        .function(move |t| Ok(Some(predictor.propagate(t)?.position.z)))
         .step(FixedStep(Duration::seconds(60)))
         .build()
         .unwrap()
@@ -87,7 +87,7 @@ fn test_closure_built_iter_is_debug_and_clone() {
     let start = common::datetime("2025-12-20T12:00:00Z");
     let iter = EventIter::builder()
         .interval(start..start + Duration::hours(1))
-        .function(|_t| Ok(0.0))
+        .function(|_t| Ok(Some(0.0)))
         .step(FixedStep(Duration::seconds(60)))
         .build()
         .unwrap();

@@ -1,9 +1,11 @@
 use chrono::{DateTime, Duration, Utc};
 use ouroboros::self_referencing;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use sgp4_predict::{
-    AoiIterOpts, ApsisIterOpts, Degrees, IlluminationIterOpts, MaxElevationOpts, TransitIterOpts,
+    AoiIterOpts, ApsisIterOpts, ArgLatIterOpts, Degrees, IlluminationIterOpts, MaxElevationOpts,
+    TransitIterOpts,
 };
 
 use crate::{
@@ -156,6 +158,29 @@ impl ApsisIter {
             })),
             Some(Err(e)) => Err(to_py_err(e)),
         }
+    }
+}
+
+// ── ArgLatIter ─────────────────────────────────────────────────────────────────
+
+/// Lazy iterator yielding the times the satellite reaches an argument of latitude within a time interval.
+#[gen_stub_pyclass]
+#[pyclass(module = "sgp4_predict._sgp4_predict")]
+#[derive(Debug)]
+pub struct ArgLatIter {
+    inner: sgp4_predict::ArgLatIter,
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl ArgLatIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    #[gen_stub(override_return_type(type_repr = "datetime.datetime", imports = ("datetime",)))]
+    fn __next__(&mut self) -> PyResult<Option<DateTime<Utc>>> {
+        self.inner.next().transpose().map_err(to_py_err)
     }
 }
 
@@ -356,6 +381,13 @@ fn apsis_opts(step: Option<Duration>) -> ApsisIterOpts {
     }
 }
 
+fn arg_lat_opts(step: Option<Duration>) -> ArgLatIterOpts {
+    let d = ArgLatIterOpts::default();
+    ArgLatIterOpts {
+        step: step.unwrap_or(d.step),
+    }
+}
+
 fn max_elevation_opts(scan_step: Option<Duration>) -> MaxElevationOpts {
     let d = MaxElevationOpts::default();
     MaxElevationOpts {
@@ -416,6 +448,17 @@ impl Predictor {
         self.inner
             .propagate(t)
             .map(StateVectorTeme::from_inner)
+            .map_err(to_py_err)
+    }
+
+    /// Osculating argument of latitude at the given UTC time, in degrees `[0, 360)`.
+    ///
+    /// The angle from the ascending node to the satellite along the orbit.
+    /// Raises for an equatorial orbit, which has no ascending node.
+    fn argument_of_latitude_deg(&self, t: DateTime<Utc>) -> PyResult<f64> {
+        self.inner
+            .argument_of_latitude(t)
+            .map(|u| u.degrees())
             .map_err(to_py_err)
     }
 
@@ -709,6 +752,36 @@ impl Predictor {
         })
     }
 
+    /// Iterate over the times the satellite reaches an argument of latitude.
+    ///
+    /// `argument_deg` is the angle from the ascending node along the orbit, so
+    /// `0.0` yields the ascending node and `180.0` the descending one. `interval` must
+    /// expose `.start` and `.end` datetime properties; `step` is the coarse
+    /// scan step, defaulting to the library's own value. Raises `ValueError`
+    /// for a non-finite `argument_deg`.
+    #[pyo3(signature = (interval, argument_deg, *, step = None))]
+    fn arg_lat_iter(
+        &self,
+        interval: IntervalArg,
+        argument_deg: f64,
+        step: Option<Duration>,
+    ) -> PyResult<ArgLatIter> {
+        let IntervalArg { start, end } = interval;
+        if !argument_deg.is_finite() {
+            return Err(PyValueError::new_err(format!(
+                "argument_deg is not finite: {argument_deg}"
+            )));
+        }
+        Ok(ArgLatIter {
+            inner: self.inner.arg_lat_iter_with_opts(
+                start..end,
+                Degrees(argument_deg),
+                arg_lat_opts(step),
+                self.inner.refinement(),
+            ),
+        })
+    }
+
     /// Iterate over sunlit and eclipse windows within the interval.
     ///
     /// `interval` must expose `.start` and `.end` datetime properties.
@@ -847,6 +920,7 @@ mod tests {
             IlluminationIterOpts::default()
         );
         assert_eq!(apsis_opts(None), ApsisIterOpts::default());
+        assert_eq!(arg_lat_opts(None), ArgLatIterOpts::default());
         assert_eq!(max_elevation_opts(None), MaxElevationOpts::default());
         assert_eq!(
             Refinement::new(None, None).inner,
@@ -913,6 +987,7 @@ mod tests {
         );
 
         assert_eq!(apsis_opts(Some(secs(1))).step, secs(1));
+        assert_eq!(arg_lat_opts(Some(secs(1))).step, secs(1));
         assert_eq!(max_elevation_opts(Some(secs(1))).scan_step, secs(1));
 
         let refinement = Refinement::new(Some(1e-6), Some(7)).inner;

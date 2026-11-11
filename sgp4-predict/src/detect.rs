@@ -1,7 +1,6 @@
 //! Generic event and window detection over scalar functions of time.
 //!
-//! The building blocks that power `ApsisIter`, `TransitIter`, `AoiIter` and
-//! `IlluminationIter`. The module is private; its items are re-exported at the
+//! The building blocks that power the crate's detection iterators. The module is private; its items are re-exported at the
 //! crate root when the `generics` Cargo feature is enabled, which is where the
 //! user-facing overview of them lives.
 
@@ -38,6 +37,14 @@ pub struct Sample {
 
 /// A scalar function of time whose zero crossings define events.
 ///
+/// `sample` returns `None` where the function has no value at `t`; that reads
+/// as a negative value, so a positive window ends at the edge of the
+/// function's domain. An [`EventIter`] likewise reports a [`Crossing`] where an
+/// undefined stretch borders a positive sample, and none against a negative
+/// one. An adaptive [`StepStrategy`] has no rate to go on there,
+/// so [`ThresholdStep`] takes its largest step; use [`FixedStep`] if the
+/// defined region can be shorter than that.
+///
 /// Plain closures are adapted with [`ValueFn`] / [`RateFn`] (the
 /// [`EventIterBuilder::function`] and
 /// [`EventIterBuilder::function_with_rate`] builder methods do this for
@@ -45,10 +52,10 @@ pub struct Sample {
 /// type.
 pub trait EventFunction {
     /// Evaluate the function at `t`.
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample>;
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>>;
 }
 
-/// Adapts a `FnMut(DateTime<Utc>) -> Result<f64>` closure into an
+/// Adapts a `FnMut(DateTime<Utc>) -> Result<Option<f64>>` closure into an
 /// [`EventFunction`] with no derivative.
 #[derive(Clone, Copy)]
 pub struct ValueFn<F>(pub F);
@@ -61,17 +68,17 @@ impl<F> fmt::Debug for ValueFn<F> {
     }
 }
 
-impl<F: FnMut(DateTime<Utc>) -> Result<f64>> EventFunction for ValueFn<F> {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
-        Ok(Sample {
+impl<F: FnMut(DateTime<Utc>) -> Result<Option<f64>>> EventFunction for ValueFn<F> {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
+        Ok((self.0)(t)?.map(|value| Sample {
             time: t,
-            value: (self.0)(t)?,
+            value,
             rate: None,
-        })
+        }))
     }
 }
 
-/// Adapts a `FnMut(DateTime<Utc>) -> Result<(f64, f64)>` closure returning
+/// Adapts a `FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>` closure returning
 /// `(value, rate)` into an [`EventFunction`] with a derivative.
 #[derive(Clone, Copy)]
 pub struct RateFn<F>(pub F);
@@ -82,14 +89,13 @@ impl<F> fmt::Debug for RateFn<F> {
     }
 }
 
-impl<F: FnMut(DateTime<Utc>) -> Result<(f64, f64)>> EventFunction for RateFn<F> {
-    fn sample(&mut self, t: DateTime<Utc>) -> Result<Sample> {
-        let (value, rate) = (self.0)(t)?;
-        Ok(Sample {
+impl<F: FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>> EventFunction for RateFn<F> {
+    fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
+        Ok((self.0)(t)?.map(|(value, rate)| Sample {
             time: t,
             value,
             rate: Some(rate),
-        })
+        }))
     }
 }
 
@@ -98,8 +104,9 @@ pub trait StepStrategy {
     /// Return the next sample time after `current`.
     ///
     /// `sample` is the function evaluation taken at `current`, when that
-    /// evaluation succeeded; strategies must still advance when it is `None`
-    /// (e.g. after an evaluation error) so iteration cannot stall.
+    /// evaluation succeeded and the function was defined there; strategies must
+    /// still advance when it is `None` (an evaluation error, or an undefined
+    /// stretch that may last many steps) so iteration cannot stall.
     fn next_time(&mut self, current: DateTime<Utc>, sample: Option<&Sample>) -> DateTime<Utc>;
 }
 
@@ -271,9 +278,9 @@ impl<D: Detector> Iterator for DetectIter<D> {
 /// The direction of a zero crossing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
-    /// The function value went from negative to positive.
+    /// The function value went from negative (or undefined) to positive.
     Rising,
-    /// The function value went from positive to negative.
+    /// The function value went from positive to negative (or undefined).
     Falling,
 }
 
@@ -284,6 +291,16 @@ pub struct Crossing {
     pub time: DateTime<Utc>,
     /// Whether the function was rising or falling through zero.
     pub direction: Direction,
+}
+
+/// A sample's value, with an undefined sample reading as negative.
+fn value_or_negative(sample: &Option<Sample>) -> f64 {
+    sample.map_or(f64::NEG_INFINITY, |s| s.value)
+}
+
+/// Whether a sample lies outside a positive window: negative, or undefined.
+fn is_outside(sample: &Option<Sample>) -> bool {
+    value_or_negative(sample) < 0.0
 }
 
 /// Adapts an [`EventFunction`] bracket to [`Refinement::solve`], which does
@@ -305,9 +322,11 @@ fn refine_crossing<F: EventFunction>(
 ) -> Result<DateTime<Utc>> {
     let a = time::datetime_to_f64(t0);
     let b = time::datetime_to_f64(t1);
+    // `-inf` reads as negative; with no rate and a NaN secant step, the solver
+    // bisects to the edge of the function's domain.
     let root = refinement.solve(a, b, |x| {
         f.sample(time::f64_to_datetime(x))
-            .map(|s| (s.value, s.rate))
+            .map(|s| s.map_or((f64::NEG_INFINITY, None), |s| (s.value, s.rate)))
     })?;
     Ok(time::f64_to_datetime(root))
 }
@@ -353,7 +372,7 @@ fn walk_to_crossing<F: EventFunction>(
             return Err(on_give_up().into());
         }
 
-        if f.sample(next)?.value < 0.0 {
+        if is_outside(&f.sample(next)?) {
             let refined = refine_crossing(f, refinement, prev, next)?;
             return Ok((refined, next));
         }
@@ -391,7 +410,7 @@ pub fn detect_window<F: EventFunction>(
     max_window_duration: Duration,
     refinement: &Refinement,
 ) -> Result<Option<Window>> {
-    if f.sample(t)?.value < 0.0 {
+    if is_outside(&f.sample(t)?) {
         return Ok(None);
     }
     let (window, _) =
@@ -458,7 +477,9 @@ pub struct CrossingDetector<F, S> {
     f: F,
     step: S,
     refinement: Refinement,
-    prev: Option<Sample>,
+    ignore_falling: bool,
+    /// The last sample time, and the sample if it was defined.
+    prev: Option<(DateTime<Utc>, Option<Sample>)>,
 }
 
 impl<F: EventFunction, S: StepStrategy> CrossingDetector<F, S> {
@@ -468,8 +489,16 @@ impl<F: EventFunction, S: StepStrategy> CrossingDetector<F, S> {
             f,
             step,
             refinement,
+            ignore_falling: false,
             prev: None,
         }
+    }
+
+    /// Skip [`Direction::Falling`] crossings: they are neither refined nor
+    /// yielded.
+    pub fn ignore_falling_crossings(mut self) -> Self {
+        self.ignore_falling = true;
+        self
     }
 
     /// Mutably access the root-finder configuration.
@@ -482,25 +511,34 @@ impl<F: EventFunction, S: StepStrategy> Detector for CrossingDetector<F, S> {
     type Event = Crossing;
 
     fn next_time(&mut self, current: DateTime<Utc>) -> DateTime<Utc> {
-        let sample = self.prev.as_ref().filter(|s| s.time == current);
+        let sample = self
+            .prev
+            .as_ref()
+            .filter(|(t, _)| *t == current)
+            .and_then(|(_, s)| s.as_ref());
         self.step.next_time(current, sample)
     }
 
     fn detect_event(&mut self, t: DateTime<Utc>) -> Result<Option<Crossing>> {
         let s = self.f.sample(t)?;
+        let value = value_or_negative(&s);
         let result = match self.prev {
-            Some(p) if p.value * s.value < 0.0 => {
-                let direction = if p.value < 0.0 {
+            Some((p_time, p)) if value_or_negative(&p) * value < 0.0 => {
+                let direction = if is_outside(&p) {
                     Direction::Rising
                 } else {
                     Direction::Falling
                 };
-                refine_crossing(&mut self.f, &self.refinement, p.time, s.time)
+                if self.ignore_falling && direction == Direction::Falling {
+                    self.prev = Some((t, s));
+                    return Ok(None);
+                }
+                refine_crossing(&mut self.f, &self.refinement, p_time, t)
                     .map(|time| Some(Crossing { time, direction }))
             }
             _ => Ok(None),
         };
-        self.prev = Some(s);
+        self.prev = Some((t, s));
         result
     }
 }
@@ -676,11 +714,11 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
         }
         let first = self.last_boundary.is_none();
         let s = self.f.sample(t)?;
-        if s.value < 0.0 {
+        if is_outside(&s) {
             if first {
                 self.last_boundary = Some(t);
             }
-            self.prev = Some(s);
+            self.prev = s;
             return Ok(None);
         }
         if first && self.skip_leading_partial {
@@ -711,7 +749,7 @@ impl<F: EventFunction, S: StepStrategy> Detector for WindowDetector<F, S> {
         // A crossing may still lie between the last coarse-scan sample and
         // the exact interval end.
         let s = self.f.sample(end)?;
-        if s.value < 0.0 {
+        if is_outside(&s) {
             return Ok((!self.positive_only).then_some(Window {
                 start: last_boundary,
                 end,
@@ -769,6 +807,7 @@ pub struct EventIterBuilder<F = Missing, S = FixedStep> {
     function: F,
     step: S,
     refinement: Refinement,
+    ignore_falling: bool,
 }
 
 impl EventIterBuilder {
@@ -778,6 +817,7 @@ impl EventIterBuilder {
             function: Missing,
             step: FixedStep(Duration::seconds(60)),
             refinement: Refinement::default(),
+            ignore_falling: false,
         }
     }
 }
@@ -794,7 +834,7 @@ impl<F, S> EventIterBuilder<F, S> {
     /// [`event_function`](Self::event_function) is used instead).
     pub fn function<F2>(self, f: F2) -> EventIterBuilder<ValueFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<f64>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<f64>>,
     {
         self.event_function(ValueFn(f))
     }
@@ -803,7 +843,7 @@ impl<F, S> EventIterBuilder<F, S> {
     /// enables Newton-Raphson refinement of crossings.
     pub fn function_with_rate<F2>(self, f: F2) -> EventIterBuilder<RateFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<(f64, f64)>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>,
     {
         self.event_function(RateFn(f))
     }
@@ -815,6 +855,7 @@ impl<F, S> EventIterBuilder<F, S> {
             function: f,
             step: self.step,
             refinement: self.refinement,
+            ignore_falling: self.ignore_falling,
         }
     }
 
@@ -829,6 +870,7 @@ impl<F, S> EventIterBuilder<F, S> {
             function: self.function,
             step,
             refinement: self.refinement,
+            ignore_falling: self.ignore_falling,
         }
     }
 
@@ -837,16 +879,22 @@ impl<F, S> EventIterBuilder<F, S> {
         self.refinement = refinement;
         self
     }
+
+    /// Yield only [`Direction::Rising`] crossings (default: both). Falling
+    /// crossings are skipped without being refined.
+    pub fn ignore_falling_crossings(mut self) -> Self {
+        self.ignore_falling = true;
+        self
+    }
 }
 
 impl<F: EventFunction, S: StepStrategy> EventIterBuilder<F, S> {
     /// Build the iterator. Errors if no interval was supplied.
     pub fn build(self) -> Result<EventIter<F, S>> {
         let interval = self.interval.ok_or_else(|| missing_interval("EventIter"))?;
-        Ok(DetectIter::new(
-            interval,
-            CrossingDetector::new(self.function, self.step, self.refinement),
-        ))
+        let mut detector = CrossingDetector::new(self.function, self.step, self.refinement);
+        detector.ignore_falling = self.ignore_falling;
+        Ok(DetectIter::new(interval, detector))
     }
 }
 
@@ -905,7 +953,7 @@ impl<F, S> WindowIterBuilder<F, S> {
     /// [`event_function`](Self::event_function) is used instead).
     pub fn function<F2>(self, f: F2) -> WindowIterBuilder<ValueFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<f64>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<f64>>,
     {
         self.event_function(ValueFn(f))
     }
@@ -914,7 +962,7 @@ impl<F, S> WindowIterBuilder<F, S> {
     /// enables Newton-Raphson refinement of crossings.
     pub fn function_with_rate<F2>(self, f: F2) -> WindowIterBuilder<RateFn<F2>, S>
     where
-        F2: FnMut(DateTime<Utc>) -> Result<(f64, f64)>,
+        F2: FnMut(DateTime<Utc>) -> Result<Option<(f64, f64)>>,
     {
         self.event_function(RateFn(f))
     }
@@ -1083,8 +1131,8 @@ mod tests {
 
     /// A sine wave with the given period in seconds: rising crossings at
     /// integer multiples of `period`, falling crossings at half-periods.
-    fn sine(period: f64) -> impl FnMut(DateTime<Utc>) -> Result<f64> {
-        move |t| Ok((secs(t) * std::f64::consts::TAU / period).sin())
+    fn sine(period: f64) -> impl FnMut(DateTime<Utc>) -> Result<Option<f64>> {
+        move |t| Ok(Some((secs(t) * std::f64::consts::TAU / period).sin()))
     }
 
     // --- EventIter / CrossingDetector ---
@@ -1118,12 +1166,29 @@ mod tests {
     }
 
     #[test]
+    fn test_event_iter_ignore_falling_crossings() {
+        let iter = EventIter::builder()
+            .interval(t0()..t0() + Duration::seconds(1500))
+            .function(sine(600.0))
+            .step(FixedStep(Duration::seconds(60)))
+            .ignore_falling_crossings()
+            .build()
+            .unwrap();
+
+        let crossings: Vec<Crossing> = iter.map(|c| c.unwrap()).collect();
+        let times: Vec<f64> = crossings.iter().map(|c| secs(c.time)).collect();
+        assert_eq!(times.len(), 2);
+        assert!((times[0] - 600.0).abs() < 1e-3 && (times[1] - 1200.0).abs() < 1e-3);
+        assert!(crossings.iter().all(|c| c.direction == Direction::Rising));
+    }
+
+    #[test]
     fn test_event_iter_with_rate_uses_newton_raphson() {
         // Linear ramp f(t) = t - 500 with derivative 1: a single rising
         // crossing at 500 s, refinable by Newton-Raphson in one step.
         let iter = EventIter::builder()
             .interval(t0()..t0() + Duration::seconds(1000))
-            .function_with_rate(|t| Ok((secs(t) - 500.0, 1.0)))
+            .function_with_rate(|t| Ok(Some((secs(t) - 500.0, 1.0))))
             .step(FixedStep(Duration::seconds(300)))
             .build()
             .unwrap();
@@ -1345,7 +1410,7 @@ mod tests {
         // give up after the max_window_duration.
         let iter = WindowIter::builder()
             .interval(t0()..t0() + Duration::seconds(600))
-            .function(|t| Ok(secs(t) - 100.0))
+            .function(|t| Ok(Some(secs(t) - 100.0)))
             .step(FixedStep(Duration::seconds(60)))
             .max_window_duration(Duration::minutes(5))
             .build()
@@ -1372,11 +1437,11 @@ mod tests {
             WindowIter::builder()
                 .interval(interval)
                 .function(|t| {
-                    Ok(match secs(t) {
+                    Ok(Some(match secs(t) {
                         x if x < 100.0 => -2.0,
                         x if x < 300.0 => 1.0,
                         _ => -1.0,
-                    })
+                    }))
                 })
                 .step(FixedStep(Duration::seconds(60)))
                 .refinement(Refinement {
@@ -1429,6 +1494,119 @@ mod tests {
         .unwrap();
 
         assert!(window.is_none());
+    }
+
+    // --- Undefined samples ---
+
+    /// `sine(600)` where `from <= t <= to` (seconds from `t0`), undefined elsewhere.
+    struct Gated {
+        from: f64,
+        to: f64,
+    }
+
+    impl EventFunction for Gated {
+        fn sample(&mut self, t: DateTime<Utc>) -> Result<Option<Sample>> {
+            let x = secs(t);
+            Ok((self.from..=self.to).contains(&x).then(|| Sample {
+                time: t,
+                value: (x * std::f64::consts::TAU / 600.0).sin(),
+                rate: None,
+            }))
+        }
+    }
+
+    #[test]
+    fn test_detect_window_returns_none_where_undefined() {
+        let mut f = Gated {
+            from: 100.0,
+            to: 1000.0,
+        };
+        let window = detect_window(
+            &mut f,
+            t0() + Duration::seconds(50),
+            Duration::seconds(30),
+            Duration::hours(1),
+            &Refinement::default(),
+        )
+        .unwrap();
+
+        assert!(window.is_none());
+    }
+
+    #[test]
+    fn test_window_closes_at_the_edge_of_the_domain() {
+        // sine is positive on (0, 300) and (600, 900); the domain clips the
+        // first window at its start and ends past the interval's last window.
+        let windows: Vec<_> = WindowIter::builder()
+            .interval(t0()..t0() + Duration::seconds(1500))
+            .event_function(Gated {
+                from: 100.0,
+                to: 1000.0,
+            })
+            .step(FixedStep(Duration::seconds(60)))
+            .build()
+            .unwrap()
+            .map(|w| w.unwrap())
+            .collect();
+
+        let bounds: Vec<_> = windows
+            .iter()
+            .map(|w| (secs(w.start), secs(w.end)))
+            .collect();
+        assert_eq!(bounds.len(), 2, "{bounds:?}");
+        assert!((bounds[0].0 - 100.0).abs() < 0.01 && (bounds[0].1 - 300.0).abs() < 0.01);
+        assert!((bounds[1].0 - 600.0).abs() < 0.01 && (bounds[1].1 - 900.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_event_iter_reports_no_crossing_between_negative_and_undefined() {
+        // sine is negative at the domain's end, so leaving it is not an edge.
+        let found: Vec<_> = EventIter::builder()
+            .interval(t0()..t0() + Duration::seconds(1500))
+            .event_function(Gated {
+                from: 100.0,
+                to: 1000.0,
+            })
+            .step(FixedStep(Duration::seconds(60)))
+            .build()
+            .unwrap()
+            .map(|c| secs(c.unwrap().time))
+            .collect();
+
+        assert_eq!(found.len(), 4, "{found:?}");
+        assert!(found.iter().all(|&t| t < 950.0), "{found:?}");
+    }
+
+    #[test]
+    fn test_event_iter_reads_undefined_as_negative() {
+        // Entering the domain on a positive value rises; leaving it falls.
+        let crossings: Vec<_> = EventIter::builder()
+            .interval(t0()..t0() + Duration::seconds(1500))
+            .event_function(Gated {
+                from: 100.0,
+                to: 780.0,
+            })
+            .step(FixedStep(Duration::seconds(60)))
+            .build()
+            .unwrap()
+            .map(|c| c.unwrap())
+            .collect();
+
+        let found: Vec<_> = crossings
+            .iter()
+            .map(|c| (secs(c.time), c.direction))
+            .collect();
+        let expected = [
+            (100.0, Direction::Rising),
+            (300.0, Direction::Falling),
+            (600.0, Direction::Rising),
+            (780.0, Direction::Falling),
+        ];
+        assert_eq!(found.len(), expected.len(), "{found:?}");
+        for ((time, direction), (want, want_direction)) in found.iter().zip(expected) {
+            assert!((time - want).abs() < 0.01, "{found:?}");
+            assert_eq!(*direction, want_direction);
+        }
     }
 
     // --- ThresholdStep (ported from transits.rs step_size tests) ---

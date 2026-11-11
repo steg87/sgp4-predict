@@ -13,8 +13,8 @@ mod vectors;
 use area::{Circle, Coverage, FillRule, GeodeticPoint, LatLon, Polygon, Rectangle};
 use elements::{Classification, Elements};
 use predictor::{
-    AoiIter, ApsisIter, GroundTrackIter, IlluminationIter, ObservationIter, PredictionIter,
-    Predictor, Refinement, TransitIter,
+    AoiIter, ApsisIter, ArgLatIter, GroundTrackIter, IlluminationIter, ObservationIter,
+    PredictionIter, Predictor, Refinement, TransitIter,
 };
 use tle::Tle;
 use types::{
@@ -58,6 +58,7 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Predictor>()?;
     m.add_class::<PredictionIter>()?;
     m.add_class::<ApsisIter>()?;
+    m.add_class::<ArgLatIter>()?;
     m.add_class::<IlluminationIter>()?;
     m.add_class::<TransitIter>()?;
     m.add_class::<ObservationIter>()?;

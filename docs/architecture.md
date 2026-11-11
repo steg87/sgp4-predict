@@ -41,10 +41,8 @@ graph TD
 | `predict.rs`      | SGP4 call + km→m conversion; produces `StateVector<Teme>`                                                                                                         |
 | `observe.rs`      | `Observation` (ground→satellite) and `Pointing` (satellite→ground); `observe_at` / `point_at`                                                                     |
 | `detect.rs`       | Generic event/window detection: `Detector`, `EventIter`, `WindowIter`, step strategies                                                                            |
-| `transits.rs`     | `TransitIter` over `WindowIter` (event function: elevation − min_elevation)                                                                                       |
-| `apsides.rs`      | `ApsisIter` over `EventIter` (event function: radial velocity `r·v`)                                                                                              |
-| `illumination.rs` | Cylindrical shadow model; `IlluminationIter` over `WindowIter`                                                                                                    |
-| `aoi.rs`          | `Area`/`Polygon`/`Rectangle`/`Circle` spherical geometry; `AoiIter` over `WindowIter` (event function: the area's signed angular offset from the payload's reach) |
+| detection modules | One iterator each, layered over `EventIter` or `WindowIter`, supplying an event function |
+| `aoi.rs`          | `Area`/`Polygon`/`Rectangle`/`Circle` spherical geometry, and the area-of-interest iterator |
 | `frames.rs`       | Frame marker types `Teme`, `Ecef`, `Enu`, `Lvlh`; geodetic `LatLon` / `GeodeticPoint` and the ECEF inverse                                                        |
 | `vectors.rs`      | `StateVector<F>`, `Position<F>`, `Velocity<F>`, `UnitVector<F>`, generic over frame                                                                               |
 | `angle.rs`        | `Degrees` / `Radians` newtypes                                                                                                                                    |
@@ -59,10 +57,7 @@ flowchart LR
     Predictor -->|propagate| SV["StateVector&lt;Teme&gt;"]
     Predictor -->|observe_at| Obs["Observation"]
     Predictor -->|point_at| Pt["Pointing"]
-    Predictor -->|transits_iter| TI["TransitIter → Transit"]
-    Predictor -->|apsis_iter| AI["ApsisIter → Apsis"]
-    Predictor -->|illumination_iter| II["IlluminationIter → Illumination"]
-    Predictor -->|aoi_iter| QI["AoiIter → AoiWindow"]
+    Predictor -->|"*_iter (detection)"| DI["Detection iterators → events / windows"]
     Predictor -->|prediction_iter| PI["PredictionIter → StateVector"]
     Predictor -->|observation_iter| OI["ObservationIter → Observation"]
     Predictor -->|ground_track_iter| GI["GroundTrackIter → GeodeticPoint"]
