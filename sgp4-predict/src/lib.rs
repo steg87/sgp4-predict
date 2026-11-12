@@ -243,12 +243,12 @@ impl Predictor {
     /// SGP4 accuracy degrades with element-set age (typically beyond 3–7 days for LEO).
     /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
     /// as appropriate for your use case.
-    pub fn new<E>(source: E) -> Result<Self>
+    pub fn new<E>(elements: E) -> Result<Self>
     where
         E: TryInto<Elements>,
         E::Error: Into<Error>,
     {
-        let elements = source.try_into().map_err(Into::into)?;
+        let elements = elements.try_into().map_err(Into::into)?;
         let constants = Constants::from_elements(&elements)?;
         let predictor = Self {
             elements,
