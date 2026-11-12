@@ -226,9 +226,9 @@ impl FromStr for Predictor {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let [name, line_1, line_2] = types::split_element_set(s)?;
+        let (name, line_1, line_2) = types::split_element_set(s)?;
         Self::new(Elements::from_tle(
-            Some(name.to_string()),
+            Some(name.into_owned()),
             line_1.as_bytes(),
             line_2.as_bytes(),
         )?)

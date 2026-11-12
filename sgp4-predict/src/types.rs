@@ -4,6 +4,7 @@
 //! also available via [`crate::prelude`].
 
 use sgp4::{Elements, TleError};
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use thiserror::Error as ThisError;
@@ -83,7 +84,8 @@ impl TryFrom<&Tle> for Elements {
 }
 
 /// Parse a 3-line element set (name + two TLE lines), or a 2-line one, in
-/// which case the NORAD catalog number from line 1 stands in for the name.
+/// which case the name is `NORAD-<id>` from line 1 (`Unknown` if line 1 has no
+/// id).
 ///
 /// Blank lines are ignored; two or three non-empty lines must remain.
 ///
@@ -95,24 +97,28 @@ impl FromStr for Tle {
     type Err = TleParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let [name, line_1, line_2] = split_element_set(s)?;
+        let (name, line_1, line_2) = split_element_set(s)?;
         Ok(Self::new(name, line_1, line_2))
     }
 }
 
-/// Splits a 2- or 3-line element set into `[name, line 1, line 2]` without
-/// allocating them; shared by [`Tle`]'s and [`Predictor`][crate::Predictor]'s
-/// `FromStr`.
-pub(crate) fn split_element_set(s: &str) -> Result<[&str; 3], TleParseError> {
+/// Splits a 2- or 3-line element set into `(name, line 1, line 2)`; shared by
+/// [`Tle`]'s and [`Predictor`][crate::Predictor]'s `FromStr`.
+pub(crate) fn split_element_set(s: &str) -> Result<(Cow<'_, str>, &str, &str), TleParseError> {
     let lines: Vec<&str> = s.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
     match lines.as_slice() {
-        [name, line_1, line_2] => Ok([name, line_1, line_2]),
+        [name, line_1, line_2] => Ok((Cow::Borrowed(name), line_1, line_2)),
         [line_1, line_2] => {
             let norad_id = line_1.get(2..7).unwrap_or_default().trim();
-            Ok([norad_id, line_1, line_2])
+            let name = if norad_id.is_empty() {
+                Cow::Borrowed("Unknown")
+            } else {
+                Cow::Owned(format!("NORAD-{norad_id}"))
+            };
+            Ok((name, line_1, line_2))
         }
         _ => Err(TleParseError(format!(
-            "expected 2 or 3 non-empty lines ([name,] line 1, line 2), got {}",
+            "expected 2 or 3 non-empty lines (optional name, line 1, line 2), found {}",
             lines.len()
         ))),
     }
