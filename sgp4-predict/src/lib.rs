@@ -362,6 +362,8 @@ pub enum Error {
     Custom(String),
 }
 
+// `Elements: TryInto<Elements>` fails with `Infallible`, which `Predictor::new`'s
+// `E::Error: Into<Error>` bound needs to convert. It has no values, so this never runs.
 impl From<std::convert::Infallible> for Error {
     fn from(never: std::convert::Infallible) -> Self {
         match never {}
