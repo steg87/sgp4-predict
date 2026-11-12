@@ -10,6 +10,14 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `FromStr for Predictor`: parse a 3-line element set directly, `text.parse::<Predictor>()`.
+
+### Changed
+
+- **Breaking:** `Predictor::new` accepts anything convertible to `Elements` (`Elements`, `Tle`, `&Tle`, or your own type via `TryFrom<&YourType> for Elements`). `Predictor::from_tle` and the `TleRecord` trait are removed; replace `Predictor::from_tle(&tle)` with `Predictor::new(&tle)`, and `impl TleRecord for YourType` with `impl TryFrom<&YourType> for Elements`.
+
 ## [0.5.0] - 2026-11-11
 
 ### Added

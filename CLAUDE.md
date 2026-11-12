@@ -21,7 +21,7 @@ A Rust library wrapping the `sgp4` crate to provide higher-level prediction and 
 
 ### Entry point: `Predictor`
 
-`Predictor` (in `lib.rs`) has one constructor, `Predictor::new<E: TryInto<Elements>>` where `E::Error: Into<Error>`. `Elements` (OMM), `Tle` and `&Tle` pass directly; a caller's own record type implements `TryFrom<&Mine> for Elements`. `From<Infallible> for Error` is what lets `Elements` itself satisfy the bound.
+`Predictor` (in `lib.rs`) has one constructor, `Predictor::new<E: TryInto<Elements>>` where `E::Error: Into<Error>`. `Elements` (OMM), `Tle` and `&Tle` pass directly; a caller's own record type implements `TryFrom<&Mine> for Elements`. `From<Infallible> for Error` is what lets `Elements` itself satisfy the bound. `FromStr for Predictor` is a thin wrapper over `Tle`'s parser, for a raw 3-line string.
 
 Every detection entry point has a `_with_opts` sibling taking an `XxxOpts`; the iterator ones also take a trailing `refinement: Refinement` (opts before refinement), while the one-shot methods (`detect_transit`, `max_elevation`) keep reading `self.refinement` implicitly. Each `XxxOpts`'s `Default` reproduces the entry point's prior hardcoded behaviour, and step-like fields are floored to 1 second (`MIN_POSITIVE_STEP` in each module) — a zero or negative step never advances the scan and would hang the iterator.
 
