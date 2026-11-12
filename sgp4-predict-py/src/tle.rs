@@ -1,7 +1,6 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
-use sgp4_predict::TleRecord;
 
 use crate::elements::Elements;
 
@@ -46,26 +45,20 @@ impl Tle {
     ///
     /// Raises `ValueError` if the TLE is malformed.
     fn to_elements(&self) -> PyResult<Elements> {
-        sgp4_predict::Elements::from_tle(
-            Some(self.satellite_name.clone()),
-            self.line_1.as_bytes(),
-            self.line_2.as_bytes(),
-        )
-        .map(|inner| Elements { inner })
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+        sgp4_predict::Elements::try_from(self)
+            .map(|inner| Elements { inner })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 
-impl TleRecord for Tle {
-    fn satellite_name(&self) -> &str {
-        &self.satellite_name
-    }
+impl TryFrom<&Tle> for sgp4_predict::Elements {
+    type Error = sgp4_predict::TleError;
 
-    fn line_1(&self) -> &str {
-        &self.line_1
-    }
-
-    fn line_2(&self) -> &str {
-        &self.line_2
+    fn try_from(tle: &Tle) -> Result<Self, Self::Error> {
+        sgp4_predict::Elements::from_tle(
+            Some(tle.satellite_name.clone()),
+            tle.line_1.as_bytes(),
+            tle.line_2.as_bytes(),
+        )
     }
 }

@@ -12,7 +12,7 @@ use sgp4_predict::{Direction, EventIter, FixedStep, Predictor};
 #[test]
 fn test_equator_crossings() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
 
     // Sentinel-2C: 14.30821394 rev/day → orbital period ≈ 100.6 min.
     let period = Duration::seconds((86_400.0 / 14.308_213_94) as i64);

@@ -9,7 +9,7 @@ use sgp4_predict::{
 #[test]
 fn test_transits() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -42,7 +42,7 @@ fn test_transit_opts_max_duration_exceeded() {
     // A real pass is well over 1 second; capping max_transit_duration that low
     // must surface as WindowTooLong instead of silently using the default.
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -78,7 +78,7 @@ fn test_transit_opts_zero_step_does_not_hang() {
     // the boundary-walk floor (walk_step), rather than just returning an
     // empty result from a window with no transit in it at all.
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -124,12 +124,10 @@ fn test_transit_start_inside_interval() {
     let tle = common::create_tle();
     // This test compares two independent refinements of the same crossing to
     // within 1 ms, so it needs a tighter tolerance than the 1 ms default.
-    let p = Predictor::from_tle(&tle)
-        .unwrap()
-        .with_refinement(Refinement {
-            time_tolerance: 1e-4,
-            ..Refinement::default()
-        });
+    let p = Predictor::new(&tle).unwrap().with_refinement(Refinement {
+        time_tolerance: 1e-4,
+        ..Refinement::default()
+    });
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -185,7 +183,7 @@ fn test_transit_start_inside_interval() {
 #[test]
 fn test_detect_transit() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -247,7 +245,7 @@ fn test_max_elevation_trimmed_interval_returns_higher_endpoint() {
     // (e.g. a partial transit), max_elevation returns the higher-elevation
     // endpoint instead of erroring.
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -297,7 +295,7 @@ fn test_max_elevation_opts_zero_step_does_not_hang() {
     // MaxElevationOpts::scan_step must be floored to a positive duration
     // rather than stalling the scan forever.
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -329,7 +327,7 @@ fn test_transits_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -400,7 +398,7 @@ fn test_iterators_take_a_caller_type_and_stay_clone_and_debug() {
         }
     }
 
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let interval =
         common::datetime("2025-12-20T12:00:00Z")..common::datetime("2025-12-21T12:00:00Z");
     let it = p.transits_iter(&Bare, interval.clone(), Degrees(0.0));

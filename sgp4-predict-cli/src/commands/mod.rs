@@ -102,7 +102,7 @@ pub fn prepare(common: &CommonArgs) -> anyhow::Result<Context> {
     let interval = start..start + dur;
 
     let tle = load_tle(common.tle_file.as_deref())?;
-    let predictor = Predictor::from_tle(&tle)?;
+    let predictor = Predictor::new(&tle)?;
     warn_stale_tle(&predictor, start);
     let writer = open_writer(common.out.as_deref())?;
 

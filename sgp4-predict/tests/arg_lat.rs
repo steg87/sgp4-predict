@@ -2,10 +2,10 @@ mod common;
 
 use chrono::Duration;
 use chrono::{DateTime, Utc};
-use sgp4_predict::{Degrees, Elements, Error, Predictor, TleRecord};
+use sgp4_predict::{Degrees, Elements, Error, Predictor};
 
 fn predictor() -> Predictor {
-    Predictor::from_tle(common::create_tle()).unwrap()
+    Predictor::new(common::create_tle()).unwrap()
 }
 
 fn run(argument: f64) -> (Predictor, Vec<DateTime<Utc>>) {
@@ -91,8 +91,7 @@ fn test_non_finite_argument_errors_once_and_ends() {
 #[test]
 fn test_equatorial_orbit_has_no_ascending_node() {
     let tle = common::create_tle();
-    let mut elements =
-        Elements::from_tle(None, tle.line_1().as_bytes(), tle.line_2().as_bytes()).unwrap();
+    let mut elements = Elements::try_from(&tle).unwrap();
     elements.inclination = 0.0;
     let p = Predictor::new(elements).unwrap();
     assert_eq!(

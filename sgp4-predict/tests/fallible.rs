@@ -8,7 +8,7 @@ fn err() -> Result<i32> {
 }
 
 fn predictor() -> Predictor {
-    Predictor::from_tle(common::create_tle()).unwrap()
+    Predictor::new(common::create_tle()).unwrap()
 }
 
 fn glasgow() -> GeodeticPoint {

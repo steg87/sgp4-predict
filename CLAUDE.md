@@ -21,7 +21,7 @@ A Rust library wrapping the `sgp4` crate to provide higher-level prediction and 
 
 ### Entry point: `Predictor`
 
-`Predictor` (in `lib.rs`) is constructed from any `TleRecord` (`Predictor::from_tle`) or from `Elements` (OMM, `Predictor::new`).
+`Predictor` (in `lib.rs`) has one constructor, `Predictor::new<E: TryInto<Elements>>` where `E::Error: Into<Error>`. `Elements` (OMM), `Tle` and `&Tle` pass directly; a caller's own record type implements `TryFrom<&Mine> for Elements`. `From<Infallible> for Error` is what lets `Elements` itself satisfy the bound. `FromStr for Predictor` is a thin wrapper over `Tle`'s parser, for a raw 3-line string.
 
 Every detection entry point has a `_with_opts` sibling taking an `XxxOpts`; the iterator ones also take a trailing `refinement: Refinement` (opts before refinement), while the one-shot methods (`detect_transit`, `max_elevation`) keep reading `self.refinement` implicitly. Each `XxxOpts`'s `Default` reproduces the entry point's prior hardcoded behaviour, and step-like fields are floored to 1 second (`MIN_POSITIVE_STEP` in each module) — a zero or negative step never advances the scan and would hang the iterator.
 
@@ -71,7 +71,7 @@ The payoff was deletion, not idiom. `Observer` was queried behind `&'a O` at eve
 
 `to_enu` still recomputes `ecef_from_geodetic` and four `sin_cos` per sample. Caching those at iterator construction is now _possible_ (it was not, behind `&'a O`) but is not done: it needs an internal path separate from the public `to_enu`, and the gain is unmeasured against one SGP4 propagation per sample.
 
-**`TleRecord` is deliberately not given the same treatment.** It _lends_ borrowed `&str`s; `Into` cannot express that without allocating three `String`s into a temporary — the `Into<String>` vs `AsRef<str>` split in std. It also has one consumer (`from_tle`) and no iterator holds a `&'a T`, so there is nothing to delete. `tests/validation.rs` implements it on a YAML-deserialized struct, which is the trait working as intended. Do not "finish the job".
+**There is no `TleRecord` trait.** `TryFrom<&Mine> for Elements` is the std spelling of the same thing, and the orphan rule allows it because `&Mine` is local. `Elements` is the single currency every constructor path ends in.
 
 A caller with their own station type writes `From<&MyStation> for GeodeticPoint`; that is what a station name hangs off now, which is why `GroundObserver` was not kept for it. `From<&GeodeticPoint>` exists so `&point` also passes.
 
@@ -125,7 +125,7 @@ Both `Range<DateTime<Utc>>` and `Transit` implement `IntervalRange`, so a `Trans
 
 The two traits are deliberately separate. `IntervalRange` only _reads_ an interval, which is why every iterator takes `impl IntervalRange` — a caller's own type can span time without being reconstructible. `TimeWindow: IntervalRange + Sized` adds the one method that can't be derived from reading, `with_bounds(start, end) -> Self`, and gets `clamp_to` for free; it is implemented by the concrete detection results (`Transit`, `AoiWindow`, `Illumination`, `detect::Window`) only — `Range<DateTime<Utc>>` has no payload to preserve, so its `clamp_to` would just duplicate `IntervalRange::intersection`. Do not merge `with_bounds` into `IntervalRange` — that would force every interval-shaped type to be constructible and break the `impl IntervalRange` parameters.
 
-The `impl IntervalRange` parameters are by value, with a blanket `impl<T: IntervalRange + ?Sized> IntervalRange for &T` — the same shape as `TleRecord for &T` and `Area for &A`. A caller whose interval type isn't `Copy` passes `&interval` and nothing is moved or cloned; `a..b` still passes without parentheses. Do not "fix" the move by switching the parameters to `&impl IntervalRange`: that is breaking, forces `&(a..b)` at every call site, and buys nothing the blanket impl doesn't already give. It forwards `start`/`end` only, because the three defaulted methods are pure functions of those and so already read `T`'s own bounds through the reference — a defaulted method that is _not_ derivable from them has to be forwarded, or `&T` silently takes the default. That is why `Area for &A` forwards its defaulted `max_angular_distance`: overriding it is expected there.
+The `impl IntervalRange` parameters are by value, with a blanket `impl<T: IntervalRange + ?Sized> IntervalRange for &T` — the same shape as `Area for &A`. A caller whose interval type isn't `Copy` passes `&interval` and nothing is moved or cloned; `a..b` still passes without parentheses. Do not "fix" the move by switching the parameters to `&impl IntervalRange`: that is breaking, forces `&(a..b)` at every call site, and buys nothing the blanket impl doesn't already give. It forwards `start`/`end` only, because the three defaulted methods are pure functions of those and so already read `T`'s own bounds through the reference — a defaulted method that is _not_ derivable from them has to be forwarded, or `&T` silently takes the default. That is why `Area for &A` forwards its defaulted `max_angular_distance`: overriding it is expected there.
 
 `with_bounds` takes `&self` and rebuilds with `..*self` rather than mutating, so payload fields (`Illumination::state`, `Window::positive`) survive clamping. New window types belong here rather than growing another inherent `clamp_to`.
 

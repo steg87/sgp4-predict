@@ -1,7 +1,7 @@
 //! Higher-level satellite prediction built on the [`sgp4`] crate.
 //!
 //! [`Predictor`] is the main entry point. Construct it from a [`Tle`] (or any
-//! type that implements [`TleRecord`]), then use its methods to propagate state
+//! type convertible to [`Elements`]), then use its methods to propagate state
 //! vectors, compute ground observations, detect passes, find apsides, and query
 //! illumination.
 //!
@@ -18,7 +18,7 @@
 //!     .parse()
 //!     .unwrap();
 //!
-//! let predictor = Predictor::from_tle(&tle).unwrap();
+//! let predictor = Predictor::new(&tle).unwrap();
 //! let glasgow = GeodeticPoint {
 //!     latitude: Degrees(55.86),
 //!     longitude: Degrees(-4.25),
@@ -37,8 +37,9 @@
 //! # Custom types
 //!
 //! If your application already has types that hold TLE data or coordinates,
-//! implement [`TleRecord`] on them, and `From<&YourType> for `[`GeodeticPoint`],
-//! instead of converting first.
+//! implement `TryFrom<&YourType> for `[`Elements`] and
+//! `From<&YourType> for `[`GeodeticPoint`], and pass them to [`Predictor::new`]
+//! directly.
 //!
 //! # OMM support
 //!
@@ -106,7 +107,7 @@
 //! use sgp4_predict::{Direction, EventIter, FixedStep, Predictor, Tle};
 //!
 //! # let tle: Tle = "ISS (ZARYA)\n1 ...\n2 ...".parse().unwrap();
-//! let predictor = Predictor::from_tle(&tle).unwrap();
+//! let predictor = Predictor::new(&tle).unwrap();
 //! let start = Utc::now();
 //!
 //! let crossings = EventIter::builder()
@@ -150,9 +151,10 @@ mod vectors;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, MinutesSinceEpoch};
+use std::str::FromStr;
 use thiserror::Error as ThisError;
 
-pub use sgp4::{Classification, Elements};
+pub use sgp4::{Classification, Elements, TleError};
 
 pub use crate::{
     angle::{Degrees, Radians},
@@ -191,43 +193,17 @@ pub mod prelude {
     pub use crate::{
         AoiWindow, ApsisEvent, Classification, Degrees, Elements, Error, FallibleIter,
         GeodeticPoint, IlluminationState, LatLon, Observation, Pointing, Polygon, Predictor,
-        Radians, Result, TimeWindow, Tle, TleRecord, Transit,
+        Radians, Result, TimeWindow, Tle, Transit,
     };
 }
 
 /// Crate-wide result type, parameterised over [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// A type that holds a satellite name and two TLE lines.
-///
-/// Implement this on your own struct to pass it directly to
-/// [`Predictor::from_tle`] without converting to [`Tle`] first.
-pub trait TleRecord {
-    /// Returns the satellite name or NORAD catalog number string.
-    fn satellite_name(&self) -> &str;
-    /// Returns TLE line 1.
-    fn line_1(&self) -> &str;
-    /// Returns TLE line 2.
-    fn line_2(&self) -> &str;
-}
-
-impl<T: TleRecord> TleRecord for &T {
-    fn satellite_name(&self) -> &str {
-        (*self).satellite_name()
-    }
-    fn line_1(&self) -> &str {
-        (*self).line_1()
-    }
-    fn line_2(&self) -> &str {
-        (*self).line_2()
-    }
-}
-
 /// Pre-computed SGP4 constants ready for propagation.
 ///
-/// Build from TLE string lines via [`Predictor::from_tle`], or from a
-/// pre-parsed [`sgp4::Elements`] (e.g. from an OMM JSON object) via
-/// [`Predictor::new`].
+/// Build from a [`Tle`], or from pre-parsed [`sgp4::Elements`] (e.g. from an
+/// OMM JSON object), via [`Predictor::new`].
 #[derive(Debug, Clone)]
 pub struct Predictor {
     elements: Elements,
@@ -235,20 +211,49 @@ pub struct Predictor {
     refinement: Refinement,
 }
 
+/// Parse a 2- or 3-line element set directly.
+///
+/// ```
+/// # use sgp4_predict::Predictor;
+/// let predictor: Predictor = "\
+///     SENTINEL-2C\n\
+///     1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990\n\
+///     2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+///     .parse()
+///     .unwrap();
+/// ```
+impl FromStr for Predictor {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let (name, line_1, line_2) = types::split_element_set(s)?;
+        Self::new(Elements::from_tle(
+            Some(name.into_owned()),
+            line_1.as_bytes(),
+            line_2.as_bytes(),
+        )?)
+    }
+}
+
 impl Predictor {
-    /// Initialise SGP4 constants from pre-parsed orbital elements.
+    /// Initialise SGP4 constants from orbital elements.
     ///
-    /// Use this when you already have a [`sgp4::Elements`] value — for
-    /// example, one deserialised from an OMM JSON object with `serde_json`.
-    /// For the common case of building from TLE string lines, prefer
-    /// [`from_tle`](Predictor::from_tle).
+    /// Accepts [`Elements`] (e.g. deserialised from an OMM JSON object with
+    /// `serde_json`), a [`Tle`] or `&`[`Tle`], or any type with a
+    /// `TryFrom<&YourType> for Elements` impl — see [`Elements::from_tle`] for
+    /// building one from TLE lines.
     ///
-    /// Returns an error if SGP4 element initialisation fails.
+    /// Returns an error if conversion or SGP4 element initialisation fails.
     ///
     /// SGP4 accuracy degrades with element-set age (typically beyond 3–7 days for LEO).
     /// Use [`tle_age`](Predictor::tle_age) to check staleness and warn or reject
     /// as appropriate for your use case.
-    pub fn new(elements: Elements) -> Result<Self> {
+    pub fn new<E>(elements: E) -> Result<Self>
+    where
+        E: TryInto<Elements>,
+        E::Error: Into<Error>,
+    {
+        let elements = elements.try_into().map_err(Into::into)?;
         let constants = Constants::from_elements(&elements)?;
         let predictor = Self {
             elements,
@@ -259,32 +264,8 @@ impl Predictor {
             satellite = %predictor.elements.object_name.as_deref().unwrap_or(
                 &format!("NORAD {}", predictor.elements.norad_id)),
             epoch = %predictor.epoch(),
-            "predictor initialized from OMM elements"
+            "predictor initialized"
         );
-        Ok(predictor)
-    }
-
-    /// Parse TLE string lines and initialise SGP4 constants.
-    ///
-    /// Accepts any type implementing [`TleRecord`], including [`Tle`], `&`[`Tle`],
-    /// or your own custom struct.
-    ///
-    /// Returns an error if the TLE text is malformed or if SGP4
-    /// element initialisation fails.
-    pub fn from_tle(tle: impl TleRecord) -> Result<Self> {
-        let id = tle.satellite_name().to_string();
-        let elements = Elements::from_tle(
-            Some(id.clone()),
-            tle.line_1().as_bytes(),
-            tle.line_2().as_bytes(),
-        )?;
-        let constants = Constants::from_elements(&elements)?;
-        let predictor = Self {
-            elements,
-            constants,
-            refinement: Refinement::default(),
-        };
-        tracing::debug!(satellite = %id, epoch = %predictor.epoch(), "predictor initialized from TLE");
         Ok(predictor)
     }
 
@@ -384,4 +365,12 @@ pub enum Error {
     /// feature) whose failures don't fit another variant.
     #[error("{0}")]
     Custom(String),
+}
+
+// `Elements: TryInto<Elements>` fails with `Infallible`, which `Predictor::new`'s
+// `E::Error: Into<Error>` bound needs to convert. It has no values, so this never runs.
+impl From<std::convert::Infallible> for Error {
+    fn from(never: std::convert::Infallible) -> Self {
+        match never {}
+    }
 }

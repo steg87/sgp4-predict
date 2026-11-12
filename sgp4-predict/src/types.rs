@@ -1,14 +1,13 @@
-//! Standard implementation of [`TleRecord`].
+//! Standard TLE record type.
 //!
 //! [`Tle`] lets you get started quickly without defining your own struct. It is
 //! also available via [`crate::prelude`].
 
 use sgp4::{Elements, TleError};
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use thiserror::Error as ThisError;
-
-use crate::TleRecord;
 
 /// Error returned when a [`Tle`] cannot be parsed from a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ThisError)]
@@ -17,13 +16,13 @@ pub struct TleParseError(pub(crate) String);
 
 /// A TLE (Two-Line Element set) with an associated satellite identifier.
 ///
-/// Implements [`TleRecord`] so it can be passed directly to
-/// [`Predictor::from_tle`][crate::Predictor::from_tle].
+/// Converts to [`Elements`], so it can be passed directly to
+/// [`Predictor::new`][crate::Predictor::new].
 ///
 /// # Construction
 ///
-/// Build directly with [`Tle::new`], or parse a standard 3-line element set
-/// (name, line 1, line 2) with [`FromStr`]:
+/// Build directly with [`Tle::new`], or parse an element set (name, line 1,
+/// line 2; the name is optional) with [`FromStr`]:
 ///
 /// ```
 /// use sgp4_predict::Tle;
@@ -60,20 +59,6 @@ impl Tle {
     }
 }
 
-impl TleRecord for Tle {
-    fn satellite_name(&self) -> &str {
-        &self.satellite_name
-    }
-
-    fn line_1(&self) -> &str {
-        &self.line_1
-    }
-
-    fn line_2(&self) -> &str {
-        &self.line_2
-    }
-}
-
 impl TryFrom<Tle> for Elements {
     type Error = TleError;
 
@@ -98,25 +83,43 @@ impl TryFrom<&Tle> for Elements {
     }
 }
 
-/// Parse a standard 3-line element set (name + two TLE lines).
+/// Parse a 3-line element set (name + two TLE lines), or a 2-line one, in
+/// which case the name is `NORAD-<id>` from line 1 (`Unknown` if line 1 has no
+/// id).
 ///
-/// Blank lines are ignored; exactly three non-empty lines must remain.
+/// Blank lines are ignored; two or three non-empty lines must remain.
 ///
 /// # Errors
 ///
-/// Returns [`TleParseError`] if the input does not contain exactly three
+/// Returns [`TleParseError`] if the input does not contain two or three
 /// non-empty lines.
 impl FromStr for Tle {
     type Err = TleParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let lines: Vec<&str> = s.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
-        match lines.as_slice() {
-            [satellite_name, line_1, line_2] => Ok(Self::new(*satellite_name, *line_1, *line_2)),
-            _ => Err(TleParseError(format!(
-                "expected 3 non-empty lines (name, line 1, line 2), got {}",
-                lines.len()
-            ))),
+        let (name, line_1, line_2) = split_element_set(s)?;
+        Ok(Self::new(name, line_1, line_2))
+    }
+}
+
+/// Splits a 2- or 3-line element set into `(name, line 1, line 2)`; shared by
+/// [`Tle`]'s and [`Predictor`][crate::Predictor]'s `FromStr`.
+pub(crate) fn split_element_set(s: &str) -> Result<(Cow<'_, str>, &str, &str), TleParseError> {
+    let lines: Vec<&str> = s.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    match lines.as_slice() {
+        [name, line_1, line_2] => Ok((Cow::Borrowed(name), line_1, line_2)),
+        [line_1, line_2] => {
+            let norad_id = line_1.get(2..7).unwrap_or_default().trim();
+            let name = if norad_id.is_empty() {
+                Cow::Borrowed("Unknown")
+            } else {
+                Cow::Owned(format!("NORAD-{norad_id}"))
+            };
+            Ok((name, line_1, line_2))
         }
+        _ => Err(TleParseError(format!(
+            "expected 2 or 3 non-empty lines (optional name, line 1, line 2), found {}",
+            lines.len()
+        ))),
     }
 }

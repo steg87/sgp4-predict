@@ -178,7 +178,7 @@ impl Predictor {
     /// # use sgp4_predict::{Degrees, GeodeticPoint, Predictor, Tle};
     /// # use chrono::Utc;
     /// # let tle: Tle = "ISS (ZARYA)\n1 ...\n2 ...".parse().unwrap();
-    /// let predictor = Predictor::from_tle(&tle).unwrap();
+    /// let predictor = Predictor::new(&tle).unwrap();
     /// let t = Utc::now();
     ///
     /// let glasgow = GeodeticPoint {
