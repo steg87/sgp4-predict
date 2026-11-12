@@ -1061,7 +1061,7 @@ impl Predictor {
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// # let tle: Tle = unimplemented!();
-    /// let predictor = Predictor::from_tle(tle)?;
+    /// let predictor = Predictor::new(tle)?;
     /// let area = Polygon::new([
     ///     (Degrees(54.0), Degrees(-8.0)),
     ///     (Degrees(54.0), Degrees(-1.0)),

@@ -6,7 +6,7 @@ use sgp4_predict::{Degrees, GeodeticPoint, Predictor};
 #[test]
 fn test_observe() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -36,7 +36,7 @@ fn test_observe() {
 #[test]
 fn test_observe_cross_validate_skyfield() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -82,7 +82,7 @@ fn test_next_transit_observations_to_csv() {
 
     let tle = common::create_tle();
     let sat_id = tle.satellite_name.clone();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),

@@ -10,7 +10,7 @@ use sgp4_predict::{
 #[test]
 fn daily_state_vectors() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
 
     let start = p.epoch();
     let end = start + Duration::days(1);
@@ -38,7 +38,7 @@ fn daily_state_vectors() {
 #[test]
 fn current_ground_station_pass() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -94,7 +94,7 @@ fn current_ground_station_pass() {
 #[test]
 fn next_ground_station_pass() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -135,7 +135,7 @@ fn next_ground_station_pass() {
 #[test]
 fn pointing_at_a_ground_station() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -176,7 +176,7 @@ fn pointing_at_a_ground_station() {
 #[test]
 fn ground_station_passes() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -226,7 +226,7 @@ fn ground_station_passes() {
 #[test]
 fn sunlight_windows() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
 
     let start = p.epoch();
     let end = start + Duration::days(3);
@@ -252,7 +252,7 @@ fn sunlight_windows() {
 #[test]
 fn eclipse_transits() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -293,7 +293,7 @@ fn eclipse_transits() {
 #[test]
 fn resilient_pass_scan() {
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
     let gs = GeodeticPoint {
         latitude: Degrees(55.8642),
         longitude: Degrees(-4.2518),
@@ -348,7 +348,7 @@ fn area_of_interest_overpasses() {
     use sgp4_predict::Rectangle;
 
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
 
     // A latitude/longitude box: its north and south edges follow their parallels exactly. A
     // `Polygon` of the same four corners would bow poleward; `Circle` covers circular areas.
@@ -386,7 +386,7 @@ fn apsides() {
     use sgp4_predict::ApsisEvent;
 
     let tle = common::create_tle();
-    let p = Predictor::from_tle(&tle).unwrap();
+    let p = Predictor::new(&tle).unwrap();
 
     let start = p.epoch();
     let end = start + Duration::days(3);

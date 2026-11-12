@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
         .parse()?;
 
-    let predictor = Predictor::from_tle(&tle)?;
+    let predictor = Predictor::new(&tle)?;
 
     // Glasgow: latitude, longitude, altitude in metres.
     let glasgow = GeodeticPoint {
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
         2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
         .parse()?;
-    let predictor = Predictor::from_tle(&tle)?;
+    let predictor = Predictor::new(&tle)?;
 
     let area = Polygon::new([
         LatLon { latitude: Degrees(54.0), longitude: Degrees(-8.0) },
@@ -169,7 +169,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
         2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
         .parse()?;
-    let predictor = Predictor::from_tle(&tle)?;
+    let predictor = Predictor::new(&tle)?;
     let area = Rectangle::latitude_band(Degrees(50.0), Degrees(60.0))?;
 
     let start = Utc::now();
@@ -196,8 +196,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Bring your own types
 
 If your application already has a satellite record, implement
-[`TleRecord`](https://docs.rs/sgp4-predict/latest/sgp4_predict/trait.TleRecord.html) on it and pass
-it to `Predictor::from_tle` directly. For a ground-station type, give it a `From` impl — every
+`TryFrom<&YourType> for Elements` and pass it to `Predictor::new` directly. For a ground-station type, give it a `From` impl — every
 method taking a location takes `impl Into<GeodeticPoint>`:
 
 ```rust

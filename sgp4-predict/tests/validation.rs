@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde::Deserialize;
 use sgp4_predict::{
-    Degrees, GeodeticPoint, IlluminationState, Observation, Predictor, TleRecord, Transit,
+    Degrees, Elements, GeodeticPoint, IlluminationState, Observation, Predictor, Transit,
 };
 use std::collections::HashMap;
 use std::fmt::Write as FmtWrite;
@@ -48,17 +48,15 @@ struct Tle {
     line_2: String,
 }
 
-impl TleRecord for Tle {
-    fn satellite_name(&self) -> &str {
-        &self.name
-    }
+impl TryFrom<&Tle> for Elements {
+    type Error = sgp4_predict::Error;
 
-    fn line_1(&self) -> &str {
-        &self.line_1
-    }
-
-    fn line_2(&self) -> &str {
-        &self.line_2
+    fn try_from(tle: &Tle) -> Result<Self, Self::Error> {
+        Ok(Elements::from_tle(
+            Some(tle.name.clone()),
+            tle.line_1.as_bytes(),
+            tle.line_2.as_bytes(),
+        )?)
     }
 }
 
@@ -661,7 +659,7 @@ fn validate() {
             .get(&tc.observer)
             .unwrap_or_else(|| panic!("observer '{}' not found in spec", tc.observer));
 
-        let p: Predictor = Predictor::from_tle(tle)
+        let p: Predictor = Predictor::new(tle)
             .unwrap_or_else(|e| panic!("Predictor::from_tle failed for '{}': {e}", tc.name));
 
         let (window_start, duration_days, window_end) =
@@ -780,7 +778,7 @@ fn validate() {
             .get(&tc.observer)
             .unwrap_or_else(|| panic!("observer '{}' not found in spec", tc.observer));
 
-        let p: Predictor = Predictor::from_tle(tle)
+        let p: Predictor = Predictor::new(tle)
             .unwrap_or_else(|e| panic!("Predictor::from_tle failed for '{}': {e}", tc.name));
 
         let (window_start, duration_days, _) =
@@ -815,7 +813,7 @@ fn validate() {
             .get(&tc.tle)
             .unwrap_or_else(|| panic!("TLE '{}' not found in spec", tc.tle));
 
-        let p: Predictor = Predictor::from_tle(tle)
+        let p: Predictor = Predictor::new(tle)
             .unwrap_or_else(|e| panic!("Predictor::from_tle failed for '{}': {e}", tc.name));
 
         let (window_start, duration_days, _) =
@@ -932,7 +930,7 @@ fn montecarlo_benchmark() {
             .unwrap_or_else(|| panic!("transit case '{}' not found", bc.transit_case));
         let tle = spec.tles.get(&tc.tle).unwrap();
         let gs = spec.observers.get(&tc.observer).unwrap();
-        let p = Predictor::from_tle(tle).unwrap();
+        let p = Predictor::new(tle).unwrap();
         let (window_start, _, window_end) =
             resolve_window(&tc.start, tc.duration_days, &p, &tc.name);
         let min_el = Degrees(tc.min_elevation.unwrap_or(0.0));

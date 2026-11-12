@@ -4,7 +4,7 @@ use chrono::Duration;
 use sgp4_predict::{Degrees, GeodeticPoint, Predictor};
 
 fn predictor() -> Predictor {
-    Predictor::from_tle(common::create_tle()).unwrap()
+    Predictor::new(common::create_tle()).unwrap()
 }
 
 fn glasgow() -> GeodeticPoint {

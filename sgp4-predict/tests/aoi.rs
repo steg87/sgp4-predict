@@ -99,7 +99,7 @@ fn dense_scan_with(
 
 #[test]
 fn test_aoi_windows() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = scotland();
 
     let windows = p
@@ -143,7 +143,7 @@ fn test_aoi_windows() {
 /// find the same windows, at the same times.
 #[test]
 fn test_aoi_matches_dense_scan() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = europe();
 
     let adaptive = p
@@ -180,7 +180,7 @@ fn test_aoi_matches_dense_scan() {
 /// the bound derived from the element set. Check that against the propagator.
 #[test]
 fn test_ground_track_never_outruns_the_step_bound() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
 
     // Mirrors `max_sub_point_rate`, which is private to the crate.
     const OMEGA_EARTH: f64 = 7.292_115_0e-5;
@@ -220,7 +220,7 @@ fn test_ground_track_never_outruns_the_step_bound() {
 fn test_aoi_opts_max_duration_exceeded() {
     // A real overpass is well over 1 second; capping max_window_duration that
     // low must surface as WindowTooLong rather than silently truncating.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = scotland();
 
     let result = p
@@ -248,7 +248,7 @@ fn test_aoi_opts_zero_step_does_not_hang() {
     // rather than stalling forever. Bracket a known entry tightly so the
     // interval starts outside the window and ends inside it, exercising both
     // the coarse-scan floor and the boundary-walk floor.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = scotland();
 
     let reference = p
@@ -279,7 +279,7 @@ fn test_aoi_opts_zero_step_does_not_hang() {
 
 #[test]
 fn test_detect_aoi() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = scotland();
 
     let reference = p
@@ -318,7 +318,7 @@ fn test_detect_aoi() {
 fn test_aoi_window_start_inside_interval() {
     // A window already in progress when the search interval opens is excluded
     // by default, the same rule transits follow.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = scotland();
 
     let reference = p
@@ -342,7 +342,7 @@ fn test_aoi_window_start_inside_interval() {
 fn test_antimeridian_polygon() {
     // Nothing about the detector special-cases ±180°, so this is really a
     // check that no longitude wrapping crept in.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Polygon::new([
         (Degrees(-20.0), Degrees(160.0)),
         (Degrees(-20.0), Degrees(-160.0)),
@@ -365,7 +365,7 @@ fn test_antimeridian_polygon() {
 fn test_polar_polygon() {
     // A cap around the north pole. Sentinel-2C is sun-synchronous at ~98.6°
     // inclination, so it clips this on every orbit.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Polygon::new((0..36).map(|i| (Degrees(80.0), Degrees(i as f64 * 10.0 - 180.0))))
         .expect("valid cap");
 
@@ -386,7 +386,7 @@ fn test_polar_polygon() {
 
 #[test]
 fn test_vertex_order_does_not_change_windows() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let forward = scotland();
     let reversed = Polygon::new(forward.vertices().rev().collect::<Vec<_>>()).expect("valid box");
 
@@ -414,7 +414,7 @@ fn test_concave_area_windows_are_split() {
     // An L-shaped area over Europe. The notch is what makes this worth
     // testing: a ground track can leave and re-enter, and the two windows must
     // stay separate rather than merging across the gap.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Polygon::new([
         (Degrees(40.0), Degrees(0.0)),
         (Degrees(40.0), Degrees(30.0)),
@@ -446,7 +446,7 @@ fn test_fill_rule_changes_windows_over_a_self_intersecting_area() {
     // A pentagram winds its centre twice, so NonZero fills it and EvenOdd
     // leaves a hole. Made large enough that the ground track crosses the
     // central pentagon, which is the only region the rules disagree on.
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let star: Vec<_> = (0..5)
         .map(|i| {
             let theta = (90.0 + 144.0 * i as f64).to_radians();
@@ -489,7 +489,7 @@ fn test_fill_rule_changes_windows_over_a_self_intersecting_area() {
 
 #[test]
 fn test_rectangle_matches_dense_scan() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Rectangle::new(
         LatLon {
             latitude: Degrees(40.0),
@@ -526,7 +526,7 @@ fn test_rectangle_matches_dense_scan() {
 /// and excludes ground just inside the southern one.
 #[test]
 fn test_rectangle_honours_its_latitude_bounds_where_a_polygon_does_not() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let corners = [(40.0, -10.0), (40.0, 30.0), (65.0, 30.0), (65.0, -10.0)];
 
     let rect = Rectangle::new(
@@ -573,7 +573,7 @@ fn test_rectangle_honours_its_latitude_bounds_where_a_polygon_does_not() {
 
 #[test]
 fn test_circle_matches_dense_scan() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Circle::new(
         LatLon {
             latitude: Degrees(52.0),
@@ -599,7 +599,7 @@ fn test_circle_matches_dense_scan() {
 
 #[test]
 fn test_ground_track_iter_matches_sub_point() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let start = day().start;
 
     let track = p
@@ -646,7 +646,7 @@ fn windows(
 /// rather than a change in behaviour.
 #[test]
 fn test_zero_off_nadir_matches_the_default() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = europe();
 
     assert_eq!(
@@ -659,7 +659,7 @@ fn test_zero_off_nadir_matches_the_default() {
 /// each nadir-only window must sit inside a wider one.
 #[test]
 fn test_wider_field_of_regard_contains_the_nadir_windows() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = europe();
 
     let nadir = windows(&p, &area, AoiIterOpts::default());
@@ -682,7 +682,7 @@ fn test_wider_field_of_regard_contains_the_nadir_windows() {
 /// still accessible from a wide enough field of regard.
 #[test]
 fn test_area_the_ground_track_misses_is_still_reachable() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     // Placed off the ground track, inside a 30° field of regard but outside a
     // 5° one.
     let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(1.0)).expect("valid circle");
@@ -699,7 +699,7 @@ fn test_area_the_ground_track_misses_is_still_reachable() {
 /// Requiring the whole area is strictly harder than requiring part of it.
 #[test]
 fn test_full_coverage_is_contained_in_any_coverage() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(2.0)).expect("valid circle");
 
     let any = windows(&p, &area, off_nadir(45.0, Coverage::Any));
@@ -718,7 +718,7 @@ fn test_full_coverage_is_contained_in_any_coverage() {
 /// while parts of it are always in reach.
 #[test]
 fn test_area_wider_than_the_cone_is_never_fully_covered() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(30.0)).expect("valid circle");
 
     assert!(!windows(&p, &area, off_nadir(10.0, Coverage::Any)).is_empty());
@@ -732,7 +732,7 @@ fn test_area_wider_than_the_cone_is_never_fully_covered() {
 /// so cross-check it against a brute-force scan as the nadir-only path is.
 #[test]
 fn test_off_nadir_matches_dense_scan() {
-    let p = Predictor::from_tle(common::create_tle()).unwrap();
+    let p = Predictor::new(common::create_tle()).unwrap();
     let area = Circle::new((Degrees(52.0), Degrees(10.0)), Degrees(4.0)).expect("valid circle");
     let opts = off_nadir(30.0, Coverage::Any);
 

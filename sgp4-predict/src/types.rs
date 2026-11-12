@@ -1,4 +1,4 @@
-//! Standard implementation of [`TleRecord`].
+//! Standard TLE record type.
 //!
 //! [`Tle`] lets you get started quickly without defining your own struct. It is
 //! also available via [`crate::prelude`].
@@ -8,8 +8,6 @@ use std::str::FromStr;
 
 use thiserror::Error as ThisError;
 
-use crate::TleRecord;
-
 /// Error returned when a [`Tle`] cannot be parsed from a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ThisError)]
 #[error("invalid TLE: {0}")]
@@ -17,8 +15,8 @@ pub struct TleParseError(pub(crate) String);
 
 /// A TLE (Two-Line Element set) with an associated satellite identifier.
 ///
-/// Implements [`TleRecord`] so it can be passed directly to
-/// [`Predictor::from_tle`][crate::Predictor::from_tle].
+/// Converts to [`Elements`], so it can be passed directly to
+/// [`Predictor::new`][crate::Predictor::new].
 ///
 /// # Construction
 ///
@@ -57,20 +55,6 @@ impl Tle {
             line_1: line_1.into(),
             line_2: line_2.into(),
         }
-    }
-}
-
-impl TleRecord for Tle {
-    fn satellite_name(&self) -> &str {
-        &self.satellite_name
-    }
-
-    fn line_1(&self) -> &str {
-        &self.line_1
-    }
-
-    fn line_2(&self) -> &str {
-        &self.line_2
     }
 }
 
