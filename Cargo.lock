@@ -1044,7 +1044,7 @@ dependencies = [
 
 [[package]]
 name = "sgp4-predict"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "chrono",
  "humantime",
@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "sgp4-predict-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "assert_approx_eq",
@@ -1077,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "sgp4-predict-py"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "chrono",
  "ouroboros",

@@ -1,6 +1,6 @@
 [package]
 name = "sgp4-predict-py"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 rust-version = "1.90"
 publish = false
@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.30", features = ["chrono", "abi3-py310"] }
-sgp4-predict = { path = "../sgp4-predict", version = "0.6.0" }
+sgp4-predict = { path = "../sgp4-predict", version = "0.6.1" }
 chrono = { workspace = true }
 ouroboros = "0.18"
 pyo3-stub-gen = "0.23"
