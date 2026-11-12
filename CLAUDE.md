@@ -99,13 +99,19 @@ Deliberately absent: a `pointing_iter`. It would be `ObservationIter` with one l
 
 **Angles are type-safe** (`angle.rs`): `Degrees(f64)` and `Radians(f64)` tag a float with its unit so the two can't be mixed at a function boundary. There is deliberately no `From<f64>` for either — construction is always explicit. `GeodeticPoint::latitude`/`longitude` are `Degrees`; `Observation::azimuth`/`elevation` are `Radians`; `min_elevation` parameters take `impl Into<Radians>` so either unit passes directly without a round-trip. Internal-only angle math (GMST, elevation rate, sun position) stays plain `f64` — it never crosses the public API, so typing it would be ceremony without payoff.
 
+### Orbital elements (`orbital_elements.rs`)
+
+`TemeState::keplerian` is Vallado's `rv2coe` built from `h = r×v`, the eccentricity vector and the energy. Angles are measured in the orbit plane from the ascending node, or from TEME +X when there is none; the argument of perigee is zero when `e < 1e-9`. That one reference-axis choice covers the circular, equatorial and retrograde-equatorial cases without separate branches, so a circular orbit's `true_anomaly` is its argument of latitude. Only an unbound state (`Error::NotBound`) or a rectilinear one with no plane (`Error::NoOrbitPlane`) errors — circular and equatorial orbits are legitimate, unlike `argument_of_latitude`, which needs a node.
+
+`µ` comes from `sgp4::WGS84` (`ke²·ae³`), not the usual 3.986004418e14, so an osculating `a` agrees with the propagator's. `MeanElements` reports the TLE's Kozai mean motion; SGP4's internal Brouwer value is not exposed by the `sgp4` crate. Osculating and mean values differ by J2 periodics (~10 km in `a`), so they are not interchangeable.
+
 ### Apsis detection (`apsides.rs`)
 
 `ApsisIter` monitors the sign of the radial velocity `r · v` in TEME at a fixed step (60 s by default, see `ApsisIterOpts`). A sign change brackets an event: positive→negative is apogee, negative→positive is perigee. Brent's method refines the crossing time — no derivative needed, since the bracket is already known.
 
 ### Argument-of-latitude detection (`arg_lat.rs`)
 
-`ArgLatIter` finds when the satellite reaches an argument of latitude `u₀` and yields its time directly. The event function is `sin(u − u₀)`, built from the osculating TEME state (`ĥ = r×v`, node `n = ẑ×ĥ`, in-plane `p = ĥ×n`). It is continuous, so there is no 0/360° wrap to bracket across, which `u − u₀` would have. `u` always advances in the direction of motion because it is built from `h = r×v`, so `sin(u − u₀)` rises through zero at `u₀` and falls at `u₀ + 180°` for prograde and retrograde orbits alike.
+`ArgLatIter` finds when the satellite reaches an argument of latitude `u₀` and yields its time directly. The event function is `sin(u − u₀)`, built from the osculating TEME state's `OrbitPlane` (`orbital_elements.rs`: `ĥ = r×v`, node `n = ẑ×ĥ`, in-plane `ĥ×n`), which `argument_of_latitude` and `keplerian` share. It is continuous, so there is no 0/360° wrap to bracket across, which `u − u₀` would have. `u` always advances in the direction of motion because it is built from `h = r×v`, so `sin(u − u₀)` rises through zero at `u₀` and falls at `u₀ + 180°` for prograde and retrograde orbits alike.
 
 Only the rising crossings are wanted: the iterator builds its `CrossingDetector` with `ignore_falling_crossings`, which drops falling ones before refinement. There is deliberately no antipode event — `arg_lat_iter(u₀ + 180°)` is it, so a second variant would carry no information and an unfiltered default would hand callers twice the events they asked for.
 

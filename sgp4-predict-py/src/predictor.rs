@@ -15,8 +15,8 @@ use crate::{
     errors::to_py_err,
     tle::Tle,
     types::{
-        AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Observation, Pointing,
-        Transit,
+        AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, MeanElementSet, Observation,
+        OsculatingElements, Pointing, Transit,
     },
     vectors::StateVectorTeme,
 };
@@ -460,6 +460,21 @@ impl Predictor {
             .argument_of_latitude(t)
             .map(|u| u.degrees())
             .map_err(to_py_err)
+    }
+
+    /// Osculating Keplerian elements at the given UTC time.
+    ///
+    /// Raises if the state is not on a bound orbit.
+    fn osculating_elements(&self, t: DateTime<Utc>) -> PyResult<OsculatingElements> {
+        self.inner
+            .osculating_elements(t)
+            .map(OsculatingElements::from_inner)
+            .map_err(to_py_err)
+    }
+
+    /// The mean elements this predictor was built from.
+    fn mean_elements(&self) -> MeanElementSet {
+        MeanElementSet::from_inner(self.inner.mean_elements())
     }
 
     /// Calculate the observation from an observer at the given UTC time.

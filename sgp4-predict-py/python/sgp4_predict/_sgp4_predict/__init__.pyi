@@ -26,8 +26,10 @@ __all__ = [
     "IlluminationState",
     "Interval",
     "LatLon",
+    "MeanElementSet",
     "Observation",
     "ObservationIter",
+    "OsculatingElements",
     "Pointing",
     "Polygon",
     "PredictionIter",
@@ -469,6 +471,76 @@ class LatLon:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class MeanElementSet:
+    r"""
+    The mean elements the element set was published with. Angles are in
+    degrees.
+    
+    `mean_motion` and `period_seconds` are the Kozai values used by TLEs and
+    OMM messages, so a semi-major axis derived from them differs by a few
+    kilometres from the Brouwer value SGP4 propagates internally.
+    """
+    @property
+    def epoch(self) -> datetime.datetime:
+        r"""
+        Element-set epoch (UTC).
+        """
+    @property
+    def inclination_deg(self) -> builtins.float:
+        r"""
+        Inclination in degrees.
+        """
+    @property
+    def raan_deg(self) -> builtins.float:
+        r"""
+        Right ascension of the ascending node in degrees.
+        """
+    @property
+    def eccentricity(self) -> builtins.float:
+        r"""
+        Eccentricity.
+        """
+    @property
+    def argument_of_perigee_deg(self) -> builtins.float:
+        r"""
+        Argument of perigee in degrees.
+        """
+    @property
+    def mean_anomaly_deg(self) -> builtins.float:
+        r"""
+        Mean anomaly at `epoch` in degrees.
+        """
+    @property
+    def mean_motion(self) -> builtins.float:
+        r"""
+        Mean motion in rad/s.
+        """
+    @property
+    def period_seconds(self) -> builtins.float:
+        r"""
+        Orbital period in seconds.
+        """
+    @property
+    def bstar(self) -> builtins.float:
+        r"""
+        SGP4 drag term B*, in inverse earth radii.
+        """
+    @property
+    def mean_motion_dot(self) -> builtins.float:
+        r"""
+        Half the first derivative of mean motion (ṅ/2), in rev/day², as
+        published in the TLE and OMM.
+        """
+    @property
+    def mean_motion_ddot(self) -> builtins.float:
+        r"""
+        One sixth of the second derivative of mean motion (n̈/6), in
+        rev/day³, as published in the TLE and OMM.
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Observation:
     r"""
     A point observation of a satellite from a ground location.
@@ -500,6 +572,74 @@ class ObservationIter:
     """
     def __iter__(self) -> ObservationIter: ...
     def __next__(self) -> tuple[datetime.datetime, Observation]: ...
+
+@typing.final
+class OsculatingElements:
+    r"""
+    Osculating Keplerian elements at one instant. Angles are in degrees,
+    `[0, 360)` (inclination `[0, 180]`).
+    
+    An equatorial orbit has `raan_deg == 0` and angles measured from the TEME
+    +X axis; a circular one has `argument_of_perigee_deg == 0`, so
+    `true_anomaly_deg` is then the argument of latitude.
+    """
+    @property
+    def semi_major_axis(self) -> builtins.float:
+        r"""
+        Semi-major axis in metres.
+        """
+    @property
+    def eccentricity(self) -> builtins.float:
+        r"""
+        Eccentricity.
+        """
+    @property
+    def inclination_deg(self) -> builtins.float:
+        r"""
+        Inclination in degrees.
+        """
+    @property
+    def raan_deg(self) -> builtins.float:
+        r"""
+        Right ascension of the ascending node in degrees (TEME).
+        """
+    @property
+    def argument_of_perigee_deg(self) -> builtins.float:
+        r"""
+        Argument of perigee in degrees.
+        """
+    @property
+    def true_anomaly_deg(self) -> builtins.float:
+        r"""
+        True anomaly in degrees.
+        """
+    @property
+    def mean_anomaly_deg(self) -> builtins.float:
+        r"""
+        Mean anomaly in degrees.
+        """
+    @property
+    def mean_motion(self) -> builtins.float:
+        r"""
+        Mean motion in rad/s.
+        """
+    @property
+    def period_seconds(self) -> builtins.float:
+        r"""
+        Orbital period in seconds.
+        """
+    @property
+    def perigee_altitude(self) -> builtins.float:
+        r"""
+        Perigee height above the WGS-84 equatorial radius in metres.
+        """
+    @property
+    def apogee_altitude(self) -> builtins.float:
+        r"""
+        Apogee height above the WGS-84 equatorial radius in metres.
+        """
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Pointing:
@@ -634,6 +774,16 @@ class Predictor:
         
         The angle from the ascending node to the satellite along the orbit.
         Raises for an equatorial orbit, which has no ascending node.
+        """
+    def osculating_elements(self, t: datetime.datetime) -> OsculatingElements:
+        r"""
+        Osculating Keplerian elements at the given UTC time.
+        
+        Raises if the state is not on a bound orbit.
+        """
+    def mean_elements(self) -> MeanElementSet:
+        r"""
+        The mean elements this predictor was built from.
         """
     def observe_at(self, t: datetime.datetime, observer: GeodeticPoint) -> Observation:
         r"""

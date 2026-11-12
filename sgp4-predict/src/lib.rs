@@ -142,6 +142,7 @@ mod fallible;
 mod frames;
 mod illumination;
 mod observe;
+mod orbital_elements;
 mod predict;
 mod roots;
 mod time;
@@ -169,6 +170,7 @@ pub use crate::{
     frames::{EcefState, EnuState, GeodeticPoint, LatLon, LvlhDirection, LvlhState, TemeState},
     illumination::{Illumination, IlluminationIter, IlluminationIterOpts, IlluminationState},
     observe::{Observation, ObservationIter, Pointing},
+    orbital_elements::{KeplerianElements, MeanElements},
     predict::{GroundTrackIter, PredictionIter},
     roots::{Error as RootsError, Refinement},
     time::{DateTimeIter, IntervalRange, TimeWindow},
@@ -361,6 +363,14 @@ pub enum Error {
     /// is measured from the ascending node, and there is none.
     #[error("equatorial orbit has no ascending node")]
     NoAscendingNode,
+    /// The state is on a parabolic or hyperbolic orbit, so it has no
+    /// semi-major axis or period.
+    #[error("orbit is not bound")]
+    NotBound,
+    /// Position and velocity are parallel, so there is no angular momentum
+    /// and no orbit plane.
+    #[error("state has no orbit plane")]
+    NoOrbitPlane,
     /// Escape hatch for custom `EventFunction` implementations (`generics`
     /// feature) whose failures don't fit another variant.
     #[error("{0}")]

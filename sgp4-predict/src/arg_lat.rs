@@ -128,47 +128,13 @@ impl Iterator for ArgLatIter {
 }
 
 impl Predictor {
-    /// Osculating argument of latitude at `t`, in `[0, 360°)`: the angle from
-    /// the ascending node to the satellite, measured along the orbit.
-    ///
-    /// The node is poorly conditioned as the inclination approaches zero, so
-    /// the value is noisy for near-equatorial orbits.
-    ///
-    /// # Errors
-    /// Propagation errors, and [`Error::NoAscendingNode`] for an equatorial
-    /// orbit.
-    pub fn argument_of_latitude(&self, t: DateTime<Utc>) -> Result<Radians> {
-        let (sin_u, cos_u) = self.sin_cos_argument_of_latitude(t)?;
-        let u = Radians(sin_u.atan2(cos_u)).normalized();
-        // `rem_euclid` can round a tiny negative angle up to exactly a full turn.
-        Ok(if u.0 >= std::f64::consts::TAU {
-            Radians(0.0)
-        } else {
-            u
-        })
-    }
-
     fn sin_cos_argument_of_latitude(&self, t: DateTime<Utc>) -> Result<(f64, f64)> {
         let s = self.propagate(t)?;
-        let (r, v) = (s.position, s.velocity);
-        let h = (
-            r.y * v.z - r.z * v.y,
-            r.z * v.x - r.x * v.z,
-            r.x * v.y - r.y * v.x,
-        );
-        // Ascending-node direction (ẑ × h) and the in-plane direction 90° ahead
-        // of it (h × n), both unnormalised.
-        let node_norm = h.0.hypot(h.1);
-        let h_norm = node_norm.hypot(h.2);
-        if node_norm < 1e-9 * h_norm {
+        let plane = s.orbit_plane();
+        if !plane.has_node {
             return Err(Error::NoAscendingNode);
         }
-        let n = (-h.1, h.0, 0.0);
-        let p = (-h.2 * h.0, -h.2 * h.1, node_norm * node_norm);
-        let r_norm = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt();
-        let cos_u = (r.x * n.0 + r.y * n.1 + r.z * n.2) / (node_norm * r_norm);
-        let sin_u = (r.x * p.0 + r.y * p.1 + r.z * p.2) / (h_norm * node_norm * r_norm);
-        Ok((sin_u, cos_u))
+        Ok(plane.sin_cos(&s.position))
     }
 
     /// Detect the times the satellite reaches `argument` of latitude.

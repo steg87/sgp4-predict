@@ -18,8 +18,8 @@ use predictor::{
 };
 use tle::Tle;
 use types::{
-    AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Interval, Observation, Pointing,
-    Transit,
+    AoiWindow, Apsis, ApsisEvent, Illumination, IlluminationState, Interval, MeanElementSet,
+    Observation, OsculatingElements, Pointing, Transit,
 };
 use vectors::{PyVec3, StateVectorEcef, StateVectorEnu, StateVectorLvlh, StateVectorTeme};
 
@@ -47,6 +47,8 @@ fn _sgp4_predict(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Transit>()?;
     m.add_class::<ApsisEvent>()?;
     m.add_class::<Apsis>()?;
+    m.add_class::<OsculatingElements>()?;
+    m.add_class::<MeanElementSet>()?;
     m.add_class::<IlluminationState>()?;
     m.add_class::<Illumination>()?;
     m.add_class::<FillRule>()?;
