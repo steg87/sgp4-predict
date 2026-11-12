@@ -211,7 +211,7 @@ pub struct Predictor {
     refinement: Refinement,
 }
 
-/// Parse a 3-line element set (name, line 1, line 2) directly.
+/// Parse a 2- or 3-line element set directly.
 ///
 /// ```
 /// # use sgp4_predict::Predictor;

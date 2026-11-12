@@ -12,7 +12,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Added
 
-- `FromStr for Predictor`: parse a 3-line element set directly, `text.parse::<Predictor>()`.
+- `FromStr for Predictor`: parse an element set directly, `text.parse::<Predictor>()`.
+- `Tle::from_str` accepts a 2-line element set with no name, using the NORAD catalog number from line 1 as the satellite name.
 
 ### Changed
 

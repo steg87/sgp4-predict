@@ -20,8 +20,8 @@ pub struct TleParseError(pub(crate) String);
 ///
 /// # Construction
 ///
-/// Build directly with [`Tle::new`], or parse a standard 3-line element set
-/// (name, line 1, line 2) with [`FromStr`]:
+/// Build directly with [`Tle::new`], or parse an element set (name, line 1,
+/// line 2; the name is optional) with [`FromStr`]:
 ///
 /// ```
 /// use sgp4_predict::Tle;
@@ -82,13 +82,14 @@ impl TryFrom<&Tle> for Elements {
     }
 }
 
-/// Parse a standard 3-line element set (name + two TLE lines).
+/// Parse a 3-line element set (name + two TLE lines), or a 2-line one, in
+/// which case the NORAD catalog number from line 1 stands in for the name.
 ///
-/// Blank lines are ignored; exactly three non-empty lines must remain.
+/// Blank lines are ignored; two or three non-empty lines must remain.
 ///
 /// # Errors
 ///
-/// Returns [`TleParseError`] if the input does not contain exactly three
+/// Returns [`TleParseError`] if the input does not contain two or three
 /// non-empty lines.
 impl FromStr for Tle {
     type Err = TleParseError;
@@ -97,8 +98,12 @@ impl FromStr for Tle {
         let lines: Vec<&str> = s.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
         match lines.as_slice() {
             [satellite_name, line_1, line_2] => Ok(Self::new(*satellite_name, *line_1, *line_2)),
+            [line_1, line_2] => {
+                let norad_id = line_1.get(2..7).unwrap_or_default().trim();
+                Ok(Self::new(norad_id, *line_1, *line_2))
+            }
             _ => Err(TleParseError(format!(
-                "expected 3 non-empty lines (name, line 1, line 2), got {}",
+                "expected 2 or 3 non-empty lines ([name,] line 1, line 2), got {}",
                 lines.len()
             ))),
         }
