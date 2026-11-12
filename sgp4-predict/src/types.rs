@@ -95,17 +95,25 @@ impl FromStr for Tle {
     type Err = TleParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let lines: Vec<&str> = s.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
-        match lines.as_slice() {
-            [satellite_name, line_1, line_2] => Ok(Self::new(*satellite_name, *line_1, *line_2)),
-            [line_1, line_2] => {
-                let norad_id = line_1.get(2..7).unwrap_or_default().trim();
-                Ok(Self::new(norad_id, *line_1, *line_2))
-            }
-            _ => Err(TleParseError(format!(
-                "expected 2 or 3 non-empty lines ([name,] line 1, line 2), got {}",
-                lines.len()
-            ))),
+        let [name, line_1, line_2] = split_element_set(s)?;
+        Ok(Self::new(name, line_1, line_2))
+    }
+}
+
+/// Splits a 2- or 3-line element set into `[name, line 1, line 2]` without
+/// allocating them; shared by [`Tle`]'s and [`Predictor`][crate::Predictor]'s
+/// `FromStr`.
+pub(crate) fn split_element_set(s: &str) -> Result<[&str; 3], TleParseError> {
+    let lines: Vec<&str> = s.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    match lines.as_slice() {
+        [name, line_1, line_2] => Ok([name, line_1, line_2]),
+        [line_1, line_2] => {
+            let norad_id = line_1.get(2..7).unwrap_or_default().trim();
+            Ok([norad_id, line_1, line_2])
         }
+        _ => Err(TleParseError(format!(
+            "expected 2 or 3 non-empty lines ([name,] line 1, line 2), got {}",
+            lines.len()
+        ))),
     }
 }
