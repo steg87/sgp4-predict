@@ -4,7 +4,12 @@ use std::f64::consts::TAU;
 
 use chrono::{DateTime, Duration, Utc};
 
-use crate::{Error, Predictor, Result, TemeState, angle::Radians, frames::WGS84_A};
+use crate::{
+    Error, Predictor, Result, TemeState,
+    angle::Radians,
+    frames::WGS84_A,
+    vectors::{Axis, StateVector, UnitVector, Vec3},
+};
 
 /// Earth's gravitational parameter (m³/s²) from SGP4's WGS-84 geopotential,
 /// so osculating elements are consistent with the propagator.
@@ -86,115 +91,90 @@ pub struct MeanElements {
     pub mean_motion_ddot: f64,
 }
 
-pub(crate) type V = [f64; 3];
-
-fn dot(a: V, b: V) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn cross(a: V, b: V) -> V {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn scale(a: V, k: f64) -> V {
-    [a[0] * k, a[1] * k, a[2] * k]
-}
-
-/// Wrap into `[0, 2π)`; `rem_euclid` can round a tiny negative to a full turn.
-fn wrap(angle: f64) -> Radians {
-    let a = angle.rem_euclid(TAU);
-    Radians(if a >= TAU { 0.0 } else { a })
-}
-
 fn seconds(s: f64) -> Duration {
     Duration::microseconds((s * 1e6).round() as i64)
 }
 
 /// The orbit plane's axes: the angular-momentum direction, the ascending node
 /// and the in-plane direction 90° ahead of it. With no node (an equatorial
-/// orbit) the node axis is TEME +X and `has_node` is false.
-pub(crate) struct OrbitPlane {
-    pub h_hat: V,
-    pub node_hat: V,
-    pub ahead: V,
+/// orbit) the node axis is +X and `has_node` is false.
+pub(crate) struct OrbitPlane<F> {
+    pub h_hat: UnitVector<F>,
+    pub node_hat: UnitVector<F>,
+    pub ahead: UnitVector<F>,
     pub has_node: bool,
 }
 
-impl OrbitPlane {
+impl<F> OrbitPlane<F> {
     /// In-plane angle of `u` from the node, along the direction of motion.
-    pub fn angle(&self, u: V) -> f64 {
-        dot(u, self.ahead).atan2(dot(u, self.node_hat))
+    pub fn angle<K>(&self, u: &Vec3<K, F>) -> f64 {
+        u.dot(&self.ahead).atan2(u.dot(&self.node_hat))
     }
 
     /// `(sin, cos)` of [`angle`](Self::angle), without the `atan2`.
-    pub fn sin_cos(&self, u: V) -> (f64, f64) {
-        let norm = dot(u, u).sqrt();
-        (dot(u, self.ahead) / norm, dot(u, self.node_hat) / norm)
+    pub fn sin_cos<K>(&self, u: &Vec3<K, F>) -> (f64, f64) {
+        let norm = u.norm();
+        (u.dot(&self.ahead) / norm, u.dot(&self.node_hat) / norm)
+    }
+}
+
+impl<F> StateVector<F> {
+    pub(crate) fn orbit_plane(&self) -> OrbitPlane<F> {
+        let h_hat = self.position.cross(&self.velocity).unit();
+        // ẑ × ĥ, whose length is sin(inclination).
+        let node = UnitVector::new(-h_hat.y, h_hat.x, 0.0);
+        let has_node = node.norm() >= SINGULAR;
+        let node_hat = if has_node {
+            node.scale(1.0 / node.norm())
+        } else {
+            UnitVector::new(1.0, 0.0, 0.0)
+        };
+        let ahead = h_hat.cross(&node_hat).unit();
+        OrbitPlane {
+            h_hat,
+            node_hat,
+            ahead,
+            has_node,
+        }
     }
 }
 
 impl TemeState {
-    pub(crate) fn orbit_plane(&self) -> OrbitPlane {
-        let r = [self.position.x, self.position.y, self.position.z];
-        let v = [self.velocity.x, self.velocity.y, self.velocity.z];
-        let h = cross(r, v);
-        let h_hat = scale(h, 1.0 / dot(h, h).sqrt());
-        // ẑ × ĥ, whose length is sin(inclination).
-        let node = [-h_hat[1], h_hat[0], 0.0];
-        let node_norm = node[0].hypot(node[1]);
-        let has_node = node_norm >= SINGULAR;
-        let node_hat = if has_node {
-            scale(node, 1.0 / node_norm)
-        } else {
-            [1.0, 0.0, 0.0]
-        };
-        OrbitPlane {
-            h_hat,
-            node_hat,
-            ahead: cross(h_hat, node_hat),
-            has_node,
-        }
-    }
-
     /// Osculating Keplerian elements of this state.
     ///
     /// # Errors
     /// [`Error::NotBound`] if the state is on a parabolic or hyperbolic orbit.
     pub fn keplerian(&self) -> Result<KeplerianElements> {
         let mu = mu();
-        let r = [self.position.x, self.position.y, self.position.z];
-        let v = [self.velocity.x, self.velocity.y, self.velocity.z];
-        let r_norm = dot(r, r).sqrt();
+        let (r, v) = (self.position, self.velocity);
+        let r_norm = r.norm();
 
-        let energy = dot(v, v) / 2.0 - mu / r_norm;
+        let energy = v.dot(&v) / 2.0 - mu / r_norm;
         if energy.partial_cmp(&0.0) != Some(std::cmp::Ordering::Less) {
             return Err(Error::NotBound);
         }
         let a = -mu / (2.0 * energy);
 
         let plane = self.orbit_plane();
-        let e_vec = scale(
-            [
-                (dot(v, v) - mu / r_norm) * r[0] - dot(r, v) * v[0],
-                (dot(v, v) - mu / r_norm) * r[1] - dot(r, v) * v[1],
-                (dot(v, v) - mu / r_norm) * r[2] - dot(r, v) * v[2],
-            ],
-            1.0 / mu,
+        let (k_r, k_v) = (v.dot(&v) - mu / r_norm, r.dot(&v));
+        let e_vec = Axis::new(
+            (k_r * r.x - k_v * v.x) / mu,
+            (k_r * r.y - k_v * v.y) / mu,
+            (k_r * r.z - k_v * v.z) / mu,
         );
-        let e = dot(e_vec, e_vec).sqrt();
+        let e = e_vec.norm();
         let raan = if plane.has_node {
-            plane.node_hat[1].atan2(plane.node_hat[0])
+            plane.node_hat.y.atan2(plane.node_hat.x)
         } else {
             0.0
         };
-        let angle = |u: V| plane.angle(u);
 
-        let argp = if e < SINGULAR { 0.0 } else { angle(e_vec) };
-        let nu = angle(r) - argp;
+        let argp = if e < SINGULAR {
+            0.0
+        } else {
+            plane.angle(&e_vec)
+        };
+        let nu = plane.angle(&r) - argp;
         let ecc_anomaly =
             2.0 * ((1.0 - e).sqrt() * (nu / 2.0).sin()).atan2((1.0 + e).sqrt() * (nu / 2.0).cos());
         let n = (mu / a.powi(3)).sqrt();
@@ -202,11 +182,11 @@ impl TemeState {
         Ok(KeplerianElements {
             semi_major_axis: a,
             eccentricity: e,
-            inclination: Radians(plane.h_hat[2].clamp(-1.0, 1.0).acos()),
-            raan: wrap(raan),
-            argument_of_perigee: wrap(argp),
-            true_anomaly: wrap(nu),
-            mean_anomaly: wrap(ecc_anomaly - e * ecc_anomaly.sin()),
+            inclination: Radians(plane.h_hat.z.clamp(-1.0, 1.0).acos()),
+            raan: Radians(raan).normalized(),
+            argument_of_perigee: Radians(argp).normalized(),
+            true_anomaly: Radians(nu).normalized(),
+            mean_anomaly: Radians(ecc_anomaly - e * ecc_anomaly.sin()).normalized(),
             mean_motion: n,
             period: seconds(TAU / n),
             perigee_altitude: a * (1.0 - e) - WGS84_A,
@@ -239,11 +219,7 @@ impl Predictor {
         if !plane.has_node {
             return Err(Error::NoAscendingNode);
         }
-        Ok(wrap(plane.angle([
-            s.position.x,
-            s.position.y,
-            s.position.z,
-        ])))
+        Ok(Radians(plane.angle(&s.position)).normalized())
     }
 
     /// The mean elements this predictor was built from.

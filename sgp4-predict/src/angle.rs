@@ -38,7 +38,9 @@ impl Degrees {
     /// Normalize into `[0, 360)`.
     #[must_use = "returns the normalized angle; the receiver is unchanged"]
     pub fn normalized(self) -> Self {
-        Self(self.0.rem_euclid(360.0))
+        // `rem_euclid` can round a tiny negative angle up to exactly a full turn.
+        let a = self.0.rem_euclid(360.0);
+        Self(if a >= 360.0 { 0.0 } else { a })
     }
 
     /// Total ordering, delegating to `f64::total_cmp`.
@@ -70,7 +72,8 @@ impl Radians {
     /// Normalize into `[0, 2π)`.
     #[must_use = "returns the normalized angle; the receiver is unchanged"]
     pub fn normalized(self) -> Self {
-        Self(self.0.rem_euclid(std::f64::consts::TAU))
+        let a = self.0.rem_euclid(std::f64::consts::TAU);
+        Self(if a >= std::f64::consts::TAU { 0.0 } else { a })
     }
 
     /// Total ordering, delegating to `f64::total_cmp`.
@@ -161,6 +164,8 @@ mod tests {
         let tau = std::f64::consts::TAU;
         assert!((Radians(tau + 1.0).normalized().0 - 1.0).abs() < 1e-12);
         assert!(Radians(-1.0).normalized().0 > 0.0);
+        assert_eq!(Radians(-1e-20).normalized().0, 0.0);
+        assert_eq!(Degrees(-1e-20).normalized().0, 0.0);
     }
 
     #[test]

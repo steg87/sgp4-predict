@@ -38,6 +38,35 @@ impl<K, F> Vec3<K, F> {
     }
 }
 
+impl<K, F> Vec3<K, F> {
+    /// Dot product with a vector of any kind in the same frame.
+    pub(crate) fn dot<K2>(&self, other: &Vec3<K2, F>) -> f64 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
+    pub(crate) fn norm(&self) -> f64 {
+        self.dot(self).sqrt()
+    }
+
+    pub(crate) fn scale(&self, k: f64) -> Self {
+        Self::new(self.x * k, self.y * k, self.z * k)
+    }
+
+    /// Cross product. The result is neither of its operands' kinds, so it is
+    /// an [`Axis`] until normalised.
+    pub(crate) fn cross<K2>(&self, o: &Vec3<K2, F>) -> Axis<F> {
+        Axis::new(
+            self.y * o.z - self.z * o.y,
+            self.z * o.x - self.x * o.z,
+            self.x * o.y - self.y * o.x,
+        )
+    }
+
+    pub(crate) fn unit(&self) -> UnitVector<F> {
+        UnitVector::new(self.x, self.y, self.z).scale(1.0 / self.norm())
+    }
+}
+
 impl<K, F> std::ops::Sub for Vec3<K, F> {
     type Output = Self;
 
@@ -78,9 +107,7 @@ impl<F> StateVector<F> {
     /// Zero at apogee and perigee.
     #[must_use]
     pub fn radial_velocity(&self) -> f64 {
-        self.position.x * self.velocity.x
-            + self.position.y * self.velocity.y
-            + self.position.z * self.velocity.z
+        self.position.dot(&self.velocity)
     }
 }
 
@@ -96,7 +123,14 @@ pub type Velocity<F> = Vec3<markers::Velocity, F>;
 /// metres cannot be mixed at a function boundary.
 pub type UnitVector<F> = Vec3<markers::Unit, F>;
 
+/// Derived direction or axis in frame `F` (a cross product, an eccentricity
+/// vector): not a displacement, a velocity or a normalised direction.
+pub(crate) type Axis<F> = Vec3<markers::Axis, F>;
+
 mod markers {
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+    pub struct Axis;
+
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct Position;
 

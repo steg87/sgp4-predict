@@ -134,7 +134,7 @@ impl Predictor {
         if !plane.has_node {
             return Err(Error::NoAscendingNode);
         }
-        Ok(plane.sin_cos([s.position.x, s.position.y, s.position.z]))
+        Ok(plane.sin_cos(&s.position))
     }
 
     /// Detect the times the satellite reaches `argument` of latitude.
