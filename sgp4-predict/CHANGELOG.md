@@ -10,6 +10,8 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-12
+
 ### Added
 
 - `Predictor::osculating_elements` and `TemeState::keplerian` return a `KeplerianElements` set (semi-major axis, eccentricity, angles, period, perigee and apogee altitude).
