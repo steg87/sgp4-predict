@@ -21,16 +21,14 @@ Find the passes over a ground station in the next 24 hours, and sample each one:
 
 ```rust,no_run
 use chrono::{Duration, Utc};
-use sgp4_predict::{Degrees, GeodeticPoint, Predictor, Tle};
+use sgp4_predict::{Degrees, GeodeticPoint, Predictor};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tle: Tle = "\
+    let predictor: Predictor = "\
         SENTINEL-2C
         1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
         2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
         .parse()?;
-
-    let predictor = Predictor::new(&tle)?;
 
     // Glasgow: latitude, longitude, altitude in metres.
     let glasgow = GeodeticPoint {
@@ -84,15 +82,14 @@ self-intersecting rings are both fine, and the ring closes itself:
 
 ```rust,no_run
 use chrono::{Duration, Utc};
-use sgp4_predict::{Degrees, LatLon, Polygon, Predictor, Tle};
+use sgp4_predict::{Degrees, LatLon, Polygon, Predictor};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tle: Tle = "\
+    let predictor: Predictor = "\
         SENTINEL-2C
         1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
         2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
         .parse()?;
-    let predictor = Predictor::new(&tle)?;
 
     let area = Polygon::new([
         LatLon { latitude: Degrees(54.0), longitude: Degrees(-8.0) },
@@ -161,15 +158,14 @@ slewed to — and the window instead covers whenever the area is within reach:
 
 ```rust,no_run
 use chrono::{Duration, Utc};
-use sgp4_predict::{AoiIterOpts, Coverage, Degrees, Predictor, Refinement, Rectangle, Tle};
+use sgp4_predict::{AoiIterOpts, Coverage, Degrees, Predictor, Refinement, Rectangle};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tle: Tle = "\
+    let predictor: Predictor = "\
         SENTINEL-2C
         1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990
         2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
         .parse()?;
-    let predictor = Predictor::new(&tle)?;
     let area = Rectangle::latitude_band(Degrees(50.0), Degrees(60.0))?;
 
     let start = Utc::now();
