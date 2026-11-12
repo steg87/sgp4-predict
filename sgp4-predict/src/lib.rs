@@ -154,7 +154,7 @@ use sgp4::{Constants, MinutesSinceEpoch};
 use std::str::FromStr;
 use thiserror::Error as ThisError;
 
-pub use sgp4::{Classification, Elements};
+pub use sgp4::{Classification, Elements, TleError};
 
 pub use crate::{
     angle::{Degrees, Radians},

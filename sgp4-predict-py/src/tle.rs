@@ -45,24 +45,20 @@ impl Tle {
     ///
     /// Raises `ValueError` if the TLE is malformed.
     fn to_elements(&self) -> PyResult<Elements> {
-        sgp4_predict::Elements::from_tle(
-            Some(self.satellite_name.clone()),
-            self.line_1.as_bytes(),
-            self.line_2.as_bytes(),
-        )
-        .map(|inner| Elements { inner })
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+        sgp4_predict::Elements::try_from(self)
+            .map(|inner| Elements { inner })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 
 impl TryFrom<&Tle> for sgp4_predict::Elements {
-    type Error = sgp4_predict::Error;
+    type Error = sgp4_predict::TleError;
 
     fn try_from(tle: &Tle) -> Result<Self, Self::Error> {
-        Ok(sgp4_predict::Elements::from_tle(
+        sgp4_predict::Elements::from_tle(
             Some(tle.satellite_name.clone()),
             tle.line_1.as_bytes(),
             tle.line_2.as_bytes(),
-        )?)
+        )
     }
 }

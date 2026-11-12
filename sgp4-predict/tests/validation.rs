@@ -49,14 +49,14 @@ struct Tle {
 }
 
 impl TryFrom<&Tle> for Elements {
-    type Error = sgp4_predict::Error;
+    type Error = sgp4_predict::TleError;
 
     fn try_from(tle: &Tle) -> Result<Self, Self::Error> {
-        Ok(Elements::from_tle(
+        Elements::from_tle(
             Some(tle.name.clone()),
             tle.line_1.as_bytes(),
             tle.line_2.as_bytes(),
-        )?)
+        )
     }
 }
 

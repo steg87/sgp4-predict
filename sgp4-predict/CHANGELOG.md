@@ -12,6 +12,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ### Added
 
+- `TleError` is re-exported, so a `TryFrom<&YourType> for Elements` impl can name its error type.
 - `FromStr for Predictor`: parse an element set directly, `text.parse::<Predictor>()`.
 - `Tle::from_str` accepts a 2-line element set with no name, naming it `NORAD-<id>` from line 1.
 
