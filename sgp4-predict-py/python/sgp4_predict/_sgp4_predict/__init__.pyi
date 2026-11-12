@@ -528,12 +528,14 @@ class MeanElementSet:
     @property
     def mean_motion_dot(self) -> builtins.float:
         r"""
-        First derivative of mean motion, as published (rev/day²).
+        Half the first derivative of mean motion (ṅ/2), in rev/day², as
+        published in the TLE and OMM.
         """
     @property
     def mean_motion_ddot(self) -> builtins.float:
         r"""
-        Second derivative of mean motion, as published (rev/day³).
+        One sixth of the second derivative of mean motion (n̈/6), in
+        rev/day³, as published in the TLE and OMM.
         """
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...

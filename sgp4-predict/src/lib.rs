@@ -367,6 +367,10 @@ pub enum Error {
     /// semi-major axis or period.
     #[error("orbit is not bound")]
     NotBound,
+    /// Position and velocity are parallel, so there is no angular momentum
+    /// and no orbit plane.
+    #[error("state has no orbit plane")]
+    NoOrbitPlane,
     /// Escape hatch for custom `EventFunction` implementations (`generics`
     /// feature) whose failures don't fit another variant.
     #[error("{0}")]

@@ -101,7 +101,7 @@ Deliberately absent: a `pointing_iter`. It would be `ObservationIter` with one l
 
 ### Orbital elements (`orbital_elements.rs`)
 
-`TemeState::keplerian` is Vallado's `rv2coe` built from `h = r×v`, the eccentricity vector and the energy. Angles are measured in the orbit plane from the ascending node, or from TEME +X when there is none; the argument of perigee is zero when `e < 1e-9`. That one reference-axis choice covers the circular, equatorial and retrograde-equatorial cases without separate branches, so a circular orbit's `true_anomaly` is its argument of latitude. Only an unbound state errors (`Error::NotBound`) — circular and equatorial orbits are legitimate, unlike `argument_of_latitude`, which needs a node.
+`TemeState::keplerian` is Vallado's `rv2coe` built from `h = r×v`, the eccentricity vector and the energy. Angles are measured in the orbit plane from the ascending node, or from TEME +X when there is none; the argument of perigee is zero when `e < 1e-9`. That one reference-axis choice covers the circular, equatorial and retrograde-equatorial cases without separate branches, so a circular orbit's `true_anomaly` is its argument of latitude. Only an unbound state (`Error::NotBound`) or a rectilinear one with no plane (`Error::NoOrbitPlane`) errors — circular and equatorial orbits are legitimate, unlike `argument_of_latitude`, which needs a node.
 
 `µ` comes from `sgp4::WGS84` (`ke²·ae³`), not the usual 3.986004418e14, so an osculating `a` agrees with the propagator's. `MeanElements` reports the TLE's Kozai mean motion; SGP4's internal Brouwer value is not exposed by the `sgp4` crate. Osculating and mean values differ by J2 periodics (~10 km in `a`), so they are not interchangeable.
 

@@ -14,7 +14,7 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 - `Predictor::osculating_elements` and `TemeState::keplerian` return a `KeplerianElements` set (semi-major axis, eccentricity, angles, period, perigee and apogee altitude).
 - `Predictor::mean_elements` returns the published `MeanElements` in SI units, including `bstar` and the mean-motion derivatives.
-- `Error::NotBound`, for a state on a parabolic or hyperbolic orbit.
+- `Error::NotBound`, for a state on a parabolic or hyperbolic orbit, and `Error::NoOrbitPlane`, for one whose position and velocity are parallel.
 
 ## [0.6.0] - 2026-11-12
 

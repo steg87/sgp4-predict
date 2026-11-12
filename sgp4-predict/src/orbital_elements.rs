@@ -33,6 +33,10 @@ const SINGULAR: f64 = 1e-9;
 /// - **Circular** (no perigee): `argument_of_perigee` is zero, so
 ///   `true_anomaly` is the argument of latitude (the true longitude if the
 ///   orbit is also equatorial).
+///
+/// The node and perigee are poorly conditioned near those limits, so `raan`
+/// and `argument_of_perigee` are noisy for orbits that are nearly equatorial
+/// or nearly circular.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KeplerianElements {
     /// Semi-major axis, in metres.
@@ -85,9 +89,11 @@ pub struct MeanElements {
     pub period: Duration,
     /// SGP4 drag term B*, in inverse earth radii.
     pub bstar: f64,
-    /// First derivative of mean motion, as published (rev/day²).
+    /// Half the first derivative of mean motion (ṅ/2), in rev/day², as
+    /// published in the TLE and OMM.
     pub mean_motion_dot: f64,
-    /// Second derivative of mean motion, as published (rev/day³).
+    /// One sixth of the second derivative of mean motion (n̈/6), in
+    /// rev/day³, as published in the TLE and OMM.
     pub mean_motion_ddot: f64,
 }
 
@@ -143,7 +149,8 @@ impl TemeState {
     /// Osculating Keplerian elements of this state.
     ///
     /// # Errors
-    /// [`Error::NotBound`] if the state is on a parabolic or hyperbolic orbit.
+    /// [`Error::NotBound`] if the state is on a parabolic or hyperbolic orbit,
+    /// and [`Error::NoOrbitPlane`] if position and velocity are parallel.
     pub fn keplerian(&self) -> Result<KeplerianElements> {
         let mu = mu();
         let (r, v) = (self.position, self.velocity);
@@ -154,6 +161,9 @@ impl TemeState {
             return Err(Error::NotBound);
         }
         let a = -mu / (2.0 * energy);
+        if r.cross(&v).norm().partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+            return Err(Error::NoOrbitPlane);
+        }
 
         let plane = self.orbit_plane();
         let (k_r, k_v) = (v.dot(&v) - mu / r_norm, r.dot(&v));

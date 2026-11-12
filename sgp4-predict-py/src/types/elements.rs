@@ -59,7 +59,7 @@ impl OsculatingElements {
             true_anomaly_deg: k.true_anomaly.degrees(),
             mean_anomaly_deg: k.mean_anomaly.degrees(),
             mean_motion: k.mean_motion,
-            period_seconds: k.period.num_microseconds().unwrap_or(0) as f64 / 1e6,
+            period_seconds: k.period.as_seconds_f64(),
             perigee_altitude: k.perigee_altitude,
             apogee_altitude: k.apogee_altitude,
         }
@@ -119,10 +119,12 @@ pub struct MeanElementSet {
     /// SGP4 drag term B*, in inverse earth radii.
     #[pyo3(get)]
     pub bstar: f64,
-    /// First derivative of mean motion, as published (rev/day²).
+    /// Half the first derivative of mean motion (ṅ/2), in rev/day², as
+    /// published in the TLE and OMM.
     #[pyo3(get)]
     pub mean_motion_dot: f64,
-    /// Second derivative of mean motion, as published (rev/day³).
+    /// One sixth of the second derivative of mean motion (n̈/6), in
+    /// rev/day³, as published in the TLE and OMM.
     #[pyo3(get)]
     pub mean_motion_ddot: f64,
 }
@@ -137,7 +139,7 @@ impl MeanElementSet {
             argument_of_perigee_deg: m.argument_of_perigee.degrees(),
             mean_anomaly_deg: m.mean_anomaly.degrees(),
             mean_motion: m.mean_motion,
-            period_seconds: m.period.num_microseconds().unwrap_or(0) as f64 / 1e6,
+            period_seconds: m.period.as_seconds_f64(),
             bstar: m.bstar,
             mean_motion_dot: m.mean_motion_dot,
             mean_motion_ddot: m.mean_motion_ddot,

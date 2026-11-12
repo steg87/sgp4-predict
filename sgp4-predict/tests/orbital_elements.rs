@@ -72,9 +72,7 @@ fn state(r: [f64; 3], v: [f64; 3]) -> TemeState {
 #[test]
 fn test_circular_equatorial_conventions() {
     let r = 7_000_000.0;
-    let g = sgp4::WGS84;
-    let mu = g.ke * g.ke * g.ae.powi(3) * 1e9 / 3600.0;
-    let v = (mu / r).sqrt();
+    let v = (mu() / r).sqrt();
     // Prograde, at 90° from +X.
     let k = state([0.0, r, 0.0], [-v, 0.0, 0.0]).keplerian().unwrap();
     assert_eq!(k.raan.0, 0.0);
@@ -149,4 +147,10 @@ fn test_elements_round_trip_for_an_eccentric_inclined_orbit() {
     ] {
         assert_round_trip(&state(r, v));
     }
+}
+
+#[test]
+fn test_radial_state_has_no_orbit_plane() {
+    let s = state([7_000_000.0, 0.0, 0.0], [1_000.0, 0.0, 0.0]);
+    assert_eq!(s.keplerian().unwrap_err(), Error::NoOrbitPlane);
 }
