@@ -31,3 +31,11 @@ fn test_propagate() {
         .unwrap();
     assert!(!predictions.is_empty());
 }
+
+#[test]
+fn test_predictor_parses_from_str() {
+    assert!(matches!(
+        "not a tle".parse::<Predictor>(),
+        Err(sgp4_predict::Error::TleFormat(_))
+    ));
+}

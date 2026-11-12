@@ -151,6 +151,7 @@ mod vectors;
 
 use chrono::{DateTime, Duration, Utc};
 use sgp4::{Constants, MinutesSinceEpoch};
+use std::str::FromStr;
 use thiserror::Error as ThisError;
 
 pub use sgp4::{Classification, Elements};
@@ -208,6 +209,25 @@ pub struct Predictor {
     elements: Elements,
     constants: Constants,
     refinement: Refinement,
+}
+
+/// Parse a 3-line element set (name, line 1, line 2) directly.
+///
+/// ```
+/// # use sgp4_predict::Predictor;
+/// let predictor: Predictor = "\
+///     SENTINEL-2C\n\
+///     1 60989U 24157A   25356.66913557  .00000141  00000+0  70244-4 0  9990\n\
+///     2 60989  98.5671  69.0082 0001197  95.1447 264.9872 14.30821394 67740"
+///     .parse()
+///     .unwrap();
+/// ```
+impl FromStr for Predictor {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s.parse::<Tle>()?)
+    }
 }
 
 impl Predictor {
