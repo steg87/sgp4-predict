@@ -11,6 +11,10 @@ publishes it verbatim as the GitHub Release body — see `docs/RELEASING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `Predictor.osculating_elements(t)` returning `OsculatingElements`, and `Predictor.mean_elements()` returning `MeanElementSet`.
+
 ## [0.6.0] - 2026-11-12
 
 ## [0.5.0] - 2026-11-11

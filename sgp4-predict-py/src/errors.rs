@@ -10,6 +10,7 @@ pub fn to_py_err(e: Error) -> PyErr {
         | Error::Interval(_)
         | Error::NonFiniteArgumentOfLatitude(_)
         | Error::NoAscendingNode
+        | Error::NotBound
         // A rejected area is bad input, not a runtime failure.
         | Error::Aoi(_) => PyValueError::new_err(e.to_string()),
         Error::Sgp4(_) | Error::Roots(_) | Error::Detect(_) | Error::Custom(_) => {

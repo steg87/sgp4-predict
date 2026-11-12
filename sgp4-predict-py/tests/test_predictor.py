@@ -279,6 +279,17 @@ def test_argument_of_latitude_deg_matches_mean_elements():
     assert abs((u - 0.1319 + 180.0) % 360.0 - 180.0) < 0.5
 
 
+def test_osculating_and_mean_elements():
+    p = make_predictor()
+    m = p.mean_elements()
+    assert m.epoch == p.epoch
+    assert m.inclination_deg == pytest.approx(98.5671)
+    k = p.osculating_elements(p.epoch)
+    assert abs(k.inclination_deg - m.inclination_deg) < 0.1
+    assert abs(k.period_seconds - m.period_seconds) < 10
+    assert 0.0 <= k.true_anomaly_deg < 360.0
+
+
 # ── illumination_iter ─────────────────────────────────────────────────────────
 
 
